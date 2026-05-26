@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -16,20 +17,38 @@ logging.basicConfig(level=logging.WARNING)
 
 st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide")
 
+# --- CSS PASTELLO AD ALTO CONTRASTO (Safe per Icone e Mobile) ---
 st.markdown("""
 <style>
+    /* 1. Forza il tema chiaro (Anti-Dark Mode Android) */
     :root { color-scheme: light !important; }
+    
+    /* 2. Colori di sfondo Sagra */
     .stApp { background-color: #FCFAF7 !important; }
     section[data-testid="stSidebar"] { background-color: #F5F3EE !important; border-right: 1px solid #D1C9BC !important; }
-    h1, h2, h3, h4, h5, h6 { color: #1B5E20 !important; font-weight: bold !important; }
+    
+    /* 3. Titoli proporzionati per Mobile e Desktop */
+    h1 { color: #1B5E20 !important; font-weight: bold !important; font-size: 2.2rem !important; }
+    h2 { color: #1B5E20 !important; font-weight: bold !important; font-size: 1.8rem !important; }
+    h3 { color: #1B5E20 !important; font-weight: bold !important; font-size: 1.4rem !important; }
+    h4, h5, h6 { color: #1B5E20 !important; font-weight: bold !important; }
+    
+    /* 4. Metriche in Rosso Sagra */
     div[data-testid="stMetricValue"] { color: #D32F2F !important; font-weight: bold !important; }
+    
+    /* 5. Expander puliti */
     div[data-testid="stExpander"] { background-color: #FFFFFF !important; border: 1px solid #D1C9BC !important; border-radius: 4px !important; }
+    
+    /* 6. Box di allerta */
     .warning-box { background-color: #FFF3E0 !important; border-left: 5px solid #FF9800 !important; padding: 12px; border-radius: 4px; margin-bottom: 15px; color: #B78103 !important; font-weight: bold; }
     .info-box { background-color: #E8F5E9 !important; border-left: 5px solid #2E7D32 !important; padding: 12px; border-radius: 4px; margin-bottom: 15px; color: #1B5E20 !important; font-weight: bold; }
-    .stApp p, .stApp span, .stApp li, .stApp label, .stMarkdown p, .stMarkdown li, .stMarkdown span { color: #1C1C1C !important; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important; font-size: 1.02rem !important; }
+    
+    /* 7. FIX ICONE STREAMLIT: Protezione assoluta dei web-font */
+    .material-symbols-rounded, .material-icons { font-family: 'Material Symbols Rounded', 'Material Icons' !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# --- INIZIALIZZAZIONE DATABASE ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -114,18 +133,18 @@ def seed_baseline_data(conn):
         ("8002210131781", "10002766", "OLIVA", "FBERIO OOL PUR BOT W12x750ML IT", "Oliva Filippo Berio lt.0,75", 0.75, 5.97, "Bott.Lt 0,75"),
         ("8002210122307", "10000922", "OLIVA", "FBERIO OOL PUR LAT V8x1L IT", "Oliva Filippo Berio Latta lt.1", 1.0, 8.10, "Latta lt 1"),
         ("8002210111486", "10003307", "SEMI", "SAGRA SEM MAIS PET V12x1L IT", "Mais Sagra lt.1", 1.0, 2.00, "Pet.Lt 1"),
-        ("8002210127067", "10003286", "SEMI", "SAGRA SEM MAIS PET T6x1.5L IT", "Mais Sagri lt.1,5", 1.5, 3.00, "Pet.Lt 1,5"),
+        ("8002210127067", "10003286", "SEMI", "SAGRA SEM MAIS PET T6x1.5L IT", "Mais Sagrì lt.1,5", 1.5, 3.00, "Pet.Lt 1,5"),
         ("8002210112889", "10003089", "SEMI", "SAGRA SEM MAIS PET T6x2L IT", "Mais Sagra lt.2", 2.0, 4.00, "Pet.Lt 2"),
         ("8002210000551", "10003311", "SEMI", "SAGRA SEM ARACHIDE PET V12x1L IT", "Arachide Sagra lt.1", 1.0, 3.00, "Pet.Lt 1"),
-        ("8002210126916", "10003284", "SEMI", "SAGRI SEM ARACHIDE PET T6x1.5L IT", "Arachide Sagri lt.1,5", 1.5, 4.50, "Pet.Lt 1,5"),
+        ("8002210126916", "10003284", "SEMI", "SAGRI SEM ARACHIDE PET T6x1.5L IT", "Arachide Sagrì lt.1,5", 1.5, 4.50, "Pet.Lt 1,5"),
         ("8002210112865", "10003086", "SEMI", "SAGRA SEM ARACHIDE PET T6x2L IT", "Arachide Sagra lt.2", 2.0, 6.00, "Pet.Lt 2"),
         ("8002210116160", "10000326", "SEMI", "SAGRA PROF SEM ARACHIDE PET C2x5L IT", "Arachide Sagra Prof. Lt.5", 5.0, 15.00, "Pet lt 5"),
         ("8002210111905", "10003310", "SEMI", "SAGRA SEM GIRAS PET V12x1L IT", "Girasole Sagra lt.1", 1.0, 2.20, "Pet.Lt 1"),
-        ("8002210126817", "10003287", "SEMI", "SAGRI SEM GIRAS PET T6x1.5L IT", "Girasole Sagri lt.1,5", 1.5, 3.30, "Pet.Lt 1,5"),
+        ("8002210126817", "10003287", "SEMI", "SAGRI SEM GIRAS PET T6x1.5L IT", "Girasole Sagrì lt.1,5", 1.5, 3.30, "Pet.Lt 1,5"),
         ("8002210113107", "10003087", "SEMI", "SAGRA SEM GIRAS PET T6x2L IT", "Girasole Sagra lt.2", 2.0, 4.40, "Pet.Lt 2"),
         ("8002210115453", "10003062", "SEMI", "SAGRA PROF SEM GIRAS PET C2x5L IT", "Girasole Sagra Prof Lt.5", 5.0, 11.00, "Pet lt 5"),
         ("8002210111295", "10002933", "SEMI", "SAGRA FRIMX SEM FRITT PET V12x1L NOP IT", "Frimax Sagra lt.1", 1.0, 2.25, "Pet Lt 1"),
-        ("8002210126893", "10003285", "SEMI", "SAGRI SEM FRITT PET T6x1.5L IT", "Frimax Sagri lt.1,5", 1.5, 3.38, "Pet.Lt 1,5"),
+        ("8002210126893", "10003285", "SEMI", "SAGRI SEM FRITT PET T6x1.5L IT", "Frimax Sagrì lt.1,5", 1.5, 3.38, "Pet.Lt 1,5"),
         ("8002210112940", "10003085", "SEMI", "SAGRA FRIMX SEM FRITT PET T6x2L NOP IT", "Frimax Sagra lt.2", 2.0, 4.50, "Pet Lt 2"),
         ("8002210115484", "10002644", "SEMI", "SAGRA FRIMX SEM FRITT PET C2x5L NOP IT", "Frimax Sagra lt.5", 5.0, 11.25, "Pet Lt 5"),
         ("8002210134140", "10003327", "SEMI", "GRAZIA SEM GIRAS LAT 1x20L IT", "Frimax Spray ml.200", 0.2, 0.45, "Spray Lt 0,20"),
