@@ -1,3 +1,4 @@
+# core/hierarchy_resolver.py
 import sqlite3
 from decimal import Decimal
 from typing import Optional
@@ -13,6 +14,7 @@ class ResolvedContract:
     sconto_5: Decimal = Decimal("0.00")
     sconto_6: Decimal = Decimal("0.00")
     sconto_7: Decimal = Decimal("0.00")
+    sconto_y: Decimal = Decimal("0.00")  # <-- NUOVO CAMPO TRACCIATO
     sconto_carico: Decimal = Decimal("0.00")
     sconto_pagamento: Decimal = Decimal("0.00")
     voce_i: Decimal = Decimal("0.00")
@@ -26,7 +28,7 @@ class HierarchyResolver:
     _FIELDS = {
         "sconto_1": "sconto_1", "sconto_2": "sconto_2", "sconto_3": "sconto_3",
         "sconto_4": "sconto_4", "sconto_5": "sconto_5", "sconto_6": "sconto_6",
-        "sconto_7": "sconto_7", "sconto_carico": "sconto_carico", 
+        "sconto_7": "sconto_7", "sconto_y": "sconto_y", "sconto_carico": "sconto_carico", 
         "sconto_pagamento": "sconto_pagamento", "voce_contratto_1": "voce_i",
         "voce_contratto_2": "voce_ii", "voce_contratto_3": "voce_iii",
         "voce_contratto_4": "voce_iv", "voce_contratto_5": "voce_v"
@@ -40,7 +42,7 @@ class HierarchyResolver:
         cursor.execute("""
             SELECT livello, chiave_livello, listino_r,
                    sconto_1, sconto_2, sconto_3, sconto_4, sconto_5,
-                   sconto_6, sconto_7, sconto_carico, sconto_pagamento,
+                   sconto_6, sconto_7, sconto_y, sconto_carico, sconto_pagamento,
                    voce_contratto_1, voce_contratto_2, voce_contratto_3, 
                    voce_contratto_4, voce_contratto_5
             FROM accordi_commerciali
