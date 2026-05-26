@@ -322,8 +322,8 @@ if menu == "Simulatore Offerte":
                 value=float(contract.sconto_y), step=0.5
             )
             st.markdown(
-                f"<div class='warning-box'>ATTENZIONE - VALORE CONCORDATO A DATABASE: {contract.sconto_y:.2f}%<br>"
-                f"<span style='font-size:0.8em; font-weight:normal;'>La modifica in corsa potrebbe violare gli accordi locali già depositati.</span></div>", 
+                f"<div class='warning-box'>ATTENZIONE - SE IL VALORE E' POSITIVO SIGNIFICA CHE ESISTE UN ACCORDO LOCALE PREDETERMINATO: {contract.sconto_y:.2f}%<br>"
+                f"<span style='font-size:0.8em; font-weight:normal;'>La modifica in corsa potrebbe violare tale accordo che va quindi ridiscusso.</span></div>", 
                 unsafe_allow_html=True
             )
             
