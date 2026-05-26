@@ -929,7 +929,7 @@ elif menu == "Back-Office (Contratti)":
     conn.close()
 
 # ==========================================
-# SCHEDA 4: REPORT SINTETICO
+# SCHEDA 4: REPORT SINTETICO (VERSIONE BENCHMARK COMPATTA SOTTOGRUPPI)
 # ==========================================
 elif menu == "Report Sintetico":
     st.title("Report Sintetico e Analisi Contratti")
@@ -959,6 +959,89 @@ elif menu == "Report Sintetico":
     avg_pfa = cursor.fetchone()[0] or 0.0
     col_k4.metric("PFA Medio off-invoice", f"{avg_pfa:.2f} %")
     
+    # -------------------------------------------------------------------------
+    # SEZIONE BENCHMARK SOTTOGRUPPI COLLASSATA (ANTI-CLUTTER)
+    # -------------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("🔍 Benchmark Comparativo di Canale (Livello Sottogruppo)")
+    st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione d'uso originaria.")
+    
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        cursor.execute("SELECT DISTINCT tipo_olio FROM anagrafica_master ORDER BY tipo_olio")
+        categorie_disponibili = [r[0] for r in cursor.fetchall()]
+        cat_scelta = st.selectbox("1. Filtra per Categoria Merceologica", categorie_disponibili, key="bench_cat")
+        
+    with col_f2:
+        cursor.execute("SELECT ean, descrizione_commerciale FROM anagrafica_master WHERE tipo_olio=? ORDER BY descrizione_commerciale", (cat_scelta,))
+        prodotti_filtrati = cursor.fetchall()
+        prod_dict = {f"{p[1]} [{p[0]}]": (p[0], cat_scelta) for p in prodotti_filtrati}
+        
+        if prod_dict:
+            prod_scelto_bench = st.selectbox("2. Seleziona Referenza da Analizzare", list(prod_dict.keys()), key="bench_prod")
+            ean_bench, tipo_olio_bench = prod_dict[prod_scelto_bench]
+        else:
+            st.warning("Nessun prodotto trovato per questa categoria.")
+            prod_scelto_bench = None
+
+    if prod_scelto_bench:
+        # ANTIDOTO COLLO DI BOTTIGLIA: Estraiamo solo le combinazioni uniche Gruppo-Sottogruppo
+        cursor.execute("SELECT DISTINCT gruppo_macro, sottogruppo FROM clienti WHERE attivo=1 ORDER BY gruppo_macro, sottogruppo")
+        sottogruppi_unici = cursor.fetchall()
+        
+        benchmark_data = []
+        for g_macro, s_gruppo in sottogruppi_unici:
+            # Risoluzione mirata al Sottogruppo (Insegna lasciata vuota per ereditare correttamente)
+            contratto_risolto = HierarchyResolver.resolve(conn, g_macro, s_gruppo, "", ean_bench, tipo_olio_bench)
+            
+            if contratto_risolto.listino_r is not None:
+                cursor.execute("SELECT min_net_net_g FROM guardrail_aziendali WHERE ean=?", (ean_bench,))
+                res_g = cursor.fetchone()
+                soglia_g = res_g[0] if res_g else 0.0
+                
+                input_strutturale = PricingInput(
+                    listino_r=contratto_risolto.listino_r,
+                    sconto_1=contratto_risolto.sconto_1, sconto_2=contratto_risolto.sconto_2, sconto_3=contratto_risolto.sconto_3,
+                    sconto_4=contratto_risolto.sconto_4, sconto_5=contratto_risolto.sconto_5, sconto_6=contratto_risolto.sconto_6, sconto_7=contratto_risolto.sconto_7,
+                    sconto_y=contratto_risolto.sconto_y, sconto_z=Decimal("0.00"), sconto_aa=Decimal("0.00"),
+                    sconto_carico=contratto_risolto.sconto_carico, sconto_pagamento=contratto_risolto.sconto_pagamento,
+                    voce_i=contratto_risolto.voce_i, voce_ii=contratto_risolto.voce_ii, voce_iii=contratto_risolto.voce_iii, voce_iv=contratto_risolto.voce_iv, voce_v=contratto_risolto.voce_v,
+                    min_net_net_g=Decimal(str(soglia_g))
+                )
+                calcolo_strutturale = PricingEngine.calculate(input_strutturale)
+                
+                # COLLASSAMENTO DELLE COLONNE: Raggruppamento logico richiesto
+                stringa_s1_s3 = f"{float(contratto_risolto.sconto_1 or 0):.1f}% / {float(contratto_risolto.sconto_2 or 0):.1f}% / {float(contratto_risolto.sconto_3 or 0):.1f}%"
+                stringa_s4_s5 = f"{float(contratto_risolto.sconto_4 or 0):.1f}% / {float(contratto_risolto.sconto_5 or 0):.1f}%"
+                stringa_s6 = f"{float(contratto_risolto.sconto_6 or 0):.1f}%"
+                stringa_s7_y = f"S7:{float(contratto_risolto.sconto_7 or 0):.1f}% + Y:{float(contratto_risolto.sconto_y or 0):.1f}%"
+                stringa_oneri = f"Log:{float(contratto_risolto.sconto_carico or 0):.1f}% / Pag:{float(contratto_risolto.sconto_pagamento or 0):.1f}%"
+                
+                benchmark_data.append({
+                    "Gruppo GDO": g_macro,
+                    "Sottogruppo": s_gruppo if s_gruppo != "" else "Default Gruppo",
+                    "Origine Dati": contratto_risolto.livello_risolto,
+                    "Listino R (€)": float(contratto_risolto.listino_r),
+                    "Gruppo (S1-S3)": stringa_s1_s3,
+                    "Sottogruppo (S4-S5)": stringa_s4_s5,
+                    "Categoria (S6)": stringa_s6,
+                    "Referenza (S7+Y)": stringa_s7_y,
+                    "Oneri (AB/AC)": stringa_oneri,
+                    "Contratto Unificato (%)": float(calcolo_strutturale.contratto_tot_pfa),
+                    "Net Net Base AM (€)": float(calcolo_strutturale.net_net_finale)
+                })
+        
+        if benchmark_data:
+            df_benchmark = pd.DataFrame(benchmark_data)
+            st.dataframe(
+                df_benchmark.sort_values(by="Net Net Base AM (€)", ascending=True), 
+                use_container_width=True, 
+                hide_index=True
+            )
+        else:
+            st.info("Nessun accordo commerciale trovato per i criteri selezionati.")
+
+    # -------------------------------------------------------------------------
     st.markdown("---")
     st.subheader("Sintesi Dinamica e Analisi per Canale GDO")
     
@@ -1042,7 +1125,7 @@ elif menu == "Report Sintetico":
                 })
         
         if not rows_report:
-            st.warning("ATTENZIONE: Nessuna referenza in assortimento trovata per questo cliente nel database.")
+            st.warning("ATTENZIONE: Nessuna referenza in assortimento trouvata per questo cliente nel database.")
         else:
             df_rep_out = pd.DataFrame(rows_report)
             
