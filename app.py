@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.WARNING)
 
 st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide")
 
-# --- CSS PASTELLO AD ALTO CONTRASTO E ANTICRASH ---
+# --- CSS PASTELLO AD ALTO CONTRASTO (Safe per Icone e Mobile) ---
 st.markdown("""
 <style>
     :root { color-scheme: light !important; }
@@ -28,28 +28,38 @@ st.markdown("""
     div[data-testid="stExpander"] { background-color: #FFFFFF !important; border: 1px solid #D1C9BC !important; border-radius: 4px !important; }
     .warning-box { background-color: #FFF3E0 !important; border-left: 5px solid #FF9800 !important; padding: 12px; border-radius: 4px; margin-bottom: 15px; color: #B78103 !important; font-weight: bold; }
     .info-box { background-color: #E8F5E9 !important; border-left: 5px solid #2E7D32 !important; padding: 12px; border-radius: 4px; margin-bottom: 15px; color: #1B5E20 !important; font-weight: bold; }
+    .stMarkdown p, .stMarkdown li, label { color: #1C1C1C !important; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important; font-size: 1.02rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- INIZIALIZZAZIONE DATABASE ---
+# --- INIZIALIZZAZIONE DATABASE A TABELLE SEPARATE ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     try:
         cursor.execute("SELECT attivo FROM clienti LIMIT 1")
-        cursor.execute("SELECT sottogruppo FROM accordi_commerciali LIMIT 1")
-        cursor.execute("SELECT min_net_net_g FROM prodotti LIMIT 1")
+        cursor.execute("SELECT ean FROM anagrafica_master LIMIT 1") # Test per il nuovo schema separato
     except sqlite3.OperationalError:
         cursor.execute("DROP TABLE IF EXISTS accordi_commerciali")
         cursor.execute("DROP TABLE IF EXISTS clienti")
-        cursor.execute("DROP TABLE IF EXISTS prodotti")
+        cursor.execute("DROP TABLE IF EXISTS prodotti") # Eliminiamo la vecchia tabella unita
+        cursor.execute("DROP TABLE IF EXISTS anagrafica_master")
+        cursor.execute("DROP TABLE IF EXISTS guardrail_aziendali")
         conn.commit()
     
+    # TABELLA 1: Anagrafica e Logistica Pura (Senza dati finanziari)
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS prodotti (
+    CREATE TABLE IF NOT EXISTS anagrafica_master (
         ean TEXT PRIMARY KEY, codice_sap TEXT, tipo_olio TEXT,
         descrizione_sap TEXT, descrizione_commerciale TEXT, formato_lt REAL,
-        min_net_net_g REAL DEFAULT 0.0, confezione TEXT
+        confezione TEXT, pezzi_cartone INTEGER, cartoni_strato INTEGER,
+        strati_pallet INTEGER, cartoni_pallet INTEGER, conservazione_mesi INTEGER, shelf_life_mesi INTEGER
+    )""")
+    
+    # TABELLA 2: Guardrail Finanziari (Solo EAN e Margine Minimo)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS guardrail_aziendali (
+        ean TEXT PRIMARY KEY, min_net_net_g REAL DEFAULT 0.0
     )""")
     
     cursor.execute("""
@@ -64,13 +74,13 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, livello TEXT, chiave_livello TEXT,
         listino_r REAL, sconto_1 REAL, sconto_2 REAL, sconto_3 REAL, sconto_4 REAL, sconto_5 REAL,
-        sconto_6 REAL, sconto_7 REAL, sconto_carico REAL, sconto_pagamento REAL,
+        sconto_6 REAL, sconto_7 REAL, sconto_y REAL, sconto_carico REAL, sconto_pagamento REAL,
         voce_contratto_1 REAL, voce_contratto_2 REAL, voce_contratto_3 REAL, voce_contratto_4 REAL, voce_contratto_5 REAL,
         UNIQUE(gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello)
     )""")
     conn.commit()
     
-    cursor.execute("SELECT COUNT(*) FROM prodotti")
+    cursor.execute("SELECT COUNT(*) FROM anagrafica_master")
     if cursor.fetchone()[0] == 0:
         seed_baseline_data(conn)
     else:
@@ -80,71 +90,86 @@ def seed_baseline_data(conn):
     cursor = conn.cursor()
     cursor.execute("DELETE FROM accordi_commerciali")
     cursor.execute("DELETE FROM clienti")
-    cursor.execute("DELETE FROM prodotti")
+    cursor.execute("DELETE FROM anagrafica_master")
+    cursor.execute("DELETE FROM guardrail_aziendali")
     
+    # Dati base fusi per il seed iniziale
     prodotti_salov = [
-        ("8002210111110", "10002713", "EXTRAVERGINE", "SAGRA EXV BOT W12x1L CLASS IT", "Ex.v. Sagra Classico lt.1", 1.0, 10.00, "Bott.Lt 1"),
-        ("8002210133440", "10003255", "EXTRAVERGINE", "SAGRA EXV 100%R-PET V12x750ML IT", "Ex.v. Sagra lt.0,75 PET", 0.75, 7.50, "Pet.Lt 0,75"),
-        ("8002210115088", "10002716", "EXTRAVERGINE", "SAGRA GRAND EXV BOT W12x1L", "Ex.v. Sagra Grandulivo lt.1", 1.0, 10.00, "Bott.Lt 1"),
-        ("8002210127562", "10002719", "EXTRAVERGINE", "SAGRA T.VIVE EXV BOT W 12x1L", "Ex.v. Sagra Terre Vive lt.1", 1.0, 10.00, "Bott.Lt 1"),
-        ("8002210119543", "10000536", "EXTRAVERGINE", "SAGRA PROF. EXV PET C2x5L IT", "Ex.v. Sagra Prof Lt.5", 5.0, 50.00, "Pet lt 5"),
-        ("8002210112827", "10002714", "EXTRAVERGINE", "SAGRA EXV 100%I BSA BOT W12x1L IT", "Ex.v. Sagra Bassa Acidità 100% ITA lt.1", 1.0, 15.00, "Bott.Lt 1"),
-        ("8002210127425", "10002715", "EXTRAVERGINE", "SAGRA EXV 100%I BOT W 12x1L", "Ex.v. Sagra 100% Italiano lt.1", 1.0, 15.00, "Bott.Lt 1"),
-        ("8002210128286", "10002720", "EXTRAVERGINE", "SAGRA EXV 100%I BIO BOT V12x1L IT", "Ex.v. Sagra Biologico 100% ITA lt.1", 1.0, 15.00, "Vetro lt 1"),
-        ("8002210128248", "10002747", "EXTRAVERGINE", "SAGRA EXV BOT W12x750ML CLASS IT", "Ex.v. Sagra Classico lt.0,75", 0.75, 7.50, "Bott.Lt 0,75"),
-        ("8002210121997", "10003315", "EXTRAVERGINE", "SAGRA GRAND EXV BOT W12x750ML  IT", "Ex.v. Sagra Grandulivo 0,75", 0.75, 7.50, "Bott.Lt 0,75"),
-        ("8002210127197", "10003316", "EXTRAVERGINE", "SAGRA EXV 100%I BSA BOT W12x 750ML IT", "Ex.v. Sagra Bassa Acidità 100% ITA 0,75", 0.75, 11.25, "Bott.Lt 0,75"),
-        ("8002210133792", "10003317", "EXTRAVERGINE", "SAGRA EXV 100% I BOT W 12x750ML IT", "Ex.v. Sagra 100% Italiano 0,75", 0.75, 11.25, "Bott.Lt 0,75"),
-        ("8002210131815", "10003319", "EXTRAVERGINE", "SAGRA EXV 100%I BIO BOT W12x750ML IT", "Ex.v. Sagra Biologico 100% ITA  0,75", 0.75, 11.25, "Bott.Lt 0,75"),
-        ("8002210130814", "60000444", "EXTRAVERGINE", "SAGRA EXV SPRAY C6x200ML ALLUMINIO IT", "Ex.v. Sagra Spray ml.200", 0.2, 2.00, "Spray Lt 0,20"),
-        ("8002210124387", "10003061", "EXTRAVERGINE", "SAGRA PROF EXV PET T6x2L IT", "Ex.v. Sagra Prof lt.2", 2.0, 20.00, "Pet.Lt 2"),
-        ("8002210131620", "10002724", "EXTRAVERGINE", "FBERIO EXV BOT W12x1L CLASS IT", "Ex.v. Filippo Berio Classico lt.1", 1.0, 12.00, "Bott.Lt 1"),
-        ("8002210131644", "10002725", "EXTRAVERGINE", "FBERIO EXV BOT W12x1L BSA IT", "Ex.v. Filippo Berio Bassa Acidità lt.1", 1.0, 17.00, "Bott.Lt 1"),
-        ("8002210131705", "10002726", "EXTRAVERGINE", "FBERIO EXV 100%I BOT W12x1L IT", "Ex.v. Filippo Berio 100% Italiano lt.1", 1.0, 18.00, "Bott.Lt 1"),
-        ("8002210131767", "10002765", "EXTRAVERGINE", "FBERIO EXV BOT W12x750ML CLASS IT", "Ex.v. Filippo Berio Classico lt.0,75", 0.75, 12.00, "Bott.Lt 0,75"),
-        ("8002210131668", "10002746", "EXTRAVERGINE", "FBERIO EXV BSA BOT W12x750ML IT", "Ex.v. Filippo Berio Bassa Acidità lt.0,75", 0.75, 17.00, "Bott.Lt 0,75"),
-        ("8002210131804", "10002768", "EXTRAVERGINE", "FBERIO EXV 100%I BOT W12x750ML IT", "Ex.v. Filippo Berio 100% Italiano lt.0,75", 0.75, 18.00, "Bott.Lt 0,75"),
-        ("8002210133013", "10003200", "EXTRAVERGINE", "FB R.O. EXV BIO 100%IT MB BOT W12X750 IT", "Ex.v. Filippo Berio Riserva Oro lt.0,75", 0.75, 19.00, "Bott.Lt 0,75"),
-        ("8002210121461", "60000544", "EXTRAVERGINE", "EX.V. BUSTINA 10mlx250 FILIPPO BERIO ITA", "Ex.v. Filippo Berio Bustina ml.10", 0.01, 0.12, "bust lt 0,01"),
-        ("8002210126572", "10003240", "OLIVA", "SAGRA OOL PUR R-PET V12X750ML CLASS IT", "Oliva Sagra RPET lt.0,75 PET", 0.75, 8.00, "Pet.Lt 0,75"),
-        ("8002210001305", "10002717", "OLIVA", "SAGRA OOL BOT W12x1L CLASS", "Oliva Sagra lt.1", 1.0, 8.00, "Bott.Lt 1"),
-        ("8002210128453", "10002718", "OLIVA", "SAGRA GRAND OOL BOT W12x1L", "Oliva Sagra Grandulivo lt.1", 1.0, 8.00, "Bott.Lt 1"),
-        ("8002210126176", "10003288", "OLIVA", "SAGRA OOL PUR R-PET T6X1.5L IT", "Oliva Sagra lt.1,5", 1.5, 12.00, "Pet.Lt 1,5"),
-        ("8002210119567", "10000537", "OLIVA", "SAGRA PROF. OOL PUR PET C2x5L IT", "Oliva Sagra Prof Lt.5", 5.0, 40.00, "Pet.Lt 5"),
-        ("8002210132436", "10002965", "OLIVA", "FBERIO OOL PUR BOT V6X500ML IT", "Oliva Filippo Berio lt.0,50", 0.5, 4.11, "Bott.Lt 0,5"),
-        ("8002210131729", "10002727", "OLIVA", "FBERIO OOL PUR BOT W12x1L IT", "Oliva Filippo Berio lt.1", 1.0, 7.75, "Bott.Lt 1"),
-        ("8002210131781", "10002766", "OLIVA", "FBERIO OOL PUR BOT W12x750ML IT", "Oliva Filippo Berio lt.0,75", 0.75, 5.97, "Bott.Lt 0,75"),
-        ("8002210122307", "10000922", "OLIVA", "FBERIO OOL PUR LAT V8x1L IT", "Oliva Filippo Berio Latta lt.1", 1.0, 8.10, "Latta lt 1"),
-        ("8002210111486", "10003307", "SEMI", "SAGRA SEM MAIS PET V12x1L IT", "Mais Sagra lt.1", 1.0, 2.00, "Pet.Lt 1"),
-        ("8002210127067", "10003286", "SEMI", "SAGRA SEM MAIS PET T6x1.5L IT", "Mais Sagrì lt.1,5", 1.5, 3.00, "Pet.Lt 1,5"),
-        ("8002210112889", "10003089", "SEMI", "SAGRA SEM MAIS PET T6x2L IT", "Mais Sagra lt.2", 2.0, 4.00, "Pet.Lt 2"),
-        ("8002210000551", "10003311", "SEMI", "SAGRA SEM ARACHIDE PET V12x1L IT", "Arachide Sagra lt.1", 1.0, 3.00, "Pet.Lt 1"),
-        ("8002210126916", "10003284", "SEMI", "SAGRI SEM ARACHIDE PET T6x1.5L IT", "Arachide Sagrì lt.1,5", 1.5, 4.50, "Pet.Lt 1,5"),
-        ("8002210112865", "10003086", "SEMI", "SAGRA SEM ARACHIDE PET T6x2L IT", "Arachide Sagra lt.2", 2.0, 6.00, "Pet.Lt 2"),
-        ("8002210116160", "10000326", "SEMI", "SAGRA PROF SEM ARACHIDE PET C2x5L IT", "Arachide Sagra Prof. Lt.5", 5.0, 15.00, "Pet lt 5"),
-        ("8002210111905", "10003310", "SEMI", "SAGRA SEM GIRAS PET V12x1L IT", "Girasole Sagra lt.1", 1.0, 2.20, "Pet.Lt 1"),
-        ("8002210126817", "10003287", "SEMI", "SAGRI SEM GIRAS PET T6x1.5L IT", "Girasole Sagrì lt.1,5", 1.5, 3.30, "Pet.Lt 1,5"),
-        ("8002210113107", "10003087", "SEMI", "SAGRA SEM GIRAS PET T6x2L IT", "Girasole Sagra lt.2", 2.0, 4.40, "Pet.Lt 2"),
-        ("8002210115453", "10003062", "SEMI", "SAGRA PROF SEM GIRAS PET C2x5L IT", "Girasole Sagra Prof Lt.5", 5.0, 11.00, "Pet lt 5"),
-        ("8002210111295", "10002933", "SEMI", "SAGRA FRIMX SEM FRITT PET V12x1L NOP IT", "Frimax Sagra lt.1", 1.0, 2.25, "Pet Lt 1"),
-        ("8002210126893", "10003285", "SEMI", "SAGRI SEM FRITT PET T6x1.5L IT", "Frimax Sagrì lt.1,5", 1.5, 3.38, "Pet.Lt 1,5"),
-        ("8002210112940", "10003085", "SEMI", "SAGRA FRIMX SEM FRITT PET T6x2L NOP IT", "Frimax Sagra lt.2", 2.0, 4.50, "Pet Lt 2"),
-        ("8002210115484", "10002644", "SEMI", "SAGRA FRIMX SEM FRITT PET C2x5L NOP IT", "Frimax Sagra lt.5", 5.0, 11.25, "Pet Lt 5"),
-        ("8002210134140", "10003327", "SEMI", "GRAZIA SEM GIRAS LAT 1x20L IT", "Frimax Spray ml.200", 0.2, 0.45, "Spray Lt 0,20"),
-        ("8002210127401", "10003309", "SEMI", "SAGRA SEM GIRAS AO PET V12x1L IT", "Girasole Alto Oleico Sagra lt.1", 1.0, 2.80, "Pet.Lt 1"),
-        ("8002210126336", "10003063", "SEMI", "SAGRA PROF SEM GIRAS AO PET C2x5L IT", "Girasole Alto Oleico Sagra Prof lt.5", 5.0, 14.00, "Pet lt 5"),
-        ("8002210129290", "10003312", "SEMI", "SAGRA SEM VINACC PET V12x1L IT", "Vinacciolo Sagra lt.1", 1.0, 5.00, "Pet.Lt 1"),
-        ("8002210130289", "10003082", "EXTRAVERGINE", "FBERIO EXV CLASS MB BOT V6x250ML IT", "Ex.v. F.Berio Anti Rab Classico lt.0,25", 0.25, 2.50, "Vetro lt 0,25"),
-        ("8002210130210", "10003081", "EXTRAVERGINE", "FBERIO EXV 100%I MB BOT V6x250ML IT", "Ex.v. F.Berio Anti Rab 100% ITA lt.0,25", 0.25, 3.00, "Vetro lt 0,25"),
-        ("8002210130340", "10003091", "EXTRAVERGINE", "FBERIO EXV CLASS MB BOT V6x500ML IT", "Ex.v. F.Berio Anti Rab Classico lt.0,50", 0.5, 4.30, "Vetro lt 0,50"),
-        ("8002210130302", "10003079", "EXTRAVERGINE", "FBERIO EXV 100%I MB BOT V6x500ML IT", "Ex.v. F.Berio Anti Rab 100% ITA lt.0,50", 0.5, 4.80, "Vetro lt 0,50"),
-        ("8002210132573", "10003072", "EXTRAVERGINE", "FBERIO EXV BOT V6x500ML TOSC IT", "Ex.v. F.Berio Toscano lt.0,50", 0.5, 10.00, "Vetro lt 0,50"),
-        ("8002210130234", "60000591", "EXTRAVERGINE", "FBERIO EXV DRES BOT V6x250ML PEP TE IT", "Ex.v. F.Berio Peperoncino lt.0,25", 0.25, 3.50, "Vetro lt 0,25"),
-        ("8002210130791", "60000590", "ACETO", "FBERIO ACE BALS BOT V6x250ML IT", "Aceto Balsamico F.Berio lt.0,25", 0.25, 2.00, "Vetro lt 0,25"),
-        ("8002210130197", "60000589", "ACETO", "FBERIO ACE BALS BOT V6x500ML IT", "Aceto Balsamico F.Berio lt.0,50", 0.5, 2.10, "Vetro lt 0,50")
+        ("8002210111110", "10002713", "EXTRAVERGINE", "SAGRA EXV BOT W12x1L CLASS IT", "Ex.v. Sagra Classico lt.1", 1.0, 10.00, "Bott.Lt 1", 12, 8, 5, 40, 14, 9),
+        ("8002210133440", "10003255", "EXTRAVERGINE", "SAGRA EXV 100%R-PET V12x750ML IT", "Ex.v. Sagra lt.0,75 PET", 0.75, 7.50, "Pet.Lt 0,75", 12, 12, 5, 60, 14, 9),
+        ("8002210115088", "10002716", "EXTRAVERGINE", "SAGRA GRAND EXV BOT W12x1L", "Ex.v. Sagra Grandulivo lt.1", 1.0, 10.00, "Bott.Lt 1", 12, 8, 5, 40, 14, 9),
+        ("8002210127562", "10002719", "EXTRAVERGINE", "SAGRA T.VIVE EXV BOT W 12x1L", "Ex.v. Sagra Terre Vive lt.1", 1.0, 10.00, "Bott.Lt 1", 12, 8, 5, 40, 14, 9),
+        ("8002210119543", "10000536", "EXTRAVERGINE", "SAGRA PROF. EXV PET C2x5L IT", "Ex.v. Sagra Prof Lt.5", 5.0, 50.00, "Pet lt 5", 2, 17, 4, 68, 14, 9),
+        ("8002210112827", "10002714", "EXTRAVERGINE", "SAGRA EXV 100%I BSA BOT W12x1L IT", "Ex.v. Sagra Bassa Acidità 100% ITA lt.1", 1.0, 15.00, "Bott.Lt 1", 12, 8, 5, 40, 14, 9),
+        ("8002210127425", "10002715", "EXTRAVERGINE", "SAGRA EXV 100%I BOT W 12x1L", "Ex.v. Sagra 100% Italiano lt.1", 1.0, 15.00, "Bott.Lt 1", 12, 8, 5, 40, 14, 9),
+        ("8002210128286", "10002720", "EXTRAVERGINE", "SAGRA EXV 100%I BIO BOT V12x1L IT", "Ex.v. Sagra Biologico 100% ITA lt.1", 1.0, 15.00, "Vetro lt 1", 12, 8, 5, 40, 14, 9),
+        ("8002210128248", "10002747", "EXTRAVERGINE", "SAGRA EXV BOT W12x750ML CLASS IT", "Ex.v. Sagra Classico lt.0,75", 0.75, 7.50, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
+        ("8002210121997", "10003315", "EXTRAVERGINE", "SAGRA GRAND EXV BOT W12x750ML  IT", "Ex.v. Sagra Grandulivo 0,75", 0.75, 7.50, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
+        ("8002210127197", "10003316", "EXTRAVERGINE", "SAGRA EXV 100%I BSA BOT W12x 750ML IT", "Ex.v. Sagra Bassa Acidità 100% ITA 0,75", 0.75, 11.25, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
+        ("8002210133792", "10003317", "EXTRAVERGINE", "SAGRA EXV 100% I BOT W 12x750ML IT", "Ex.v. Sagra 100% Italiano 0,75", 0.75, 11.25, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
+        ("8002210131815", "10003319", "EXTRAVERGINE", "SAGRA EXV 100%I BIO BOT W12x750ML IT", "Ex.v. Sagra Biologico 100% ITA  0,75", 0.75, 11.25, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
+        ("8002210130814", "60000444", "EXTRAVERGINE", "SAGRA EXV SPRAY C6x200ML ALLUMINIO IT", "Ex.v. Sagra Spray ml.200", 0.2, 2.00, "Spray Lt 0,20", 6, 49, 6, 294, 14, 9),
+        ("8002210124387", "10003061", "EXTRAVERGINE", "SAGRA PROF EXV PET T6x2L IT", "Ex.v. Sagra Prof lt.2", 2.0, 20.00, "Pet.Lt 2", 6, 13, 4, 52, 14, 9),
+        ("8002210131620", "10002724", "EXTRAVERGINE", "FBERIO EXV BOT W12x1L CLASS IT", "Ex.v. Filippo Berio Classico lt.1", 1.0, 12.00, "Bott.Lt 1", 12, 8, 5, 40, 14, 9),
+        ("8002210131644", "10002725", "EXTRAVERGINE", "FBERIO EXV BOT W12x1L BSA IT", "Ex.v. Filippo Berio Bassa Acidità lt.1", 1.0, 17.00, "Bott.Lt 1", 12, 8, 5, 40, 14, 9),
+        ("8002210131705", "10002726", "EXTRAVERGINE", "FBERIO EXV 100%I BOT W12x1L IT", "Ex.v. Filippo Berio 100% Italiano lt.1", 1.0, 18.00, "Bott.Lt 1", 12, 8, 5, 40, 14, 9),
+        ("8002210131767", "10002765", "EXTRAVERGINE", "FBERIO EXV BOT W12x750ML CLASS IT", "Ex.v. Filippo Berio Classico lt.0,75", 0.75, 12.00, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
+        ("8002210131668", "10002746", "EXTRAVERGINE", "FBERIO EXV BSA BOT W12x750ML IT", "Ex.v. Filippo Berio Bassa Acidità lt.0,75", 0.75, 17.00, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
+        ("8002210131804", "10002768", "EXTRAVERGINE", "FBERIO EXV 100%I BOT W12x750ML IT", "Ex.v. Filippo Berio 100% Italiano lt.0,75", 0.75, 18.00, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
+        ("8002210133013", "10003200", "EXTRAVERGINE", "FB R.O. EXV BIO 100%IT MB BOT W12X750 IT", "Ex.v. Filippo Berio Riserva Oro lt.0,75", 0.75, 19.00, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
+        ("8002210121461", "60000544", "EXTRAVERGINE", "EX.V. BUSTINA 10mlx250 FILIPPO BERIO ITA", "Ex.v. Filippo Berio Bustina ml.10", 0.01, 0.12, "bust lt 0,01", 250, 20, 5, 100, 14, 9),
+        ("8002210126572", "10003240", "OLIVA", "SAGRA OOL PUR R-PET V12X750ML CLASS IT", "Oliva Sagra RPET lt.0,75 PET", 0.75, 8.00, "Pet.Lt 0,75", 12, 12, 5, 60, 18, 12),
+        ("8002210001305", "10002717", "OLIVA", "SAGRA OOL BOT W12x1L CLASS", "Oliva Sagra lt.1", 1.0, 8.00, "Bott.Lt 1", 12, 8, 5, 40, 18, 12),
+        ("8002210128453", "10002718", "OLIVA", "SAGRA GRAND OOL BOT W12x1L", "Oliva Sagra Grandulivo lt.1", 1.0, 8.00, "Bott.Lt 1", 12, 8, 5, 40, 18, 12),
+        ("8002210126176", "10003288", "OLIVA", "SAGRA OOL PUR R-PET T6X1.5L IT", "Oliva Sagra lt.1,5", 1.5, 12.00, "Pet.Lt 1,5", 6, 16, 4, 64, 18, 12),
+        ("8002210119567", "10000537", "OLIVA", "SAGRA PROF. OOL PUR PET C2x5L IT", "Oliva Sagra Prof Lt.5", 5.0, 40.00, "Pet.Lt 5", 2, 17, 4, 68, 18, 12),
+        ("8002210132436", "10002965", "OLIVA", "FBERIO OOL PUR BOT V6X500ML IT", "Oliva Filippo Berio lt.0,50", 0.5, 4.11, "Bott.Lt 0,5", 6, 30, 6, 180, 18, 12),
+        ("8002210131729", "10002727", "OLIVA", "FBERIO OOL PUR BOT W12x1L IT", "Oliva Filippo Berio lt.1", 1.0, 7.75, "Bott.Lt 1", 12, 8, 5, 40, 18, 12),
+        ("8002210131781", "10002766", "OLIVA", "FBERIO OOL PUR BOT W12x750ML IT", "Oliva Filippo Berio lt.0,75", 0.75, 5.97, "Bott.Lt 0,75", 12, 12, 5, 60, 18, 12),
+        ("8002210122307", "10000922", "OLIVA", "FBERIO OOL PUR LAT V8x1L IT", "Oliva Filippo Berio Latta lt.1", 1.0, 8.10, "Latta lt 1", 8, 12, 5, 60, 18, 12),
+        ("8002210111486", "10003307", "SEMI", "SAGRA SEM MAIS PET V12x1L IT", "Mais Sagra lt.1", 1.0, 2.00, "Pet.Lt 1", 12, 12, 5, 60, 18, 12),
+        ("8002210127067", "10003286", "SEMI", "SAGRA SEM MAIS PET T6x1.5L IT", "Mais Sagrì lt.1,5", 1.5, 3.00, "Pet.Lt 1,5", 6, 16, 4, 64, 18, 12),
+        ("8002210112889", "10003089", "SEMI", "SAGRA SEM MAIS PET T6x2L IT", "Mais Sagra lt.2", 2.0, 4.00, "Pet.Lt 2", 6, 13, 4, 52, 18, 12),
+        ("8002210000551", "10003311", "SEMI", "SAGRA SEM ARACHIDE PET V12x1L IT", "Arachide Sagra lt.1", 1.0, 3.00, "Pet.Lt 1", 12, 12, 5, 60, 18, 12),
+        ("8002210126916", "10003284", "SEMI", "SAGRI SEM ARACHIDE PET T6x1.5L IT", "Arachide Sagrì lt.1,5", 1.5, 4.50, "Pet.Lt 1,5", 6, 16, 4, 64, 18, 12),
+        ("8002210112865", "10003086", "SEMI", "SAGRA SEM ARACHIDE PET T6x2L IT", "Arachide Sagra lt.2", 2.0, 6.00, "Pet.Lt 2", 6, 13, 4, 52, 18, 12),
+        ("8002210116160", "10000326", "SEMI", "SAGRA PROF SEM ARACHIDE PET C2x5L IT", "Arachide Sagra Prof. Lt.5", 5.0, 15.00, "Pet lt 5", 2, 17, 4, 68, 18, 12),
+        ("8002210111905", "10003310", "SEMI", "SAGRA SEM GIRAS PET V12x1L IT", "Girasole Sagra lt.1", 1.0, 2.20, "Pet.Lt 1", 12, 12, 5, 60, 18, 12),
+        ("8002210126817", "10003287", "SEMI", "SAGRI SEM GIRAS PET T6x1.5L IT", "Girasole Sagrì lt.1,5", 1.5, 3.30, "Pet.Lt 1,5", 6, 16, 4, 64, 18, 12),
+        ("8002210113107", "10003087", "SEMI", "SAGRA SEM GIRAS PET T6x2L IT", "Girasole Sagra lt.2", 2.0, 4.40, "Pet.Lt 2", 6, 13, 4, 52, 18, 12),
+        ("8002210115453", "10003062", "SEMI", "SAGRA PROF SEM GIRAS PET C2x5L IT", "Girasole Sagra Prof Lt.5", 5.0, 11.00, "Pet lt 5", 2, 17, 4, 68, 18, 12),
+        ("8002210111295", "10002933", "SEMI", "SAGRA FRIMX SEM FRITT PET V12x1L NOP IT", "Frimax Sagra lt.1", 1.0, 2.25, "Pet Lt 1", 12, 12, 5, 60, 18, 12),
+        ("8002210126893", "10003285", "SEMI", "SAGRI SEM FRITT PET T6x1.5L IT", "Frimax Sagrì lt.1,5", 1.5, 3.38, "Pet.Lt 1,5", 6, 16, 4, 64, 18, 12),
+        ("8002210112940", "10003085", "SEMI", "SAGRA FRIMX SEM FRITT PET T6x2L NOP IT", "Frimax Sagra lt.2", 2.0, 4.50, "Pet Lt 2", 6, 13, 4, 52, 18, 12),
+        ("8002210115484", "10002644", "SEMI", "SAGRA FRIMX SEM FRITT PET C2x5L NOP IT", "Frimax Sagra lt.5", 5.0, 11.25, "Pet Lt 5", 2, 17, 4, 68, 18, 12),
+        ("8002210134140", "10003327", "SEMI", "GRAZIA SEM GIRAS LAT 1x20L IT", "Frimax Spray ml.200", 0.2, 0.45, "Spray Lt 0,20", 6, 49, 6, 294, 18, 12),
+        ("8002210127401", "10003309", "SEMI", "SAGRA SEM GIRAS AO PET V12x1L IT", "Girasole Alto Oleico Sagra lt.1", 1.0, 2.80, "Pet.Lt 1", 12, 12, 5, 60, 18, 12),
+        ("8002210126336", "10003063", "SEMI", "SAGRA PROF SEM GIRAS AO PET C2x5L IT", "Girasole Alto Oleico Sagra Prof lt.5", 5.0, 14.00, "Pet lt 5", 2, 17, 4, 68, 18, 12),
+        ("8002210129290", "10003312", "SEMI", "SAGRA SEM VINACC PET V12x1L IT", "Vinacciolo Sagra lt.1", 1.0, 5.00, "Pet.Lt 1", 12, 12, 5, 60, 18, 12),
+        ("8002210130289", "10003082", "EXTRAVERGINE", "FBERIO EXV CLASS MB BOT V6x250ML IT", "Ex.v. F.Berio Anti Rab Classico lt.0,25", 0.25, 2.50, "Vetro lt 0,25", 6, 49, 5, 245, 14, 9),
+        ("8002210130210", "10003081", "EXTRAVERGINE", "FBERIO EXV 100%I MB BOT V6x250ML IT", "Ex.v. F.Berio Anti Rab 100% ITA lt.0,25", 0.25, 3.00, "Vetro lt 0,25", 6, 49, 5, 245, 14, 9),
+        ("8002210130340", "10003091", "EXTRAVERGINE", "FBERIO EXV CLASS MB BOT V6x500ML IT", "Ex.v. F.Berio Anti Rab Classico lt.0,50", 0.5, 4.30, "Vetro lt 0,50", 6, 31, 5, 155, 14, 9),
+        ("8002210130302", "10003079", "EXTRAVERGINE", "FBERIO EXV 100%I MB BOT V6x500ML IT", "Ex.v. F.Berio Anti Rab 100% ITA lt.0,50", 0.5, 4.80, "Vetro lt 0,50", 6, 31, 5, 155, 14, 9),
+        ("8002210132573", "10003072", "EXTRAVERGINE", "FBERIO EXV BOT V6x500ML TOSC IT", "Ex.v. F.Berio Toscano lt.0,50", 0.5, 10.00, "Vetro lt 0,50", 6, 31, 5, 155, 18, 12),
+        ("8002210130234", "60000591", "EXTRAVERGINE", "FBERIO EXV DRES BOT V6x250ML PEP TE IT", "Ex.v. F.Berio Peperoncino lt.0,25", 0.25, 3.50, "Vetro lt 0,25", 6, 49, 5, 245, 24, 16),
+        ("8002210130791", "60000590", "ACETO", "FBERIO ACE BALS BOT V6x250ML IT", "Aceto Balsamico F.Berio lt.0,25", 0.25, 2.00, "Vetro lt 0,25", 6, 48, 6, 288, 61, 41),
+        ("8002210130197", "60000589", "ACETO", "FBERIO ACE BALS BOT V6x500ML IT", "Aceto Balsamico F.Berio lt.0,50", 0.5, 2.10, "Vetro lt 0,50", 6, 31, 5, 155, 61, 41)
     ]
+    
+    # Scrittura separata nelle due tabelle
     for p in prodotti_salov:
-        cursor.execute("INSERT OR REPLACE INTO prodotti VALUES (?, ?, ?, ?, ?, ?, ?, ?)", p)
+        # 1. Anagrafica Master
+        cursor.execute("""
+        INSERT OR REPLACE INTO anagrafica_master (
+            ean, codice_sap, tipo_olio, descrizione_sap, descrizione_commerciale, formato_lt, confezione,
+            pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet, conservazione_mesi, shelf_life_mesi
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (p[0], p[1], p[2], p[3], p[4], p[5], p[7], p[8], p[9], p[10], p[11], p[12], p[13]))
+        
+        # 2. Guardrail Finanziari
+        cursor.execute("""
+        INSERT OR REPLACE INTO guardrail_aziendali (ean, min_net_net_g) VALUES (?, ?)
+        """, (p[0], p[6]))
         
     clienti_demo = [
         ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "ALLEANZA 3.0"),
@@ -188,7 +213,7 @@ def seed_baseline_data(conn):
 
 init_db()
 
-menu = st.sidebar.radio("SELEZIONA SCHEDA", ["Simulatore Offerte", "Back-Office (Gestione Dati)", "Report Sintetico", "Guida Operativa"])
+menu = st.sidebar.radio("SELEZIONA SCHEDA", ["Simulatore Offerte", "Dati Anagrafici (Logistica)", "Back-Office (Contratti)", "Report Sintetico", "Guida Operativa"])
 
 # ==========================================
 # SCHEDA 1: SIMULATORE 
@@ -216,9 +241,14 @@ if menu == "Simulatore Offerte":
         associati = [r[0] for r in cursor.fetchall()]
         associato_sel = st.sidebar.selectbox("3. Insegna Locale / Associato", associati, help="Seleziona l'associato locale.")
 
-        cursor.execute("SELECT ean, descrizione_commerciale, tipo_olio, min_net_net_g, codice_sap, formato_lt FROM prodotti")
+        # JOIN tra Anagrafica Master e Guardrail Finanziari per popolare il simulatore
+        cursor.execute("""
+            SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, a.codice_sap, a.formato_lt, COALESCE(g.min_net_net_g, 0.0) 
+            FROM anagrafica_master a
+            LEFT JOIN guardrail_aziendali g ON a.ean = g.ean
+        """)
         prodotti = cursor.fetchall()
-        prodotti_dict = {f"{p[1]} [EAN: {p[0]}]": (p[0], p[2], p[3], p[4], p[5]) for p in prodotti}
+        prodotti_dict = {f"{p[1]} [EAN: {p[0]}]": (p[0], p[2], p[5], p[3], p[4]) for p in prodotti}
         prodotto_scelto = st.sidebar.selectbox("4. Referenza Salov", list(prodotti_dict.keys()), help="Seleziona la referenza.")
         ean, tipo_olio, min_net_net_g, codice_sap, formato_lt = prodotti_dict[prodotto_scelto]
 
@@ -343,13 +373,11 @@ if menu == "Simulatore Offerte":
         )
         result = PricingEngine.calculate(engine_input)
 
-        # --- SEZIONE COMPATTA MARGINE & DATE PROMO ---
         st.markdown("---")
         col_c1, col_c2 = st.columns(2)
         
         with col_c1:
             with st.expander("Verifica Margine e Stato", expanded=True):
-                # FIX: Arrotondamento a 2 decimali per la lettura commerciale
                 st.metric("PREZZO NET NET RISULTANTE", f"{result.net_net_finale:.2f} Euro")
                 st.metric("SOGLIA MINIMA NET NET (G)", f"{min_net_net_g:.2f} Euro")
                 if result.guardrail_ok:
@@ -506,181 +534,380 @@ if menu == "Simulatore Offerte":
     conn.close()
 
 # ==========================================
-# SCHEDA 2: BACK-OFFICE (GDO CON TRANSAZIONI ATOMICHE SICURE)
+# SCHEDA 2: DATI ANAGRAFICI (PRODOTTI E LOGISTICA)
 # ==========================================
-elif menu == "Back-Office (Gestione Dati)":
-    st.title("Back-Office - Gestione Dati e Backup")
+elif menu == "Dati Anagrafici (Logistica)":
+    st.title("Dati Anagrafici - Prodotti e Logistica")
+    st.markdown("Gestione dell'anagrafica prodotti (Dati SAP e Logistici). I margini finanziari sono gestiti separatamente.")
+    
     conn = sqlite3.connect(DB_FILE)
     
-    st.subheader("Modifica Diretta dei Contratti in Database (A caldo)")
-    st.markdown("Questa griglia ti permette di modificare direttamente i record esistenti nel database locale. Qualsiasi modifica salvata si rifletterà all'istante sul Simulatore.")
+    st.subheader("Modifica Diretta Anagrafica Master")
     
-    df_database_editor = pd.read_sql_query("""
-        SELECT a.id, a.gruppo_macro, a.sottogruppo, a.associato_insegna, a.livello, a.chiave_livello,
-               CASE 
-                    WHEN a.livello = 'REFERENZA' THEN p.descrizione_commerciale 
-                    WHEN a.livello = 'CATEGORIA' THEN 'Categoria: ' || a.chiave_livello
-                    ELSE 'Contratto Quadro'
-               END as descrizione_prodotto,
-               a.listino_r,
-               a.sconto_1, a.sconto_2, a.sconto_3, a.sconto_4, a.sconto_5, a.sconto_6, a.sconto_7, a.sconto_y,
-               a.sconto_carico, a.sconto_pagamento, a.voce_contratto_1, a.voce_contratto_2, a.voce_contratto_3,
-               a.voce_contratto_4, a.voce_contratto_5
-        FROM accordi_commerciali a
-        LEFT JOIN prodotti p ON a.chiave_livello = p.ean AND a.livello = 'REFERENZA'
+    df_prodotti = pd.read_sql_query("""
+        SELECT ean, codice_sap, tipo_olio, descrizione_sap, descrizione_commerciale, formato_lt, confezione,
+               pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet, conservazione_mesi, shelf_life_mesi
+        FROM anagrafica_master
     """, conn)
     
-    edited_df = st.data_editor(
-        df_database_editor, 
+    edited_prod_df = st.data_editor(
+        df_prodotti, 
         num_rows="dynamic", 
         use_container_width=True,
         hide_index=True,
-        disabled=["descrizione_prodotto"],
-        key="db_data_editor"
+        key="prod_data_editor"
     )
     
-    if st.button("SALVA MODIFICHE DIRETTE NEL DATABASE"):
+    if st.button("SALVA MODIFICHE ANAGRAFICA"):
         cursor = conn.cursor()
         try:
             with conn:
-                cursor.execute("DELETE FROM accordi_commerciali")
-                for _, r in edited_df.iterrows():
-                    def check_nan(val):
-                        return float(val) if (pd.notna(val) and str(val).strip() != "") else None
+                cursor.execute("DELETE FROM anagrafica_master")
+                for _, r in edited_prod_df.iterrows():
+                    def check_nan_float(val):
+                        return float(val) if (pd.notna(val) and str(val).strip() != "") else 0.0
+                    def check_nan_int(val):
+                        return int(float(val)) if (pd.notna(val) and str(val).strip() != "") else 0
                     
                     cursor.execute("""
-                    INSERT OR REPLACE INTO accordi_commerciali (
-                        id, gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello, listino_r,
-                        sconto_1, sconto_2, sconto_3, sconto_4, sconto_5, sconto_6, sconto_7, sconto_y,
-                        sconto_carico, sconto_pagamento, voce_contratto_1, voce_contratto_2, voce_contratto_3,
-                        voce_contratto_4, voce_contratto_5
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO anagrafica_master (
+                        ean, codice_sap, tipo_olio, descrizione_sap, descrizione_commerciale, formato_lt, confezione,
+                        pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet, conservazione_mesi, shelf_life_mesi
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        check_nan(r.get("id")),
-                        str(r.get("gruppo_macro")).upper().strip() if pd.notna(r.get("gruppo_macro")) else "",
-                        str(r.get("sottogruppo")).upper().strip() if pd.notna(r.get("sottogruppo")) else "",
-                        str(r.get("associato_insegna")).upper().strip() if pd.notna(r.get("associato_insegna")) else "",
-                        str(r.get("livello")).upper().strip() if pd.notna(r.get("livello")) else "GRUPPO",
-                        str(r.get("chiave_livello")).strip() if pd.notna(r.get("chiave_livello")) else "",
-                        check_nan(r.get("listino_r")),
-                        check_nan(r.get("sconto_1")), check_nan(r.get("sconto_2")), check_nan(r.get("sconto_3")),
-                        check_nan(r.get("sconto_4")), check_nan(r.get("sconto_5")), check_nan(r.get("sconto_6")),
-                        check_nan(r.get("sconto_7")), check_nan(r.get("sconto_y")), check_nan(r.get("sconto_carico")), check_nan(r.get("sconto_pagamento")),
-                        check_nan(r.get("voce_contratto_1")), check_nan(r.get("voce_contratto_2")), check_nan(r.get("voce_contratto_3")),
-                        check_nan(r.get("voce_contratto_4")), check_nan(r.get("voce_contratto_5"))
+                        str(r.get("ean")).strip(),
+                        str(r.get("codice_sap")).strip(),
+                        str(r.get("tipo_olio")).strip(),
+                        str(r.get("descrizione_sap")).strip(),
+                        str(r.get("descrizione_commerciale")).strip(),
+                        check_nan_float(r.get("formato_lt")),
+                        str(r.get("confezione")).strip(),
+                        check_nan_int(r.get("pezzi_cartone")),
+                        check_nan_int(r.get("cartoni_strato")),
+                        check_nan_int(r.get("strati_pallet")),
+                        check_nan_int(r.get("cartoni_pallet")),
+                        check_nan_int(r.get("conservazione_mesi")),
+                        check_nan_int(r.get("shelf_life_mesi"))
                     ))
-            st.success("VERDE (APPROVATO) - Il database locale è stato aggiornato correttamente.")
+            st.success("VERDE (APPROVATO) - L'anagrafica prodotti è stata aggiornata correttamente.")
             st.rerun()
         except Exception as e:
-            st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione del file: {e}")
+            st.error(f"ROSSO (BLOCCATO) - Errore durante il salvataggio dei prodotti: {e}")
 
     st.markdown("---")
-    col_b1, col_b2 = st.columns(2)
+    col_p1, col_p2 = st.columns(2)
     
-    with col_b1:
-        st.subheader("Esportazione e Backup")
-        st.markdown("Scarica il tracciato attuale degli accordi commerciali per lavorarlo localmente in Excel.")
+    with col_p1:
+        st.subheader("Esportazione Anagrafica")
+        st.markdown("Scarica l'anagrafica logistica attuale per lavorarla in Excel.")
         
-        query_accordi = """
-        SELECT a.gruppo_macro as GRUPPO_MACRO, a.sottogruppo as SOTTOGRUPPO, a.associato_insegna as ASSOCIATO_INSEGNA,
-               a.livello as LIVELLO, a.chiave_livello as CHIAVE_LIVELLO,
-               CASE 
-                    WHEN a.livello = 'REFERENZA' THEN p.descrizione_commerciale 
-                    WHEN a.livello = 'CATEGORIA' THEN 'Accordo di Categoria: ' || a.chiave_livello
-                    ELSE 'Contratto Quadro'
-               END as DESCRIZIONE_PRODOTTO,
-               a.listino_r as LISTINO_BASE_R,
-               a.sconto_1 as SCONTO_1, a.sconto_2 as SCONTO_2, a.sconto_3 as SCONTO_3, a.sconto_4 as SCONTO_4, a.sconto_5 as SCONTO_5,
-               a.sconto_6 as SCONTO_LOCAL_6, a.sconto_7 as SCONTO_LOCAL_7, a.sconto_y as SCONTO_CONTINUATIVO_Y,
-               a.sconto_carico as SCONTO_CARICO_LOGISTICA, a.sconto_pagamento as SCONTO_PAGAMENTO_AC,
-               a.voce_contratto_1 as PFA_VOCE_I, a.voce_contratto_2 as PFA_VOCE_II,
-               a.voce_contratto_3 as PFA_VOCE_III, a.voce_contratto_4 as PFA_VOCE_IV, a.voce_contratto_5 as PFA_VOCE_V
-        FROM accordi_commerciali a
-        LEFT JOIN prodotti p ON a.chiave_livello = p.ean AND a.livello = 'REFERENZA'
-        """
-        df_accordi = pd.read_sql_query(query_accordi, conn)
-        
-        colonne_ordinate = [
-            "GRUPPO_MACRO", "SOTTOGRUPPO", "ASSOCIATO_INSEGNA", "LIVELLO", "CHIAVE_LIVELLO", "DESCRIZIONE_PRODOTTO",
-            "LISTINO_BASE_R", "SCONTO_1", "SCONTO_2", "SCONTO_3", "SCONTO_4", "SCONTO_5",
-            "SCONTO_LOCAL_6", "SCONTO_LOCAL_7", "SCONTO_CONTINUATIVO_Y", "SCONTO_CARICO_LOGISTICA", "SCONTO_PAGAMENTO_AC",
-            "PFA_VOCE_I", "PFA_VOCE_II", "PFA_VOCE_III", "PFA_VOCE_IV", "PFA_VOCE_V"
-        ]
-        df_accordi = df_accordi[colonne_ordinate]
-        
-        buffer_export = io.BytesIO()
-        with pd.ExcelWriter(buffer_export, engine='openpyxl') as writer:
-            df_accordi.to_excel(writer, index=False, sheet_name="Accordi_GDO")
+        buffer_prod_export = io.BytesIO()
+        with pd.ExcelWriter(buffer_prod_export, engine='openpyxl') as writer:
+            df_prodotti.to_excel(writer, index=False, sheet_name="Anagrafica_SAP")
             
         st.download_button(
-            label="Scarica Backup / Template Excel",
-            data=buffer_export.getvalue(),
-            file_name=f"Backup_Bunker_Commerciale_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+            label="Scarica Anagrafica Prodotti (Excel)",
+            data=buffer_prod_export.getvalue(),
+            file_name=f"Anagrafica_Prodotti_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-    with col_b2:
-        st.subheader("Importazione Massiva Contratti")
-        st.markdown("Carica il file Excel compilato per sovrascrivere o aggiungere condizioni.")
-        uploaded_file = st.file_uploader("Trascina il file Excel (.xlsx)", type=["xlsx"])
+    with col_p2:
+        st.subheader("Importazione Massiva SAP")
+        st.markdown("Carica il file Excel per aggiornare l'anagrafica logistica.")
+        uploaded_prod_file = st.file_uploader("Trascina il file Excel Anagrafica (.xlsx)", type=["xlsx"])
         
-        if uploaded_file is not None:
-            if st.button("Conferma Scrittura nel Bunker"):
+        if uploaded_prod_file is not None:
+            if st.button("Conferma Scrittura Anagrafica"):
                 try:
-                    df_import = pd.read_excel(uploaded_file)
-                    colonne_obbligatorie = ["GRUPPO_MACRO", "SOTTOGRUPPO", "ASSOCIATO_INSEGNA", "LIVELLO", "CHIAVE_LIVELLO"]
-                    missing_cols = [c for c in colonne_obbligatorie if c not in df_import.columns]
+                    df_prod_import = pd.read_excel(uploaded_prod_file)
                     
-                    if missing_cols:
-                        st.error(f"ROSSO (BLOCCATO) - Struttura Excel non valida. Colonne mancanti: {', '.join(missing_cols)}")
+                    col_map = {
+                        "EAN": "ean",
+                        "Codice Articolo": "codice_sap",
+                        "TIPO OLIO contenuto": "tipo_olio",
+                        "Descrizione articolo in SAP": "descrizione_sap",
+                        "Descrizione Articolo": "descrizione_commerciale",
+                        "Formato (lt)": "formato_lt",
+                        "Tipologia Confezione": "confezione",
+                        "Pezzi x\nCartone": "pezzi_cartone",
+                        "Pezzi x Cartone": "pezzi_cartone",
+                        "Cartoni x\nStrato": "cartoni_strato",
+                        "Cartoni x Strato": "cartoni_strato",
+                        "Strati x Pallet": "strati_pallet",
+                        "Cartoni X Pallet": "cartoni_pallet",
+                        "Conservazione (Mese)": "conservazione_mesi",
+                        "SHELF LIFE (mesi)": "shelf_life_mesi"
+                    }
+                    
+                    df_prod_import = df_prod_import.rename(columns=col_map)
+                    df_prod_import.columns = [str(c).lower().strip() for c in df_prod_import.columns]
+                    
+                    if "ean" not in df_prod_import.columns:
+                        st.error("ROSSO (BLOCCATO) - Colonna 'EAN' mancante nel file Excel.")
                     else:
                         cursor = conn.cursor()
                         righe_inserite = 0
                         
                         with conn:
-                            for idx, row in df_import.iterrows():
-                                gruppo = str(row["GRUPPO_MACRO"]).upper().strip()
-                                sottogruppo = str(row["SOTTOGRUPPO"]).upper().strip() if (pd.notna(row.get("SOTTOGRUPPO")) and str(row.get("SOTTOGRUPPO")).strip() != "") else ""
-                                insegna = str(row["ASSOCIATO_INSEGNA"]).upper().strip() if (pd.notna(row.get("ASSOCIATO_INSEGNA")) and str(row.get("ASSOCIATO_INSEGNA")).strip() != "") else ""
-                                livello = str(row["LIVELLO"]).upper().strip()
-                                chiave_livello = str(row["CHIAVE_LIVELLO"]).strip() if pd.notna(row["CHIAVE_LIVELLO"]) else ""
-                                
-                                if livello == "REFERENZA" and chiave_livello:
-                                    chiave_livello = str(chiave_livello).split('.')[0].zfill(13)
+                            for idx, row in df_prod_import.iterrows():
+                                ean_val = str(row.get("ean", "")).split('.')[0].zfill(13)
+                                if not ean_val or ean_val == "0000000000000" or ean_val == "NAN":
+                                    continue
+                                    
+                                tipo_olio_raw = str(row.get("tipo_olio", "")).upper().strip()
+                                if tipo_olio_raw == "EXTRA":
+                                    tipo_olio_raw = "EXTRAVERGINE"
+
+                                def get_float(col_name, default=0.0):
+                                    val = row.get(col_name)
+                                    if pd.isna(val) or str(val).strip() == "": return default
+                                    try: return float(str(val).replace(',', '.'))
+                                    except: return default
+                                    
+                                def get_int(col_name, default=0):
+                                    val = row.get(col_name)
+                                    if pd.isna(val) or str(val).strip() == "": return default
+                                    try: return int(float(val))
+                                    except: return default
 
                                 cursor.execute("""
-                                INSERT OR IGNORE INTO clienti (gruppo_macro, sottogruppo, associato_insegna)
-                                VALUES (?, ?, ?)
-                                """, (gruppo, sottogruppo, insegna))
-
-                                def to_float_or_none(val):
-                                    if pd.isna(val) or str(val).strip() == "":
-                                        return None
-                                    try: return float(val)
-                                    except: return None
-
-                                cursor.execute("""
-                                INSERT OR REPLACE INTO accordi_commerciali (
-                                    gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello, listino_r,
-                                    sconto_1, sconto_2, sconto_3, sconto_4, sconto_5,
-                                    sconto_6, sconto_7, sconto_y, sconto_carico, sconto_pagamento,
-                                    voce_contratto_1, voce_contratto_2, voce_contratto_3, voce_contratto_4, voce_contratto_5
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                INSERT OR REPLACE INTO anagrafica_master (
+                                    ean, codice_sap, tipo_olio, descrizione_sap, descrizione_commerciale, formato_lt, confezione,
+                                    pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet, conservazione_mesi, shelf_life_mesi
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 """, (
-                                    gruppo, sottogruppo, insegna, livello, chiave_livello, to_float_or_none(row.get("LISTINO_BASE_R")),
-                                    to_float_or_none(row.get("SCONTO_1")), to_float_or_none(row.get("SCONTO_2")), to_float_or_none(row.get("SCONTO_3")),
-                                    to_float_or_none(row.get("SCONTO_4")), to_float_or_none(row.get("SCONTO_5")), to_float_or_none(row.get("SCONTO_LOCAL_6")),
-                                    to_float_or_none(row.get("SCONTO_LOCAL_7")), to_float_or_none(row.get("SCONTO_CONTINUATIVO_Y")),
-                                    to_float_or_none(row.get("SCONTO_CARICO_LOGISTICA")),
-                                    to_float_or_none(row.get("SCONTO_PAGAMENTO_AC")), to_float_or_none(row.get("PFA_VOCE_I")),
-                                    to_float_or_none(row.get("PFA_VOCE_II")), to_float_or_none(row.get("PFA_VOCE_III")),
-                                    to_float_or_none(row.get("PFA_VOCE_IV")), to_float_or_none(row.get("PFA_VOCE_V"))
+                                    ean_val,
+                                    str(row.get("codice_sap", "")).split('.')[0],
+                                    tipo_olio_raw,
+                                    str(row.get("descrizione_sap", "")),
+                                    str(row.get("descrizione_commerciale", "")),
+                                    get_float("formato_lt"),
+                                    str(row.get("confezione", "")),
+                                    get_int("pezzi_cartone"),
+                                    get_int("cartoni_strato"),
+                                    get_int("strati_pallet"),
+                                    get_int("cartoni_pallet"),
+                                    get_int("conservazione_mesi"),
+                                    get_int("shelf_life_mesi")
                                 ))
                                 righe_inserite += 1
-                        st.success(f"VERDE (APPROVATO) - Elaborate {righe_inserite} regole commerciali nel Bunker.")
+                        st.success(f"VERDE (APPROVATO) - Elaborati {righe_inserite} prodotti nell'anagrafica.")
                         st.rerun()
                 except Exception as e:
                     st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione del file: {e}")
+
+    conn.close()
+
+# ==========================================
+# SCHEDA 3: BACK-OFFICE CONTRATTI E GUARDRAIL
+# ==========================================
+elif menu == "Back-Office (Contratti)":
+    st.title("Back-Office - Contratti e Guardrail Finanziari")
+    conn = sqlite3.connect(DB_FILE)
+    
+    tab_contratti, tab_guardrail = st.tabs(["Gestione Contratti GDO", "Gestione Guardrail Aziendali (Minimo G)"])
+    
+    with tab_contratti:
+        st.subheader("Modifica Diretta dei Contratti in Database (A caldo)")
+        
+        df_database_editor = pd.read_sql_query("""
+            SELECT a.id, a.gruppo_macro, a.sottogruppo, a.associato_insegna, a.livello, a.chiave_livello,
+                   CASE 
+                        WHEN a.livello = 'REFERENZA' THEN p.descrizione_commerciale 
+                        WHEN a.livello = 'CATEGORIA' THEN 'Categoria: ' || a.chiave_livello
+                        ELSE 'Contratto Quadro'
+                   END as descrizione_prodotto,
+                   a.listino_r,
+                   a.sconto_1, a.sconto_2, a.sconto_3, a.sconto_4, a.sconto_5, a.sconto_6, a.sconto_7, a.sconto_y,
+                   a.sconto_carico, a.sconto_pagamento, a.voce_contratto_1, a.voce_contratto_2, a.voce_contratto_3,
+                   a.voce_contratto_4, a.voce_contratto_5
+            FROM accordi_commerciali a
+            LEFT JOIN anagrafica_master p ON a.chiave_livello = p.ean AND a.livello = 'REFERENZA'
+        """, conn)
+        
+        edited_df = st.data_editor(
+            df_database_editor, 
+            num_rows="dynamic", 
+            use_container_width=True,
+            hide_index=True,
+            disabled=["descrizione_prodotto"],
+            key="db_data_editor"
+        )
+        
+        if st.button("SALVA MODIFICHE CONTRATTI"):
+            cursor = conn.cursor()
+            try:
+                with conn:
+                    cursor.execute("DELETE FROM accordi_commerciali")
+                    for _, r in edited_df.iterrows():
+                        def check_nan(val):
+                            return float(val) if (pd.notna(val) and str(val).strip() != "") else None
+                        
+                        cursor.execute("""
+                        INSERT OR REPLACE INTO accordi_commerciali (
+                            id, gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello, listino_r,
+                            sconto_1, sconto_2, sconto_3, sconto_4, sconto_5, sconto_6, sconto_7, sconto_y,
+                            sconto_carico, sconto_pagamento, voce_contratto_1, voce_contratto_2, voce_contratto_3,
+                            voce_contratto_4, voce_contratto_5
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            check_nan(r.get("id")),
+                            str(r.get("gruppo_macro")).upper().strip() if pd.notna(r.get("gruppo_macro")) else "",
+                            str(r.get("sottogruppo")).upper().strip() if pd.notna(r.get("sottogruppo")) else "",
+                            str(r.get("associato_insegna")).upper().strip() if pd.notna(r.get("associato_insegna")) else "",
+                            str(r.get("livello")).upper().strip() if pd.notna(r.get("livello")) else "GRUPPO",
+                            str(r.get("chiave_livello")).strip() if pd.notna(r.get("chiave_livello")) else "",
+                            check_nan(r.get("listino_r")),
+                            check_nan(r.get("sconto_1")), check_nan(r.get("sconto_2")), check_nan(r.get("sconto_3")),
+                            check_nan(r.get("sconto_4")), check_nan(r.get("sconto_5")), check_nan(r.get("sconto_6")),
+                            check_nan(r.get("sconto_7")), check_nan(r.get("sconto_y")), check_nan(r.get("sconto_carico")), check_nan(r.get("sconto_pagamento")),
+                            check_nan(r.get("voce_contratto_1")), check_nan(r.get("voce_contratto_2")), check_nan(r.get("voce_contratto_3")),
+                            check_nan(r.get("voce_contratto_4")), check_nan(r.get("voce_contratto_5"))
+                        ))
+                st.success("VERDE (APPROVATO) - I contratti sono stati aggiornati correttamente.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione del file: {e}")
+
+        st.markdown("---")
+        col_b1, col_b2 = st.columns(2)
+        
+        with col_b1:
+            st.subheader("Esportazione Contratti")
+            
+            query_accordi = """
+            SELECT a.gruppo_macro as GRUPPO_MACRO, a.sottogruppo as SOTTOGRUPPO, a.associato_insegna as ASSOCIATO_INSEGNA,
+                   a.livello as LIVELLO, a.chiave_livello as CHIAVE_LIVELLO,
+                   CASE 
+                        WHEN a.livello = 'REFERENZA' THEN p.descrizione_commerciale 
+                        WHEN a.livello = 'CATEGORIA' THEN 'Accordo di Categoria: ' || a.chiave_livello
+                        ELSE 'Contratto Quadro'
+                   END as DESCRIZIONE_PRODOTTO,
+                   a.listino_r as LISTINO_BASE_R,
+                   a.sconto_1 as SCONTO_1, a.sconto_2 as SCONTO_2, a.sconto_3 as SCONTO_3, a.sconto_4 as SCONTO_4, a.sconto_5 as SCONTO_5,
+                   a.sconto_6 as SCONTO_LOCAL_6, a.sconto_7 as SCONTO_LOCAL_7, a.sconto_y as SCONTO_CONTINUATIVO_Y,
+                   a.sconto_carico as SCONTO_CARICO_LOGISTICA, a.sconto_pagamento as SCONTO_PAGAMENTO_AC,
+                   a.voce_contratto_1 as PFA_VOCE_I, a.voce_contratto_2 as PFA_VOCE_II,
+                   a.voce_contratto_3 as PFA_VOCE_III, a.voce_contratto_4 as PFA_VOCE_IV, a.voce_contratto_5 as PFA_VOCE_V
+            FROM accordi_commerciali a
+            LEFT JOIN anagrafica_master p ON a.chiave_livello = p.ean AND a.livello = 'REFERENZA'
+            """
+            df_accordi = pd.read_sql_query(query_accordi, conn)
+            
+            colonne_ordinate = [
+                "GRUPPO_MACRO", "SOTTOGRUPPO", "ASSOCIATO_INSEGNA", "LIVELLO", "CHIAVE_LIVELLO", "DESCRIZIONE_PRODOTTO",
+                "LISTINO_BASE_R", "SCONTO_1", "SCONTO_2", "SCONTO_3", "SCONTO_4", "SCONTO_5",
+                "SCONTO_LOCAL_6", "SCONTO_LOCAL_7", "SCONTO_CONTINUATIVO_Y", "SCONTO_CARICO_LOGISTICA", "SCONTO_PAGAMENTO_AC",
+                "PFA_VOCE_I", "PFA_VOCE_II", "PFA_VOCE_III", "PFA_VOCE_IV", "PFA_VOCE_V"
+            ]
+            df_accordi = df_accordi[colonne_ordinate]
+            
+            buffer_export = io.BytesIO()
+            with pd.ExcelWriter(buffer_export, engine='openpyxl') as writer:
+                df_accordi.to_excel(writer, index=False, sheet_name="Accordi_GDO")
+                
+            st.download_button(
+                label="Scarica Template Contratti (Excel)",
+                data=buffer_export.getvalue(),
+                file_name=f"Backup_Contratti_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        with col_b2:
+            st.subheader("Importazione Massiva Contratti")
+            uploaded_file = st.file_uploader("Trascina il file Excel Contratti (.xlsx)", type=["xlsx"])
+            
+            if uploaded_file is not None:
+                if st.button("Conferma Scrittura Contratti"):
+                    try:
+                        df_import = pd.read_excel(uploaded_file)
+                        colonne_obbligatorie = ["GRUPPO_MACRO", "SOTTOGRUPPO", "ASSOCIATO_INSEGNA", "LIVELLO", "CHIAVE_LIVELLO"]
+                        missing_cols = [c for c in colonne_obbligatorie if c not in df_import.columns]
+                        
+                        if missing_cols:
+                            st.error(f"ROSSO (BLOCCATO) - Struttura Excel non valida. Colonne mancanti: {', '.join(missing_cols)}")
+                        else:
+                            cursor = conn.cursor()
+                            righe_inserite = 0
+                            
+                            with conn:
+                                for idx, row in df_import.iterrows():
+                                    gruppo = str(row["GRUPPO_MACRO"]).upper().strip()
+                                    sottogruppo = str(row["SOTTOGRUPPO"]).upper().strip() if (pd.notna(row.get("SOTTOGRUPPO")) and str(row.get("SOTTOGRUPPO")).strip() != "") else ""
+                                    insegna = str(row["ASSOCIATO_INSEGNA"]).upper().strip() if (pd.notna(row.get("ASSOCIATO_INSEGNA")) and str(row.get("ASSOCIATO_INSEGNA")).strip() != "") else ""
+                                    livello = str(row["LIVELLO"]).upper().strip()
+                                    chiave_livello = str(row["CHIAVE_LIVELLO"]).strip() if pd.notna(row["CHIAVE_LIVELLO"]) else ""
+                                    
+                                    if livello == "REFERENZA" and chiave_livello:
+                                        chiave_livello = str(chiave_livello).split('.')[0].zfill(13)
+
+                                    cursor.execute("""
+                                    INSERT OR IGNORE INTO clienti (gruppo_macro, sottogruppo, associato_insegna)
+                                    VALUES (?, ?, ?)
+                                    """, (gruppo, sottogruppo, insegna))
+
+                                    def to_float_or_none(val):
+                                        if pd.isna(val) or str(val).strip() == "":
+                                            return None
+                                        try: return float(val)
+                                        except: return None
+
+                                    cursor.execute("""
+                                    INSERT OR REPLACE INTO accordi_commerciali (
+                                        gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello, listino_r,
+                                        sconto_1, sconto_2, sconto_3, sconto_4, sconto_5,
+                                        sconto_6, sconto_7, sconto_y, sconto_carico, sconto_pagamento,
+                                        voce_contratto_1, voce_contratto_2, voce_contratto_3, voce_contratto_4, voce_contratto_5
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    """, (
+                                        gruppo, sottogruppo, insegna, livello, chiave_livello, to_float_or_none(row.get("LISTINO_BASE_R")),
+                                        to_float_or_none(row.get("SCONTO_1")), to_float_or_none(row.get("SCONTO_2")), to_float_or_none(row.get("SCONTO_3")),
+                                        to_float_or_none(row.get("SCONTO_4")), to_float_or_none(row.get("SCONTO_5")), to_float_or_none(row.get("SCONTO_LOCAL_6")),
+                                        to_float_or_none(row.get("SCONTO_LOCAL_7")), to_float_or_none(row.get("SCONTO_CONTINUATIVO_Y")),
+                                        to_float_or_none(row.get("SCONTO_CARICO_LOGISTICA")),
+                                        to_float_or_none(row.get("SCONTO_PAGAMENTO_AC")), to_float_or_none(row.get("PFA_VOCE_I")),
+                                        to_float_or_none(row.get("PFA_VOCE_II")), to_float_or_none(row.get("PFA_VOCE_III")),
+                                        to_float_or_none(row.get("PFA_VOCE_IV")), to_float_or_none(row.get("PFA_VOCE_V"))
+                                    ))
+                                    righe_inserite += 1
+                            st.success(f"VERDE (APPROVATO) - Elaborate {righe_inserite} regole commerciali nel Bunker.")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione del file: {e}")
+
+    with tab_guardrail:
+        st.subheader("Gestione Guardrail Finanziari (Minimo Net Net G)")
+        st.markdown("Questa tabella è isolata dall'anagrafica logistica. Modifica qui i limiti minimi di margine per ogni referenza.")
+        
+        df_guardrail = pd.read_sql_query("""
+            SELECT g.ean, a.descrizione_commerciale, g.min_net_net_g
+            FROM guardrail_aziendali g
+            LEFT JOIN anagrafica_master a ON g.ean = a.ean
+        """, conn)
+        
+        edited_guardrail = st.data_editor(
+            df_guardrail, 
+            num_rows="dynamic", 
+            use_container_width=True,
+            hide_index=True,
+            disabled=["descrizione_commerciale"],
+            key="guardrail_editor"
+        )
+        
+        if st.button("SALVA MODIFICHE GUARDRAIL"):
+            cursor = conn.cursor()
+            try:
+                with conn:
+                    cursor.execute("DELETE FROM guardrail_aziendali")
+                    for _, r in edited_guardrail.iterrows():
+                        cursor.execute("""
+                        INSERT INTO guardrail_aziendali (ean, min_net_net_g) VALUES (?, ?)
+                        """, (str(r.get("ean")).strip(), float(r.get("min_net_net_g", 0.0))))
+                st.success("VERDE (APPROVATO) - Guardrail aggiornati.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"ROSSO (BLOCCATO) - Errore salvataggio guardrail: {e}")
 
     st.markdown("---")
     st.markdown("<h3 style='color: #D32F2F;'>Sezione Pericolo (Danger Zone)</h3>", unsafe_allow_html=True)
@@ -702,7 +929,7 @@ elif menu == "Back-Office (Gestione Dati)":
     conn.close()
 
 # ==========================================
-# SCHEDA 3: REPORT SINTETICO
+# SCHEDA 4: REPORT SINTETICO
 # ==========================================
 elif menu == "Report Sintetico":
     st.title("Report Sintetico e Analisi Contratti")
@@ -773,7 +1000,11 @@ elif menu == "Report Sintetico":
         res_sub = cursor.fetchone()
         sub_rep_sel = res_sub[0] if res_sub else ""
         
-        cursor.execute("SELECT ean, descrizione_commerciale, tipo_olio, min_net_net_g, codice_sap, formato_lt, confezione FROM prodotti")
+        cursor.execute("""
+            SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0), a.codice_sap, a.formato_lt, a.confezione 
+            FROM anagrafica_master a
+            LEFT JOIN guardrail_aziendali g ON a.ean = g.ean
+        """)
         all_prods = cursor.fetchall()
         
         rows_report = []
@@ -900,7 +1131,7 @@ elif menu == "Report Sintetico":
     conn.close()
 
 # ==========================================
-# SCHEDA 4: GUIDA OPERATIVA
+# SCHEDA 5: GUIDA OPERATIVA
 # ==========================================
 else:
     st.title("Guida Operativa - Bunker Commerciale Salov")
