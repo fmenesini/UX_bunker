@@ -1131,8 +1131,8 @@ elif menu == "Report Sintetico":
 # SCHEDA 5: GUIDA OPERATIVA (VERSIONE ESTESA & AVANZATA)
 # ==========================================
 else:
-    st.title("Manuale d'Istruzione del Bunker Commerciale")
-    st.markdown("### Guida di Sopravvivenza per la Gestione della Marginalità Salov")
+    st.title("Manuale d'Istruzione")
+    st.markdown("### Guida per la Gestione della Marginalità Salov")
     st.markdown("---")
     
     with st.expander("1.IL MOTORE DI PRICING: La Cascata Sequenziale (Esempio Numerico)", expanded=True):
@@ -1156,14 +1156,14 @@ else:
         *   *Calcolo:* $7,255 \\times (1 - 0,05) = 6,892 €$
         *   **PREZZO NET NET FINALE (AM):** **6,89 €**
         
-        > **Regola del Cecchino:** Se questo 6,89 € scende anche solo di un centesimo sotto la soglia di sicurezza **G** registrata nel Back-Office per quell'EAN, l'applicazione spara il **ROSSO (BLOCCATO)**.
+        > **Regola** Se questo 6,89 € scende anche solo di un centesimo sotto la soglia di sicurezza **G** registrata nel Back-Office per quell'EAN, l'applicazione avvisa **ROSSO (BLOCCATO)**.
         """)
         
     with st.expander("2. LA GERARCHIA DEI CONTRATTI: Le Regole di Ereditarietà (Esempio di Default e Override)", expanded=False):
         st.markdown("""
-        Per evitare di dover inserire migliaia di righe per ogni singolo cliente e referenza, il Bunker applica un algoritmo di scansione a cascata che cerca l'accordo commerciale seguendo 4 livelli logici.
+        Per evitare di dover inserire migliaia di righe per ogni singolo cliente e referenza, l'applicazione utilizza un algoritmo di scansione a cascata che cerca l'accordo commerciale seguendo 4 livelli logici.
         
-        #### I 4 Livelli del Mirino:
+        #### I 4 Livelli:
         1. **GRUPPO MACRO** (es. *COOP ITALIA*) ➔ Regole generali valide per tutte le insegne e tutti i prodotti.
         2. **SOTTOGRUPPO** (es. *ALLEANZA 3.0*) ➔ Condizioni specifiche che sovrascrivono la Centrale.
         3. **CATEGORIA** (es. *EXTRAVERGINE*) ➔ Sconti validi solo per quel tipo di olio.
@@ -1201,7 +1201,7 @@ else:
 
     with st.expander("4. BACK-OFFICE ED EXCEL: Come Aggiornare i Dati in Sicurezza", expanded=False):
         st.markdown("""
-        Il Bunker si alimenta con i dati reali delle anagrafiche e dei contratti. Puoi fare manutenzione in due modi:
+        L'applicazione si alimenta con i dati reali delle anagrafiche e dei contratti. Puoi fare manutenzione in due modi:
         
         ####  Variante 1: Modifiche rapide "a caldo" direttamente a schermo
         1. Vai su **Back-Office (Contratti)** o **Dati Anagrafici**.
