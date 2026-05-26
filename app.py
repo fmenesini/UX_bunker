@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.WARNING)
 
 st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide")
 
-# --- CSS PASTELLO AD ALTO CONTRASTO (Safe per Icone e Mobile) ---
+# --- CSS PASTELLO AD ALTO CONTRASTO E ANTICRASH ---
 st.markdown("""
 <style>
     :root { color-scheme: light !important; }
@@ -28,10 +28,10 @@ st.markdown("""
     div[data-testid="stExpander"] { background-color: #FFFFFF !important; border: 1px solid #D1C9BC !important; border-radius: 4px !important; }
     .warning-box { background-color: #FFF3E0 !important; border-left: 5px solid #FF9800 !important; padding: 12px; border-radius: 4px; margin-bottom: 15px; color: #B78103 !important; font-weight: bold; }
     .info-box { background-color: #E8F5E9 !important; border-left: 5px solid #2E7D32 !important; padding: 12px; border-radius: 4px; margin-bottom: 15px; color: #1B5E20 !important; font-weight: bold; }
-    .stMarkdown p, .stMarkdown li, label { color: #1C1C1C !important; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important; font-size: 1.02rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# --- INIZIALIZZAZIONE DATABASE ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -64,7 +64,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, livello TEXT, chiave_livello TEXT,
         listino_r REAL, sconto_1 REAL, sconto_2 REAL, sconto_3 REAL, sconto_4 REAL, sconto_5 REAL,
-        sconto_6 REAL, sconto_7 REAL, sconto_y REAL, sconto_carico REAL, sconto_pagamento REAL,
+        sconto_6 REAL, sconto_7 REAL, sconto_carico REAL, sconto_pagamento REAL,
         voce_contratto_1 REAL, voce_contratto_2 REAL, voce_contratto_3 REAL, voce_contratto_4 REAL, voce_contratto_5 REAL,
         UNIQUE(gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello)
     )""")
@@ -343,17 +343,19 @@ if menu == "Simulatore Offerte":
         )
         result = PricingEngine.calculate(engine_input)
 
+        # --- SEZIONE COMPATTA MARGINE & DATE PROMO ---
         st.markdown("---")
         col_c1, col_c2 = st.columns(2)
         
         with col_c1:
             with st.expander("Verifica Margine e Stato", expanded=True):
-                st.metric("PREZZO NET NET RISULTANTE", f"{result.net_net_finale:.3f} Euro")
-                st.metric("SOGLIA MINIMA NET NET (G)", f"{min_net_net_g:.3f} Euro")
+                # FIX: Arrotondamento a 2 decimali per la lettura commerciale
+                st.metric("PREZZO NET NET RISULTANTE", f"{result.net_net_finale:.2f} Euro")
+                st.metric("SOGLIA MINIMA NET NET (G)", f"{min_net_net_g:.2f} Euro")
                 if result.guardrail_ok:
-                    st.success(f"VERDE (APPROVATO) - Margine sicuro. Delta: {result.delta_vs_min:+.3f} Euro")
+                    st.success(f"VERDE (APPROVATO) - Margine sicuro. Delta: +{result.delta_vs_min:.2f} Euro")
                 else:
-                    st.error(f"ROSSO (BLOCCATO) - Sotto soglia di {abs(result.delta_vs_min):.3f} Euro")
+                    st.error(f"ROSSO (BLOCCATO) - Sotto soglia di {abs(result.delta_vs_min):.2f} Euro")
         
         with col_c2:
             with st.expander("Finestra Temporale Promo", expanded=True):
@@ -514,11 +516,18 @@ elif menu == "Back-Office (Gestione Dati)":
     st.markdown("Questa griglia ti permette di modificare direttamente i record esistenti nel database locale. Qualsiasi modifica salvata si rifletterà all'istante sul Simulatore.")
     
     df_database_editor = pd.read_sql_query("""
-        SELECT id, gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello, listino_r,
-               sconto_1, sconto_2, sconto_3, sconto_4, sconto_5, sconto_6, sconto_7, sconto_y,
-               sconto_carico, sconto_pagamento, voce_contratto_1, voce_contratto_2, voce_contratto_3,
-               voce_contratto_4, voce_contratto_5
-        FROM accordi_commerciali
+        SELECT a.id, a.gruppo_macro, a.sottogruppo, a.associato_insegna, a.livello, a.chiave_livello,
+               CASE 
+                    WHEN a.livello = 'REFERENZA' THEN p.descrizione_commerciale 
+                    WHEN a.livello = 'CATEGORIA' THEN 'Categoria: ' || a.chiave_livello
+                    ELSE 'Contratto Quadro'
+               END as descrizione_prodotto,
+               a.listino_r,
+               a.sconto_1, a.sconto_2, a.sconto_3, a.sconto_4, a.sconto_5, a.sconto_6, a.sconto_7, a.sconto_y,
+               a.sconto_carico, a.sconto_pagamento, a.voce_contratto_1, a.voce_contratto_2, a.voce_contratto_3,
+               a.voce_contratto_4, a.voce_contratto_5
+        FROM accordi_commerciali a
+        LEFT JOIN prodotti p ON a.chiave_livello = p.ean AND a.livello = 'REFERENZA'
     """, conn)
     
     edited_df = st.data_editor(
@@ -526,6 +535,7 @@ elif menu == "Back-Office (Gestione Dati)":
         num_rows="dynamic", 
         use_container_width=True,
         hide_index=True,
+        disabled=["descrizione_prodotto"],
         key="db_data_editor"
     )
     
@@ -673,7 +683,7 @@ elif menu == "Back-Office (Gestione Dati)":
                     st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione del file: {e}")
 
     st.markdown("---")
-    st.markdown("<h3 style='color: #D32F2F;'>🚨 Sezione Pericolo (Danger Zone)</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #D32F2F;'>Sezione Pericolo (Danger Zone)</h3>", unsafe_allow_html=True)
     
     if PRODUCTION_MODE:
         st.info("Modalità Produzione: Ripristino demo disattivato.")
