@@ -23,21 +23,11 @@ st.markdown("""
     :root { color-scheme: light !important; }
     .stApp { background-color: #FCFAF7 !important; }
     section[data-testid="stSidebar"] { background-color: #F5F3EE !important; border-right: 1px solid #D1C9BC !important; }
-    
-    /* Titoli in Verde Sagra */
     h1, h2, h3, h4, h5, h6 { color: #1B5E20 !important; font-weight: bold !important; }
-    
-    /* Metriche in Rosso Sagra */
     div[data-testid="stMetricValue"] { color: #D32F2F !important; font-weight: bold !important; }
-    
-    /* Expander puliti */
     div[data-testid="stExpander"] { background-color: #FFFFFF !important; border: 1px solid #D1C9BC !important; border-radius: 4px !important; }
-    
-    /* Box di allerta */
     .warning-box { background-color: #FFF3E0 !important; border-left: 5px solid #FF9800 !important; padding: 12px; border-radius: 4px; margin-bottom: 15px; color: #B78103 !important; font-weight: bold; }
     .info-box { background-color: #E8F5E9 !important; border-left: 5px solid #2E7D32 !important; padding: 12px; border-radius: 4px; margin-bottom: 15px; color: #1B5E20 !important; font-weight: bold; }
-    
-    /* Testi generici forzati scuri per leggibilità, MA ESCLUDENDO i tag span per salvare le icone Streamlit */
     .stMarkdown p, .stMarkdown li, label { color: #1C1C1C !important; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important; font-size: 1.02rem !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -47,7 +37,8 @@ def init_db():
     cursor = conn.cursor()
     try:
         cursor.execute("SELECT attivo FROM clienti LIMIT 1")
-        cursor.execute("SELECT sconto_y FROM accordi_commerciali LIMIT 1") # Test per la nuova colonna Y
+        cursor.execute("SELECT sottogruppo FROM accordi_commerciali LIMIT 1")
+        cursor.execute("SELECT min_net_net_g FROM prodotti LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("DROP TABLE IF EXISTS accordi_commerciali")
         cursor.execute("DROP TABLE IF EXISTS clienti")
@@ -68,7 +59,6 @@ def init_db():
         attivo BOOLEAN DEFAULT 1, UNIQUE(gruppo_macro, sottogruppo, associato_insegna)
     )""")
     
-    # Aggiunto sconto_y nello schema
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS accordi_commerciali (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -171,18 +161,13 @@ def seed_baseline_data(conn):
     for c in clienti_demo:
         cursor.execute("INSERT OR IGNORE INTO clienti (gruppo_macro, sottogruppo, associato_insegna) VALUES (?, ?, ?)", c)
         
-    # --- NUOVA MAPPATURA SCONTI E LISTINI RICALCOLATI (-60% COOP, -20% CONAD) ---
-    # S1-S3 = Gruppo | S4-S5 = Sottogruppo | S6 = Categoria | S7 = Referenza | SY = Referenza
     fallback_data = [
-        # COOP ITALIA (ALLEANZA 3.0)
         ('COOP ITALIA', '', '', 'GRUPPO', '', None, 10.0, 5.0, None, None, None, None, None, None, 1.5, 1.0, 5.0, 2.0, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', '', 'SOTTOGRUPPO', '', None, None, None, None, 2.0, None, None, None, None, None, None, None, None, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'CATEGORIA', 'EXTRAVERGINE', None, None, None, None, None, None, 3.0, None, None, None, None, None, None, None, None, 1.0),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210131620', 66.00, None, None, None, None, None, None, 12.0, 5.0, None, None, None, None, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210111110', 60.80, None, None, None, None, None, None, 15.0, 0.0, None, None, None, None, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210001305', 43.20, None, None, None, None, None, None, 12.0, 0.0, None, None, None, None, None, None, None),
-        
-        # CONAD ADRIATICO (Listini ulteriormente deflazionati)
         ('CONAD', '', '', 'GRUPPO', '', None, 10.0, 5.0, None, None, None, None, None, None, 1.5, 1.0, 5.0, 2.0, None, None, None),
         ('CONAD', 'CONAD SOTTOGRUPPO', '', 'SOTTOGRUPPO', '', None, None, None, None, 2.0, None, None, None, None, None, None, None, None, None, None, None),
         ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'CATEGORIA', 'EXTRAVERGINE', None, None, None, None, None, None, 3.0, None, None, None, None, None, None, None, None, 1.0),
@@ -281,7 +266,6 @@ if menu == "Simulatore Offerte":
         col_l1, col_l2 = st.columns(2)
         
         with col_l1:
-            # Sconto Y ora preleva il valore tracciato contract.sconto_y
             sconto_y = st.number_input(
                 "Sconto Continuativo Y (%)", 
                 min_value=0.0, max_value=100.0, 
@@ -367,7 +351,7 @@ if menu == "Simulatore Offerte":
                 st.metric("PREZZO NET NET RISULTANTE", f"{result.net_net_finale:.3f} Euro")
                 st.metric("SOGLIA MINIMA NET NET (G)", f"{min_net_net_g:.3f} Euro")
                 if result.guardrail_ok:
-                    st.success(f"VERDE (APPROVATO) - Margine sicuro. Delta: +{result.delta_vs_min:.3f} Euro")
+                    st.success(f"VERDE (APPROVATO) - Margine sicuro. Delta: {result.delta_vs_min:+.3f} Euro")
                 else:
                     st.error(f"ROSSO (BLOCCATO) - Sotto soglia di {abs(result.delta_vs_min):.3f} Euro")
         
@@ -689,7 +673,7 @@ elif menu == "Back-Office (Gestione Dati)":
                     st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione del file: {e}")
 
     st.markdown("---")
-    st.markdown("<h3 style='color: #D32F2F;'>Sezione Pericolo (Danger Zone)</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #D32F2F;'>🚨 Sezione Pericolo (Danger Zone)</h3>", unsafe_allow_html=True)
     
     if PRODUCTION_MODE:
         st.info("Modalità Produzione: Ripristino demo disattivato.")
@@ -945,19 +929,32 @@ else:
         [ LIVELLO 4: REFERENZA SPECIFICA (EAN) ] (es. Ex.v. Sagra Classico 1L)
         ```
         
+        **Mappatura Aziendale degli Sconti per Livello:**
+        Per mantenere ordine nel database, l'azienda utilizza questa convenzione rigorosa per i "cassetti" degli sconti:
+        * **SCONTI DI GRUPPO:** Sconti 1, 2 e 3
+        * **SCONTO DI SOTTOGRUPPO:** Sconti 4 e 5
+        * **SCONTO DI CATEGORIA:** Sconto 6
+        * **SCONTI DI REFERENZA:** Sconto 7
+
         **Regole Fondamentali di Ereditarietà:**
         * **Cella Vuota (Blank):** Nel database o nel file Excel di caricamento, se una cella di sconto è vuota, l'applicazione erediterà automaticamente il valore inserito a livello superiore. Se lo Sconto 1 è vuoto sulla singola Referenza ma è popolato al 10% sul Gruppo, l'app applicherà il 10%.
         * **Override Esplicito (Valore 0.0):** Se inserisci esplicitamente lo `0` (o `0.0`) a livello di Referenza o Categoria, l'app **annullerà e azzererà** lo sconto ereditato, consentendo di bloccare sconti centrali non dovuti su determinati prodotti.
         * **Filtro Assortimento:** Un prodotto viene considerato in assortimento ed è selezionabile solo se esiste un valore di **Listino R** configurato per quel cliente specifico a livello di Referenza (Livello 4). Se il listino è assente, l'app visualizzerà l'errore di blocco *"Prodotto fuori assortimento"*.
         """)
 
-    with st.expander("3. Il Calcolo Inverso del Net Net Target", expanded=False):
+    with st.expander("3. Metodologie di Negoziazione (Target vs Spot)", expanded=False):
         st.markdown("""
-        Il calcolo inverso è una funzione strategica per la gestione delle richieste del cliente:
+        Il simulatore offre due modalità di lavoro per adattarsi a ogni fase della trattativa:
         
-        1. All'attivazione della simulazione, l'app imposta come **Prezzo Net Net Target** di partenza il valore della soglia minima di sicurezza **G** della referenza selezionata.
-        2. Se modifichi questo valore impostando il prezzo desiderato dal buyer della GDO, il sistema calcolerà istantaneamente lo **Sconto Promozionale Z (%)** necessario a raggiungere esattamente quell'obiettivo di ricavo.
-        3. Se inserisci un valore nello **Sconto Unitario in fattura AA (Euro/Pz)**, il sistema adeguerà e diminuirà in tempo reale lo Sconto Promo Z (%) per mantenere il Net Net target perfettamente stabile.
+        **Metodo A: Partenza da Prezzo Target (Calcolo Inverso)**
+        1. All'attivazione, l'app imposta come **Prezzo Target Net Net** la soglia minima di sicurezza **G** della referenza selezionata.
+        2. Inserendo il prezzo desiderato dal buyer, il sistema calcola istantaneamente lo **Sconto Promozionale Z (%)** necessario a raggiungere esattamente quell'obiettivo.
+        3. Se inserisci un valore nello **Sconto Unitario in fattura AA (Euro/Pz)**, il sistema adeguerà in tempo reale lo Sconto Promo Z (%) per mantenere il Net Net target stabile.
+        
+        **Metodo B: Tentativi Spot Manuali (Sconto Libero)**
+        1. Sblocca l'inserimento manuale dello Sconto Promozionale Z.
+        2. Permette di fare tentativi liberi per vedere dove atterra il Net Net.
+        3. Mostra costantemente a fianco lo **Sconto Massimo Consentito (AV)**: la percentuale limite che puoi inserire prima che il semaforo diventi rosso.
         """)
 
     with st.expander("4. Uso del Back-Office ed Excel (Sincronizzazione)", expanded=False):
