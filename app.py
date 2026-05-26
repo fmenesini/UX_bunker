@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -17,38 +16,20 @@ logging.basicConfig(level=logging.WARNING)
 
 st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide")
 
-# --- CSS PASTELLO AD ALTO CONTRASTO (Safe per Icone e Mobile) ---
 st.markdown("""
 <style>
-    /* 1. Forza il tema chiaro (Anti-Dark Mode Android) */
     :root { color-scheme: light !important; }
-    
-    /* 2. Colori di sfondo Sagra */
     .stApp { background-color: #FCFAF7 !important; }
     section[data-testid="stSidebar"] { background-color: #F5F3EE !important; border-right: 1px solid #D1C9BC !important; }
-    
-    /* 3. Titoli proporzionati per Mobile e Desktop */
-    h1 { color: #1B5E20 !important; font-weight: bold !important; font-size: 2.2rem !important; }
-    h2 { color: #1B5E20 !important; font-weight: bold !important; font-size: 1.8rem !important; }
-    h3 { color: #1B5E20 !important; font-weight: bold !important; font-size: 1.4rem !important; }
-    h4, h5, h6 { color: #1B5E20 !important; font-weight: bold !important; }
-    
-    /* 4. Metriche in Rosso Sagra */
+    h1, h2, h3, h4, h5, h6 { color: #1B5E20 !important; font-weight: bold !important; }
     div[data-testid="stMetricValue"] { color: #D32F2F !important; font-weight: bold !important; }
-    
-    /* 5. Expander puliti */
     div[data-testid="stExpander"] { background-color: #FFFFFF !important; border: 1px solid #D1C9BC !important; border-radius: 4px !important; }
-    
-    /* 6. Box di allerta */
     .warning-box { background-color: #FFF3E0 !important; border-left: 5px solid #FF9800 !important; padding: 12px; border-radius: 4px; margin-bottom: 15px; color: #B78103 !important; font-weight: bold; }
     .info-box { background-color: #E8F5E9 !important; border-left: 5px solid #2E7D32 !important; padding: 12px; border-radius: 4px; margin-bottom: 15px; color: #1B5E20 !important; font-weight: bold; }
-    
-    /* 7. FIX ICONE STREAMLIT: Protezione assoluta dei web-font */
-    .material-symbols-rounded, .material-icons { font-family: 'Material Symbols Rounded', 'Material Icons' !important; }
+    .stApp p, .stApp span, .stApp li, .stApp label, .stMarkdown p, .stMarkdown li, .stMarkdown span { color: #1C1C1C !important; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important; font-size: 1.02rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- INIZIALIZZAZIONE DATABASE ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -179,12 +160,14 @@ def seed_baseline_data(conn):
         cursor.execute("INSERT OR IGNORE INTO clienti (gruppo_macro, sottogruppo, associato_insegna) VALUES (?, ?, ?)", c)
         
     fallback_data = [
-        ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'GRUPPO', '', None, 10.0, 5.0, None, None, None, None, None, 1.5, 1.0, 5.0, 2.0, None, None, None),
+        ('COOP ITALIA', '', '', 'GRUPPO', '', None, 10.0, 5.0, None, None, None, None, None, 1.5, 1.0, 5.0, 2.0, None, None, None),
+        ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', '', 'SOTTOGRUPPO', '', None, None, None, 2.0, None, None, None, None, None, None, None, None, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'CATEGORIA', 'EXTRAVERGINE', None, None, None, None, None, None, 3.0, None, None, None, None, None, None, None, 1.0),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210131620', 165.00, 12.0, None, None, None, None, None, None, None, None, None, None, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210111110', 152.00, None, None, None, None, None, 15.0, None, None, None, None, None, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210001305', 108.00, None, None, None, None, None, 12.0, None, None, None, None, None, None, None, None),
-        ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'GRUPPO', '', None, 10.0, 5.0, None, None, None, None, None, 1.5, 1.0, 5.0, 2.0, None, None, None),
+        ('CONAD', '', '', 'GRUPPO', '', None, 10.0, 5.0, None, None, None, None, None, 1.5, 1.0, 5.0, 2.0, None, None, None),
+        ('CONAD', 'CONAD SOTTOGRUPPO', '', 'SOTTOGRUPPO', '', None, None, None, 2.0, None, None, None, None, None, None, None, None, None, None, None),
         ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'CATEGORIA', 'EXTRAVERGINE', None, None, None, None, None, None, 3.0, None, None, None, None, None, None, None, 1.0),
         ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'REFERENZA', '8002210131620', 82.50, 12.0, None, None, None, None, None, None, None, None, None, None, None, None, None),
         ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'REFERENZA', '8002210111110', 76.00, None, None, None, None, None, 15.0, None, None, None, None, None, None, None, None),
@@ -687,7 +670,7 @@ elif menu == "Back-Office (Gestione Dati)":
                     st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione del file: {e}")
 
     st.markdown("---")
-    st.subheader("Sezione Pericolo (Danger Zone)")
+    st.markdown("<h3 style='color: #D32F2F;'>Sezione Pericolo (Danger Zone)</h3>", unsafe_allow_html=True)
     
     if PRODUCTION_MODE:
         st.info("Modalità Produzione: Ripristino demo disattivato.")
@@ -949,20 +932,26 @@ else:
         * **Filtro Assortimento:** Un prodotto viene considerato in assortimento ed è selezionabile solo se esiste un valore di **Listino R** configurato per quel cliente specifico a livello di Referenza (Livello 4). Se il listino è assente, l'app visualizzerà l'errore di blocco *"Prodotto fuori assortimento"*.
         """)
 
-    with st.expander("3. Il Calcolo Inverso del Net Net Target", expanded=False):
+    with st.expander("3. Metodologie di Negoziazione (Target vs Spot)", expanded=False):
         st.markdown("""
-        Il calcolo inverso è una funzione strategica per la gestione delle richieste del cliente:
+        Il simulatore offre due modalità di lavoro per adattarsi a ogni fase della trattativa:
         
-        1. All'attivazione della simulazione, l'app imposta come **Prezzo Net Net Target** di partenza il valore della soglia minima di sicurezza **G** della referenza selezionata.
-        2. Se modifichi questo valore impostando il prezzo desiderato dal buyer della GDO, il sistema calcolerà istantaneamente lo **Sconto Promozionale Z (%)** necessario a raggiungere esattamente quell'obiettivo di ricavo.
-        3. Se inserisci un valore nello **Sconto Unitario in fattura AA (Euro/Pz)**, il sistema adeguerà e diminuirà in tempo reale lo Sconto Promo Z (%) per mantenere il Net Net target perfettamente stabile.
+        **Metodo A: Partenza da Prezzo Target (Calcolo Inverso)**
+        1. All'attivazione, l'app imposta come **Prezzo Target Net Net** la soglia minima di sicurezza **G** della referenza selezionata.
+        2. Inserendo il prezzo desiderato dal buyer, il sistema calcola istantaneamente lo **Sconto Promozionale Z (%)** necessario a raggiungere esattamente quell'obiettivo.
+        3. Se inserisci un valore nello **Sconto Unitario in fattura AA (Euro/Pz)**, il sistema adeguerà in tempo reale lo Sconto Promo Z (%) per mantenere il Net Net target stabile.
+        
+        **Metodo B: Tentativi Spot Manuali (Sconto Libero)**
+        1. Sblocca l'inserimento manuale dello Sconto Promozionale Z.
+        2. Permette di fare tentativi liberi per vedere dove atterra il Net Net.
+        3. Mostra costantemente a fianco lo **Sconto Massimo Consentito (AV)**: la percentuale limite che puoi inserire prima che il semaforo diventi rosso.
         """)
 
     with st.expander("4. Uso del Back-Office ed Excel (Sincronizzazione)", expanded=False):
         st.markdown("""
         L'operatore di sede può gestire i listini e le condizioni in corsa in due modi:
         
-        * **Modifica Diretta (A caldo):** Utilizza lo strumento di modifica diretta inserito nella scheda Back-Office. Fai doppio clic sulle celle per variare sconti o listini e primi il pulsante **Salva Modifiche** per sincronizzare istantaneamente l'app.
+        * **Modifica Diretta (A caldo):** Utilizza lo strumento di modifica diretta inserito nella scheda Back-Office. Fai doppio clic sulle celle per variare sconti o listini e premi il pulsante **Salva Modifiche** per sincronizzare istantaneamente l'app.
         * **Caricamento da file Excel:** Scarica il tracciato attuale degli accordi, compilalo localmente e trascinalo nel widget di importazione.
         
         **ATTENZIONE - REGOLA DI FERRO PER LA FORMATTAZIONE DEGLI EAN IN EXCEL:**
