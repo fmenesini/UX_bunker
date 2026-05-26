@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -17,7 +16,6 @@ logging.basicConfig(level=logging.WARNING)
 
 st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide")
 
-# --- CSS PASTELLO AD ALTO CONTRASTO E ANTICRASH ---
 st.markdown("""
 <style>
     :root { color-scheme: light !important; }
@@ -32,54 +30,45 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- INIZIALIZZAZIONE DATABASE A TABELLE SEPARATE ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT attivo FROM clienti LIMIT 1")
-        cursor.execute("SELECT ean FROM anagrafica_master LIMIT 1")
-    except sqlite3.OperationalError:
-        cursor.execute("DROP TABLE IF EXISTS accordi_commerciali")
-        cursor.execute("DROP TABLE IF EXISTS clienti")
-        cursor.execute("DROP TABLE IF EXISTS prodotti")
-        cursor.execute("DROP TABLE IF EXISTS anagrafica_master")
-        cursor.execute("DROP TABLE IF EXISTS guardrail_aziendali")
+    
+    # CRITICO: Verifichiamo l'esistenza reale delle tabelle senza basarci sulle eccezioni di Lock
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='anagrafica_master'")
+    db_inizializzato = cursor.fetchone()
+    
+    if not db_inizializzato:
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS anagrafica_master (
+            ean TEXT PRIMARY KEY, codice_sap TEXT, tipo_olio TEXT,
+            descrizione_sap TEXT, descrizione_commerciale TEXT, formato_lt REAL,
+            confezione TEXT, pezzi_cartone INTEGER, cartoni_strato INTEGER,
+            strati_pallet INTEGER, cartoni_pallet INTEGER, conservazione_mesi INTEGER, shelf_life_mesi INTEGER
+        )""")
+        
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS guardrail_aziendali (
+            ean TEXT PRIMARY KEY, min_net_net_g REAL DEFAULT 0.0
+        )""")
+        
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS clienti (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT,
+            attivo BOOLEAN DEFAULT 1, UNIQUE(gruppo_macro, sottogruppo, associato_insegna)
+        )""")
+        
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS accordi_commerciali (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, livello TEXT, chiave_livello TEXT,
+            listino_r REAL, sconto_1 REAL, sconto_2 REAL, sconto_3 REAL, sconto_4 REAL, sconto_5 REAL,
+            sconto_6 REAL, sconto_7 REAL, sconto_y REAL, sconto_carico REAL, sconto_pagamento REAL,
+            voce_contratto_1 REAL, voce_contratto_2 REAL, voce_contratto_3 REAL, voce_contratto_4 REAL, voce_contratto_5 REAL,
+            UNIQUE(gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello)
+        )""")
         conn.commit()
-    
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS anagrafica_master (
-        ean TEXT PRIMARY KEY, codice_sap TEXT, tipo_olio TEXT,
-        descrizione_sap TEXT, descrizione_commerciale TEXT, formato_lt REAL,
-        confezione TEXT, pezzi_cartone INTEGER, cartoni_strato INTEGER,
-        strati_pallet INTEGER, cartoni_pallet INTEGER, conservazione_mesi INTEGER, shelf_life_mesi INTEGER
-    )""")
-    
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS guardrail_aziendali (
-        ean TEXT PRIMARY KEY, min_net_net_g REAL DEFAULT 0.0
-    )""")
-    
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS clienti (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT,
-        attivo BOOLEAN DEFAULT 1, UNIQUE(gruppo_macro, sottogruppo, associato_insegna)
-    )""")
-    
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS accordi_commerciali (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, livello TEXT, chiave_livello TEXT,
-        listino_r REAL, sconto_1 REAL, sconto_2 REAL, sconto_3 REAL, sconto_4 REAL, sconto_5 REAL,
-        sconto_6 REAL, sconto_7 REAL, sconto_y REAL, sconto_carico REAL, sconto_pagamento REAL,
-        voce_contratto_1 REAL, voce_contratto_2 REAL, voce_contratto_3 REAL, voce_contratto_4 REAL, voce_contratto_5 REAL,
-        UNIQUE(gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello)
-    )""")
-    conn.commit()
-    
-    cursor.execute("SELECT COUNT(*) FROM anagrafica_master")
-    if cursor.fetchone()[0] == 0:
         seed_baseline_data(conn)
     else:
         conn.close()
@@ -210,7 +199,7 @@ init_db()
 menu = st.sidebar.radio("SELEZIONA SCHEDA", ["Simulatore Offerte", "Dati Anagrafici (Logistica)", "Back-Office (Contratti)", "Report Sintetico", "Guida Operativa"])
 
 # ==========================================
-# SCHEDA 1: SIMULATORE 
+# SCHEDA 1: SIMULATORE
 # ==========================================
 if menu == "Simulatore Offerte":
     st.title("Bunker Commerciale Salov - Simulatore")
@@ -534,7 +523,6 @@ elif menu == "Dati Anagrafici (Logistica)":
     st.markdown("Gestione dell'anagrafica prodotti (Dati SAP e Logistici). I margini finanziari sono gestiti separatamente.")
     
     conn = sqlite3.connect(DB_FILE)
-    
     st.subheader("Modifica Diretta Anagrafica Master")
     
     df_prodotti = pd.read_sql_query("""
@@ -607,7 +595,7 @@ elif menu == "Dati Anagrafici (Logistica)":
 
     with col_p2:
         st.subheader("Importazione Massiva SAP")
-        st.markdown("Carica il file Excel per aggiornare l'anagrafica logistica.")
+        st.markdown("Carica il file Excel per aggiornare l'anagrafica logistica e i guardrail finanziari.")
         uploaded_prod_file = st.file_uploader("Trascina il file Excel Anagrafica (.xlsx)", type=["xlsx"])
         
         if uploaded_prod_file is not None:
@@ -615,6 +603,7 @@ elif menu == "Dati Anagrafici (Logistica)":
                 try:
                     df_prod_import = pd.read_excel(uploaded_prod_file)
                     
+                    # CORREZIONE TATTICA: Mappiamo esplicitamente i campi del Guardrail dal tracciato Excel
                     col_map = {
                         "EAN": "ean",
                         "Codice Articolo": "codice_sap",
@@ -630,7 +619,10 @@ elif menu == "Dati Anagrafici (Logistica)":
                         "Strati x Pallet": "strati_pallet",
                         "Cartoni X Pallet": "cartoni_pallet",
                         "Conservazione (Mese)": "conservazione_mesi",
-                        "SHELF LIFE (mesi)": "shelf_life_mesi"
+                        "SHELF LIFE (mesi)": "shelf_life_mesi",
+                        "Margine Minimo G": "min_net_net_g",
+                        "MIN_NET_NET_G": "min_net_net_g",
+                        "Soglia Sicurezza G (Euro)": "min_net_net_g"
                     }
                     
                     df_prod_import = df_prod_import.rename(columns=col_map)
@@ -645,7 +637,7 @@ elif menu == "Dati Anagrafici (Logistica)":
                         with conn:
                             for idx, row in df_prod_import.iterrows():
                                 ean_val = str(row.get("ean", "")).split('.')[0].zfill(13)
-                                if not ean_val or ean_val == "0000000000000" or ean_val == "NAN":
+                                if not ean_val or ean_val == "0000000000000" or ean_val == "nan":
                                     continue
                                     
                                 tipo_olio_raw = str(row.get("tipo_olio", "")).upper().strip()
@@ -664,11 +656,14 @@ elif menu == "Dati Anagrafici (Logistica)":
                                     try: return int(float(val))
                                     except: return default
 
-                                min_g = get_float("min_net_net_g", -1.0)
-                                if min_g == -1.0:
+                                # Se la colonna non esiste nel file, eseguiamo fallback sul valore DB esistente
+                                min_g = row.get("min_net_net_g")
+                                if pd.isna(min_g) or str(min_g).strip() == "":
                                     cursor.execute("SELECT min_net_net_g FROM guardrail_aziendali WHERE ean=?", (ean_val,))
                                     res_min = cursor.fetchone()
                                     min_g = res_min[0] if res_min else 0.0
+                                else:
+                                    min_g = float(str(min_g).replace(',', '.'))
 
                                 cursor.execute("""
                                 INSERT OR REPLACE INTO anagrafica_master (
@@ -690,8 +685,14 @@ elif menu == "Dati Anagrafici (Logistica)":
                                     get_int("conservazione_mesi"),
                                     get_int("shelf_life_mesi")
                                 ))
+
+                                # Allineamento del guardrail aziendale
+                                cursor.execute("""
+                                INSERT OR REPLACE INTO guardrail_aziendali (ean, min_net_net_g) VALUES (?, ?)
+                                """, (ean_val, min_g))
+                                
                                 righe_inserite += 1
-                        st.success(f"VERDE (APPROVATO) - Elaborati {righe_inserite} prodotti nell'anagrafica.")
+                        st.success(f"VERDE (APPROVATO) - Elaborati {righe_inserite} prodotti nell'anagrafica con relativi guardrail.")
                         st.rerun()
                 except Exception as e:
                     st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione del file: {e}")
@@ -767,7 +768,7 @@ elif menu == "Back-Office (Contratti)":
                 st.success("VERDE (APPROVATO) - I contratti sono stati aggiornati correttamente.")
                 st.rerun()
             except Exception as e:
-                st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione del file: {e}")
+                st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione delle modifiche: {e}")
 
         st.markdown("---")
         col_b1, col_b2 = st.columns(2)
@@ -873,7 +874,7 @@ elif menu == "Back-Office (Contratti)":
                             st.success(f"VERDE (APPROVATO) - Elaborate {righe_inserite} regole commerciali nel Bunker.")
                             st.rerun()
                     except Exception as e:
-                        st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione del file: {e}")
+                        st.error(f"ROSSO (BLOCCATO) - Errore durante l'importazione: {e}")
 
     with tab_guardrail:
         st.subheader("GESTIONE MINIMI NET NET")
@@ -912,7 +913,7 @@ elif menu == "Back-Office (Contratti)":
     st.markdown("<h3 style='color: #D32F2F;'>Sezione Pericolo (Danger Zone)</h3>", unsafe_allow_html=True)
     
     if PRODUCTION_MODE:
-        st.info("Modalità Produzione: Ripristino demo disattivato.")
+        st.info("Modalità Production: Ripristino demo disattivato.")
     else:
         st.warning("ATTENZIONE: Questa operazione ripristinerà il database allo stato iniziale.")
         pin_conferma = st.text_input("Per procedere digita la password di sicurezza 'RESET' in lettere maiuscole:")
@@ -932,11 +933,9 @@ elif menu == "Back-Office (Contratti)":
 # ==========================================
 elif menu == "Report Sintetico":
     st.title("Report Sintetico e Analisi Contratti")
-    st.markdown("Analisi e raggruppamento delle metriche chiave degli accordi commerciali presenti in database.")
     st.markdown("---")
     
     conn = sqlite3.connect(DB_FILE)
-    
     col_k1, col_k2, col_k3, col_k4 = st.columns(4)
     cursor = conn.cursor()
     
@@ -982,7 +981,6 @@ elif menu == "Report Sintetico":
     
     st.markdown("---")
     st.subheader("Generatore ed Esportazione Report Consolidato di Sintesi")
-    st.markdown("Questo strumento permette di simulare ed esportare in blocco la verità contrattuale netta di tutti i 59 prodotti Salov contemporaneamente per un cliente specifico.")
     
     col_ex1, col_ex2 = st.columns(2)
     with col_ex1:
@@ -1142,19 +1140,19 @@ else:
         Il simulatore applica gli sconti in modo **sequenziale geometrico (a cascata)** e non per somma algebrica, rispettando rigorosamente le prassi negoziali e contabili dell'ufficio commerciale Salov.
         
         **La Scomposizione Sequenziale dei Calcoli (Flusso On-Invoice ed Off-Invoice):**
-        1. **Listino Base R (Euro/Pz):** Rappresenta il prezzo lordo base di partenza stabilito esclusivamente in fase di contrattazione con lo specifico cliente per la singola referenza. Non è un listino fisso o teorico, ma il vero punto di inizio del pricing.
-        2. **Sconti Centrali / Canale Fisso (S1 - S5):** Sconti contrattuali strutturali concessi al cliente in base agli accordi annuali. Si applicano in cascata sequenziale sul prezzo ridotto precedente.
-        3. **Sconti Territoriali Locali (S6 - S7):** Trattenute contrattuali locali destinate alla gestione periferica o territoriale degli associati.
-        4. **Sconto Continuativo Y (%):** Leva commerciale continuativa definita dal venditore e approvata per coprire trattative trimestrali o semestrali di canale.
-        5. **Sconto Promozionale Z (%):** Sconto percentuale temporaneo legato rigidamente alle finestre di Sell-In e Sell-Out promozionali (campagne volantino).
-        6. **Sconto Taglio Prezzo Secco (AA):** Detrazione diretta espressa in Euro/Pezzo applicata subito dopo gli sconti percentuali.
-        7. **Oneri di Rete Logistica (AB) & Pagamento (AC):** AB (Sconto Carico) è legato all'efficienza logistica dei volumi d'ordine (es. bilici o pallet completi). AC (Sconto Pagamento) è legato ai termini di pagamento concordati (es. cassa vista o anticipato). Generano il **Netto in Fattura 2 (AF)**.
+        1. **Listino Base R (Euro/Pz):** Prezzo lordo base stabilito per la singola referenza.
+        2. **Sconti Centrali / Canale Fisso (S1 - S5):** Sconti contrattuali concessi al cliente in cascata sequenziale sul prezzo ridotto precedente.
+        3. **Sconti Territoriali Locali (S6 - S7):** Trattenute contrattuali locali destinate agli associati periferici.
+        4. **Sconto Continuativo Y (%):** Leva commerciale continuativa trimestrale o semestrale.
+        5. **Sconto Promozionale Z (%):** Sconto percentuale temporaneo legato alle campagne volantino.
+        6. **Sconto Taglio Prezzo Secco (AA):** Detrazione diretta espressa in Euro/Pezzo.
+        7. **Oneri di Rete Logistica (AB) & Pagamento (AC):** AB (Efficienza volumi) e AC (Termini di pagamento). Generano il **Netto in Fattura 2 (AF)**.
         8. **Premi Fuori Fattura (AL):** Somma algebrica dei premi fine anno (PFA Voci I-V) applicata sul Netto in Fattura 2 per calcolare il **Prezzo Net Net Reale Aziendale (AM)**.
         """)
         
     with st.expander("2. La Gerarchia dei Contratti (Regole di Ereditarietà a 4 Livelli)", expanded=False):
         st.markdown("""
-        Per evitare di dover compilare migliaia di righe per ogni cliente, l'applicazione implementa un sistema di **ereditarietà gerarchica a 4 livelli**:
+        L'applicazione implementa un sistema di **ereditarietà gerarchica a 4 livelli**:
         
         ```text
         [ LIVELLO 1: GRUPPO GDO (Macro) ] (es. COOP ITALIA)
@@ -1163,47 +1161,29 @@ else:
         [ LIVELLO 2: SOTTOGRUPPO ] (es. COOP ITALIA SOTTOGRUPPO)
                      │
                      ▼
-        [ LIVELLO 3: CATEGORIA MERCEOLOGICA ] (es. EXTRAVERGINE, OLIVA, SEMI, ACETO)
+        [ LIVELLO 3: CATEGORIA MERCEOLOGICA ] (es. EXTRAVERGINE)
                      │
                      ▼
-        [ LIVELLO 4: REFERENZA SPECIFICA (EAN) ] (es. Ex.v. Sagra Classico 1L)
+        [ LIVELLO 4: REFERENZA SPECIFICA (EAN) ] (es. Sagra Classico 1L)
         ```
         
-        **Mappatura Aziendale degli Sconti per Livello:**
-        Per mantenere ordine nel database, l'azienda utilizza questa convenzione rigorosa per i "cassetti" degli sconti:
-        * **SCONTI DI GRUPPO:** Sconti 1, 2 e 3
-        * **SCONTO DI SOTTOGRUPPO:** Sconti 4 e 5
-        * **SCONTO DI CATEGORIA:** Sconto 6
-        * **SCONTI DI REFERENZA:** Sconto 7
-
         **Regole Fondamentali di Ereditarietà:**
-        * **Cella Vuota (Blank):** Nel database o nel file Excel di caricamento, se una cella di sconto è vuota, l'applicazione erediterà automaticamente il valore inserito a livello superiore. Se lo Sconto 1 è vuoto sulla singola Referenza ma è popolato al 10% sul Gruppo, l'app applicherà il 10%.
-        * **Override Esplicito (Valore 0.0):** Se inserisci esplicitamente lo `0` (o `0.0`) a livello di Referenza o Categoria, l'app **annullerà e azzererà** lo sconto ereditato, consentendo di bloccare sconti centrali non dovuti su determinati prodotti.
-        * **Filtro Assortimento:** Un prodotto viene considerato in assortimento ed è selezionabile solo se esiste un valore di **Listino R** configurato per quel cliente specifico a livello di Referenza (Livello 4). Se il listino è assente, l'app visualizzerà l'errore di blocco *"Prodotto fuori assortimento"*.
+        * **Cella Vuota (Blank):** Eredita automaticamente il valore inserito al livello gerarchico superiore.
+        * **Override Esplicito (Valore 0.0):** Annulla e azzera lo sconto ereditato, bloccando sconti centrali non dovuti.
+        * **Filtro Assortimento:** Un prodotto è selezionabile solo se ha un valore di **Listino R** configurato a livello di Referenza (Livello 4).
         """)
 
     with st.expander("3. Metodologie di Negoziazione (Target vs Spot)", expanded=False):
         st.markdown("""
-        Il simulatore offre due modalità di lavoro per adattarsi a ogni fase della trattativa:
-        
-        **Metodo A: Partenza da Prezzo Target (Calcolo Inverso)**
-        1. All'attivazione, l'app imposta come **Prezzo Target Net Net** la soglia minima di sicurezza **G** della referenza selezionata.
-        2. Inserendo il prezzo desiderato dal buyer, il sistema calcola istantaneamente lo **Sconto Promozionale Z (%)** necessario a raggiungere esattamente quell'obiettivo.
-        3. Se inserisci un valore nello **Sconto Unitario in fattura AA (Euro/Pz)**, il sistema adeguerà in tempo reale lo Sconto Promo Z (%) per mantenere il Net Net target stabile.
-        
-        **Metodo B: Tentativi Spot Manuali (Sconto Libero)**
-        1. Sblocca l'inserimento manuale dello Sconto Promozionale Z.
-        2. Permette di fare tentativi liberi per vedere dove atterra il Net Net.
-        3. Mostra costantemente a fianco lo **Sconto Massimo Consentito (AV)**: la percentuale limite che puoi inserire prima che il semaforo diventi rosso.
+        * **Metodo A (Prezzo Target):** Imposta come obiettivo la soglia minima di sicurezza **G** e calcola in automatico lo Sconto Promozionale Z (%) necessario.
+        * **Metodo B (Tentativi Spot Manuali):** Immissione libera dello Sconto Promozionale Z con monitoraggio costante dello **Sconto Massimo Consentito (AV)** per non violare i guardrail.
         """)
 
     with st.expander("4. Uso del Back-Office ed Excel (Sincronizzazione)", expanded=False):
         st.markdown("""
-        L'operatore di sede può gestire i listini e le condizioni in corsa in due modi:
+        * **Modifica Diretta:** Doppio clic sulle celle della tabella Back-Office e clic su **Salva Modifiche**.
+        * **Importazione Excel:** Caricamento massivo tramite file tracciato `.xlsx`.
         
-        * **Modifica Diretta (A caldo):** Utilizza lo strumento di modifica diretta inserito nella scheda Back-Office. Fai doppio clic sulle celle per variare sconti o listini e primi il pulsante **Salva Modifiche** per sincronizzare istantaneamente l'app.
-        * **Caricamento da file Excel:** Scarica il tracciato attuale degli accordi, compilalo localmente e trascinalo nel widget di importazione.
-        
-        **ATTENZIONE - REGOLA DI FERRO PER LA FORMATTAZIONE DEGLI EAN IN EXCEL:**
-        Excel tende a corrompere e abbreviare i codici EAN a 13 cifre in notazione scientifica (es. `8.00E+12`). Prima di salvare il file `demo_seed_data.xlsx` o qualsiasi altro file per l'importazione, assicurati che la colonna `CHIAVE_LIVELLO` sia **esplicitamente impostata in formato Testo** all'interno di Excel.
+        **ATTENZIONE - FORMATTAZIONE EAN IN EXCEL:**
+        Assicurati che la colonna `CHIAVE_LIVELLO` ed `EAN` siano impostate in formato **Testo** prima del salvataggio in Excel per evitare la corruzione dei codici in notazione scientifica (es. `8.00E+12`).
         """)
