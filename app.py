@@ -322,7 +322,7 @@ if menu == "Simulatore Offerte":
                 value=float(contract.sconto_y), step=0.5
             )
             st.markdown(
-                f"<div class='warning-box'>ATTENZIONE - SE LO SCONTO CONTINUATIVO E' PRESENTE PUO' DERIVARE DA UN ACCORDO LOCALE: {contract.sconto_y:.2f}%<br>"
+                f"<div class='warning-box'>ATTENZIONE - UNO SCONTO CONTINUATIVO PUO' DERIVARE DA UN ACCORDO LOCALE - valore attuale: {contract.sconto_y:.2f}%<br>"
                 f"<span style='font-size:0.8em; font-weight:normal;'>La modifica in corsa potrebbe violare tale accordo che va quindi ridiscusso prima di confermare la promozione.</span></div>", 
                 unsafe_allow_html=True
             )
