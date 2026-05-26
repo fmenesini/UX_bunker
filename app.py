@@ -1357,6 +1357,6 @@ else:
         Se devi aggiornare l'intero piano contrattuale annuale:
         1. Clicca su **Scarica Template Contratti (Excel)** per avere il backup completo del database attuale.
         2. Lavora i dati comodamente sul tuo Excel aziendale.
-        3. ** ATTENZIONE AI CODICI EAN (Fuoco Amico):** Excel tende a trasformare i codici a 13 cifre in numeri scientifici (es. `800221E+12`). Prima di salvare, assicurati che la colonna **EAN** e **CHIAVE_LIVELLO** siano formattate esplicitamente come **TESTO**, altrimenti l'importazione corromperà l'anagrafica impedendo al simulatore di riconoscere i prodotti.
+        3. ** ATTENZIONE AI CODICI EAN ** Excel tende a trasformare i codici a 13 cifre in numeri scientifici (es. `800221E+12`). Prima di salvare, assicurati che la colonna **EAN** e **CHIAVE_LIVELLO** siano formattate esplicitamente come **TESTO**, altrimenti l'importazione corromperà l'anagrafica impedendo al simulatore di riconoscere i prodotti.
         4. Trascina il file salvato nel box di importazione e clicca su **Conferma Scrittura**.
         """)
