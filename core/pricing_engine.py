@@ -131,9 +131,9 @@ class PricingEngine:
         # 8. Net Net Finale
         steps.append(WaterfallStep("Net Net Finale (AM)", net_net, "Ricavo netto reale in cassa"))
 
-        # Verifiche Guardrail
+        # Verifiche Guardrail con tolleranza al centesimo (-0.01) per evitare falsi positivi da rumore di arrotondamento
         delta = net_net - inp.min_net_net_g
-        guardrail_ok = delta >= 0
+        guardrail_ok = delta > Decimal("-0.01")
 
         # Sconto Massimo Scalare Teorico Totale (AV)
         sconto_max_av = Decimal("0.00")
