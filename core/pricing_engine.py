@@ -1,3 +1,4 @@
+# core/pricing_engine.py
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List
 from dataclasses import dataclass
@@ -12,17 +13,17 @@ class PricingInput:
     sconto_5: Decimal = Decimal("0.00")
     sconto_6: Decimal = Decimal("0.00")
     sconto_7: Decimal = Decimal("0.00")
-    sconto_y: Decimal = Decimal("0.00")
-    sconto_z: Decimal = Decimal("0.00")
-    sconto_aa: Decimal = Decimal("0.00")
-    sconto_carico: Decimal = Decimal("0.00")
-    sconto_pagamento: Decimal = Decimal("0.00")
-    voce_i: Decimal = Decimal("0.00")
-    voce_ii: Decimal = Decimal("0.00")
-    voce_iii: Decimal = Decimal("0.00")
-    voce_iv: Decimal = Decimal("0.00")
-    voce_v: Decimal = Decimal("0.00")
-    min_net_net_g: Decimal = Decimal("0.00")
+    sconto_y: Decimal = Decimal("0.00")   # Sconto Continuativo
+    sconto_z: Decimal = Decimal("0.00")   # Sconto Promozionale
+    sconto_aa: Decimal = Decimal("0.00")  # Sconto Unitario in fattura
+    sconto_carico: Decimal = Decimal("0.00")     # Logistica (AB)
+    sconto_pagamento: Decimal = Decimal("0.00")  # Finanziario (AC)
+    voce_i: Decimal = Decimal("0.00")     # PFA 1
+    voce_ii: Decimal = Decimal("0.00")    # PFA 2
+    voce_iii: Decimal = Decimal("0.00")   # PFA 3
+    voce_iv: Decimal = Decimal("0.00")    # PFA 4
+    voce_v: Decimal = Decimal("0.00")     # PFA 5 (Locale)
+    min_net_net_g: Decimal = Decimal("0.00")  # Guardrail
 
 @dataclass(frozen=True)
 class WaterfallStep:
@@ -53,59 +54,88 @@ class PricingEngine:
         steps: List[WaterfallStep] = []
         prezzo = inp.listino_r
         
-        steps.append(WaterfallStep("1. Listino Base (R)", prezzo, "Prezzo di partenza contrattuale"))
+        # 1. Listino
+        steps.append(WaterfallStep("Listino Base (R)", prezzo, "Prezzo di partenza contrattuale"))
 
-        centrali = [inp.sconto_1, inp.sconto_2, inp.sconto_3, inp.sconto_4, inp.sconto_5]
-        sconti_attivi_c = [f"{s}%" for s in centrali if s > 0]
-        for s in centrali:
-            if s > 0:
-                prezzo = cls._apply_pct(prezzo, s)
-        steps.append(WaterfallStep("2. Sconti Centrali (S1-S5)", prezzo, " x ".join(sconti_attivi_c) if sconti_attivi_c else "Nessuno"))
+        # 2. Sconti Fissi Centrali (Esplosi singolarmente)
+        if inp.sconto_1 > 0:
+            prezzo = cls._apply_pct(prezzo, inp.sconto_1)
+            steps.append(WaterfallStep("Sconto Centrale 1", prezzo, f"-{inp.sconto_1}%"))
+        if inp.sconto_2 > 0:
+            prezzo = cls._apply_pct(prezzo, inp.sconto_2)
+            steps.append(WaterfallStep("Sconto Centrale 2", prezzo, f"-{inp.sconto_2}%"))
+        if inp.sconto_3 > 0:
+            prezzo = cls._apply_pct(prezzo, inp.sconto_3)
+            steps.append(WaterfallStep("Sconto Centrale 3", prezzo, f"-{inp.sconto_3}%"))
+        if inp.sconto_4 > 0:
+            prezzo = cls._apply_pct(prezzo, inp.sconto_4)
+            steps.append(WaterfallStep("Sconto Centrale 4", prezzo, f"-{inp.sconto_4}%"))
+        if inp.sconto_5 > 0:
+            prezzo = cls._apply_pct(prezzo, inp.sconto_5)
+            steps.append(WaterfallStep("Sconto Centrale 5", prezzo, f"-{inp.sconto_5}%"))
 
-        locali = [inp.sconto_6, inp.sconto_7]
-        sconti_attivi_l = [f"{s}%" for s in locali if s > 0]
-        for s in locali:
-            if s > 0:
-                prezzo = cls._apply_pct(prezzo, s)
-        steps.append(WaterfallStep("3. Sconti Locali (S6-S7)", prezzo, " x ".join(sconti_attivi_l) if sconti_attivi_l else "Nessuno"))
+        # 3. Sconti Territoriali Locali (Esplosi singolarmente)
+        if inp.sconto_6 > 0:
+            prezzo = cls._apply_pct(prezzo, inp.sconto_6)
+            steps.append(WaterfallStep("Sconto Locale 6", prezzo, f"-{inp.sconto_6}%"))
+        if inp.sconto_7 > 0:
+            prezzo = cls._apply_pct(prezzo, inp.sconto_7)
+            steps.append(WaterfallStep("Sconto Locale 7", prezzo, f"-{inp.sconto_7}%"))
 
+        # 4. Leve Venditore (Y & Z)
         if inp.sconto_y > 0:
             prezzo = cls._apply_pct(prezzo, inp.sconto_y)
-            steps.append(WaterfallStep("4. Sconto Continuativo (Y)", prezzo, f"-{inp.sconto_y}%"))
-        else:
-            steps.append(WaterfallStep("4. Sconto Continuativo (Y)", prezzo, "Non applicato"))
+            steps.append(WaterfallStep("Sconto Continuativo (Y)", prezzo, f"-{inp.sconto_y}%"))
 
         if inp.sconto_z > 0:
             prezzo = cls._apply_pct(prezzo, inp.sconto_z)
-            steps.append(WaterfallStep("5. Sconto Promozionale (Z)", prezzo, f"-{inp.sconto_z}%"))
-        else:
-            steps.append(WaterfallStep("5. Sconto Promozionale (Z)", prezzo, "Non applicato"))
+            steps.append(WaterfallStep("Sconto Promozionale (Z)", prezzo, f"-{inp.sconto_z}%"))
 
+        # 5. Sconto Unitario in fattura (AA)
         if inp.sconto_aa > 0:
             prezzo = max(Decimal("0.00"), prezzo - inp.sconto_aa)
-            steps.append(WaterfallStep("6. Sconto Unitario in fattura (AA)", prezzo, f"-{inp.sconto_aa:.2f} Euro/Pz"))
-        else:
-            steps.append(WaterfallStep("6. Sconto Unitario in fattura (AA)", prezzo, "Non applicato"))
+            steps.append(WaterfallStep("Sconto Unitario in fattura (AA)", prezzo, f"-{inp.sconto_aa:.2f} Euro/Pz"))
 
+        # 6. Oneri Logistici e Finanziari (AB & AC)
         if inp.sconto_carico > 0:
             prezzo = cls._apply_pct(prezzo, inp.sconto_carico)
+            steps.append(WaterfallStep("Oneri Logistica (AB)", prezzo, f"-{inp.sconto_carico}%"))
+            
         if inp.sconto_pagamento > 0:
             prezzo = cls._apply_pct(prezzo, inp.sconto_pagamento)
+            steps.append(WaterfallStep("Oneri Pagamento (AC)", prezzo, f"-{inp.sconto_pagamento}%"))
         
+        # Netto in Fattura 2
         netto_fatt_2 = prezzo.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
-        steps.append(WaterfallStep("7. Netto in Fattura 2 (AF)", netto_fatt_2, f"Logistica (AB): -{inp.sconto_carico}% | Finanziario (AC): -{inp.sconto_pagamento}%"))
+        steps.append(WaterfallStep("Netto in Fattura 2 (AF)", netto_fatt_2, "Imponibile netto in fattura"))
 
+        # 7. Premi Fuori Fattura (AL) - Somma algebrica con dettaglio voci
         pfa_sum = inp.voce_i + inp.voce_ii + inp.voce_iii + inp.voce_iv + inp.voce_v
         if pfa_sum >= 100:
             raise ValueError(f"La somma dei Premi Fuori Fattura ({pfa_sum}%) supera o eguaglia il 100%. Ricavo impossibile.")
             
-        net_net = cls._apply_pct(netto_fatt_2, pfa_sum)
-        net_net = net_net.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
-        steps.append(WaterfallStep("8. Net Net Finale (AM)", net_net, f"Totale Premi (AL): -{pfa_sum}% (Voci I-V)"))
+        if pfa_sum > 0:
+            pfa_details = []
+            if inp.voce_i > 0: pfa_details.append(f"I: {inp.voce_i}%")
+            if inp.voce_ii > 0: pfa_details.append(f"II: {inp.voce_ii}%")
+            if inp.voce_iii > 0: pfa_details.append(f"III: {inp.voce_iii}%")
+            if inp.voce_iv > 0: pfa_details.append(f"IV: {inp.voce_iv}%")
+            if inp.voce_v > 0: pfa_details.append(f"V: {inp.voce_v}%")
+            
+            net_net = cls._apply_pct(netto_fatt_2, pfa_sum)
+            net_net = net_net.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+            steps.append(WaterfallStep("Premi Fuori Fattura (AL)", net_net, f"Somma PFA: -{pfa_sum}% ({', '.join(pfa_details)})"))
+        else:
+            net_net = netto_fatt_2
 
+        # 8. Net Net Finale
+        steps.append(WaterfallStep("Net Net Finale (AM)", net_net, "Ricavo netto reale in cassa"))
+
+        # Verifiche Guardrail
         delta = net_net - inp.min_net_net_g
         guardrail_ok = delta >= 0
 
+        # Sconto Massimo Scalare Teorico Totale (AV)
         sconto_max_av = Decimal("0.00")
         if inp.listino_r > 0:
             pfa_factor = (Decimal("100.00") - pfa_sum) / Decimal("100.00")
