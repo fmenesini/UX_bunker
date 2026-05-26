@@ -1300,7 +1300,7 @@ else:
         *   *Calcolo:* $7,255 \\times (1 - 0,05) = 6,892 €$
         *   **PREZZO NET NET FINALE (AM):** **6,89 €**
         
-        > **Regola** Se questo 6,89 € scende anche solo di un centesimo sotto la soglia di sicurezza **G** registrata nel Back-Office per quell'EAN, l'applicazione avvisa **ROSSO (BLOCCATO)**.
+        > **Regola** Se questo 6,89 € scende anche solo di un centesimo sotto la soglia di sicurezza **del minimo NET NET** registrata nel Back-Office per quell'EAN, l'applicazione avvisa **ROSSO (BLOCCATO)**.
         """)
         
     with st.expander("2. LA GERARCHIA DEI CONTRATTI: Le Regole di Ereditarietà (Esempio di Default e Override)", expanded=False):
