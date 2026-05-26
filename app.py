@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.WARNING)
 
 st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide")
 
-# --- CSS PASTELLO AD ALTO CONTRASTO (Safe per Icone e Mobile) ---
+# --- CSS PASTELLO AD ALTO CONTRASTO E ANTICRASH ---
 st.markdown("""
 <style>
     :root { color-scheme: light !important; }
@@ -38,16 +38,15 @@ def init_db():
     cursor = conn.cursor()
     try:
         cursor.execute("SELECT attivo FROM clienti LIMIT 1")
-        cursor.execute("SELECT ean FROM anagrafica_master LIMIT 1") # Test per il nuovo schema separato
+        cursor.execute("SELECT ean FROM anagrafica_master LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("DROP TABLE IF EXISTS accordi_commerciali")
         cursor.execute("DROP TABLE IF EXISTS clienti")
-        cursor.execute("DROP TABLE IF EXISTS prodotti") # Eliminiamo la vecchia tabella unita
+        cursor.execute("DROP TABLE IF EXISTS prodotti")
         cursor.execute("DROP TABLE IF EXISTS anagrafica_master")
         cursor.execute("DROP TABLE IF EXISTS guardrail_aziendali")
         conn.commit()
     
-    # TABELLA 1: Anagrafica e Logistica Pura (Senza dati finanziari)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS anagrafica_master (
         ean TEXT PRIMARY KEY, codice_sap TEXT, tipo_olio TEXT,
@@ -56,7 +55,6 @@ def init_db():
         strati_pallet INTEGER, cartoni_pallet INTEGER, conservazione_mesi INTEGER, shelf_life_mesi INTEGER
     )""")
     
-    # TABELLA 2: Guardrail Finanziari (Solo EAN e Margine Minimo)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS guardrail_aziendali (
         ean TEXT PRIMARY KEY, min_net_net_g REAL DEFAULT 0.0
@@ -93,7 +91,6 @@ def seed_baseline_data(conn):
     cursor.execute("DELETE FROM anagrafica_master")
     cursor.execute("DELETE FROM guardrail_aziendali")
     
-    # Dati base fusi per il seed iniziale
     prodotti_salov = [
         ("8002210111110", "10002713", "EXTRAVERGINE", "SAGRA EXV BOT W12x1L CLASS IT", "Ex.v. Sagra Classico lt.1", 1.0, 10.00, "Bott.Lt 1", 12, 8, 5, 40, 14, 9),
         ("8002210133440", "10003255", "EXTRAVERGINE", "SAGRA EXV 100%R-PET V12x750ML IT", "Ex.v. Sagra lt.0,75 PET", 0.75, 7.50, "Pet.Lt 0,75", 12, 12, 5, 60, 14, 9),
@@ -156,9 +153,7 @@ def seed_baseline_data(conn):
         ("8002210130197", "60000589", "ACETO", "FBERIO ACE BALS BOT V6x500ML IT", "Aceto Balsamico F.Berio lt.0,50", 0.5, 2.10, "Vetro lt 0,50", 6, 31, 5, 155, 61, 41)
     ]
     
-    # Scrittura separata nelle due tabelle
     for p in prodotti_salov:
-        # 1. Anagrafica Master
         cursor.execute("""
         INSERT OR REPLACE INTO anagrafica_master (
             ean, codice_sap, tipo_olio, descrizione_sap, descrizione_commerciale, formato_lt, confezione,
@@ -166,7 +161,6 @@ def seed_baseline_data(conn):
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (p[0], p[1], p[2], p[3], p[4], p[5], p[7], p[8], p[9], p[10], p[11], p[12], p[13]))
         
-        # 2. Guardrail Finanziari
         cursor.execute("""
         INSERT OR REPLACE INTO guardrail_aziendali (ean, min_net_net_g) VALUES (?, ?)
         """, (p[0], p[6]))
@@ -241,14 +235,13 @@ if menu == "Simulatore Offerte":
         associati = [r[0] for r in cursor.fetchall()]
         associato_sel = st.sidebar.selectbox("3. Insegna Locale / Associato", associati, help="Seleziona l'associato locale.")
 
-        # JOIN tra Anagrafica Master e Guardrail Finanziari per popolare il simulatore
         cursor.execute("""
-            SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, a.codice_sap, a.formato_lt, COALESCE(g.min_net_net_g, 0.0) 
+            SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0), a.codice_sap, a.formato_lt 
             FROM anagrafica_master a
             LEFT JOIN guardrail_aziendali g ON a.ean = g.ean
         """)
         prodotti = cursor.fetchall()
-        prodotti_dict = {f"{p[1]} [EAN: {p[0]}]": (p[0], p[2], p[5], p[3], p[4]) for p in prodotti}
+        prodotti_dict = {f"{p[1]} [EAN: {p[0]}]": (p[0], p[2], p[3], p[4], p[5]) for p in prodotti}
         prodotto_scelto = st.sidebar.selectbox("4. Referenza Salov", list(prodotti_dict.keys()), help="Seleziona la referenza.")
         ean, tipo_olio, min_net_net_g, codice_sap, formato_lt = prodotti_dict[prodotto_scelto]
 
@@ -671,6 +664,12 @@ elif menu == "Dati Anagrafici (Logistica)":
                                     try: return int(float(val))
                                     except: return default
 
+                                min_g = get_float("min_net_net_g", -1.0)
+                                if min_g == -1.0:
+                                    cursor.execute("SELECT min_net_net_g FROM guardrail_aziendali WHERE ean=?", (ean_val,))
+                                    res_min = cursor.fetchone()
+                                    min_g = res_min[0] if res_min else 0.0
+
                                 cursor.execute("""
                                 INSERT OR REPLACE INTO anagrafica_master (
                                     ean, codice_sap, tipo_olio, descrizione_sap, descrizione_commerciale, formato_lt, confezione,
@@ -706,7 +705,7 @@ elif menu == "Back-Office (Contratti)":
     st.title("Back-Office - Contratti e Guardrail Finanziari")
     conn = sqlite3.connect(DB_FILE)
     
-    tab_contratti, tab_guardrail = st.tabs(["Gestione Contratti GDO", "Gestione Guardrail Aziendali (Minimo G)"])
+    tab_contratti, tab_guardrail = st.tabs(["Gestione Contratti GDO", "GESTIONE MINIMI NET NET"])
     
     with tab_contratti:
         st.subheader("Modifica Diretta dei Contratti in Database (A caldo)")
@@ -877,7 +876,7 @@ elif menu == "Back-Office (Contratti)":
                         st.error(f"ROSSO (BLOCCATO) - Errore durante l'elaborazione del file: {e}")
 
     with tab_guardrail:
-        st.subheader("Gestione Guardrail Finanziari (Minimo Net Net G)")
+        st.subheader("GESTIONE MINIMI NET NET")
         st.markdown("Questa tabella è isolata dall'anagrafica logistica. Modifica qui i limiti minimi di margine per ogni referenza.")
         
         df_guardrail = pd.read_sql_query("""
