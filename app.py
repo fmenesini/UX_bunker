@@ -1128,62 +1128,91 @@ elif menu == "Report Sintetico":
     conn.close()
 
 # ==========================================
-# SCHEDA 5: GUIDA OPERATIVA
+# SCHEDA 5: GUIDA OPERATIVA (VERSIONE ESTESA & AVANZATA)
 # ==========================================
 else:
-    st.title("Guida Operativa - Bunker Commerciale Salov")
-    st.markdown("Questa guida spiega in modo semplice, esaustivo e pratico come funziona il motore di calcolo, l'ereditarietà dei contratti e l'uso dell'applicazione.")
+    st.title("Manuale d'Istruzione del Bunker Commerciale")
+    st.markdown("### Guida di Sopravvivenza per la Gestione della Marginalità Salov")
     st.markdown("---")
     
-    with st.expander("1. Il Motore di Pricing (Cascata In Fattura e Fuori Fattura)", expanded=True):
+    with st.expander("1.IL MOTORE DI PRICING: La Cascata Sequenziale (Esempio Numerico)", expanded=True):
         st.markdown("""
-        Il simulatore applica gli sconti in modo **sequenziale geometrico (a cascata)** e non per somma algebrica, rispettando rigorosamente le prassi negoziali e contabili dell'ufficio commerciale Salov.
+        Il simulatore non esegue mai la somma algebrica degli sconti (es. 10% + 5% non fa 15%). Il calcolo segue una **cascata geometrica sequenziale** in cui ogni sconto si applica sul risultato del passaggio precedente.
         
-        **La Scomposizione Sequenziale dei Calcoli (Flusso On-Invoice ed Off-Invoice):**
-        1. **Listino Base R (Euro/Pz):** Prezzo lordo base stabilito per la singola referenza.
-        2. **Sconti Centrali / Canale Fisso (S1 - S5):** Sconti contrattuali concessi al cliente in cascata sequenziale sul prezzo ridotto precedente.
-        3. **Sconti Territoriali Locali (S6 - S7):** Trattenute contrattuali locali destinate agli associati periferici.
-        4. **Sconto Continuativo Y (%):** Leva commerciale continuativa trimestrale o semestrale.
-        5. **Sconto Promozionale Z (%):** Sconto percentuale temporaneo legato alle campagne volantino.
-        6. **Sconto Taglio Prezzo Secco (AA):** Detrazione diretta espressa in Euro/Pezzo.
-        7. **Oneri di Rete Logistica (AB) & Pagamento (AC):** AB (Efficienza volumi) e AC (Termini di pagamento). Generano il **Netto in Fattura 2 (AF)**.
-        8. **Premi Fuori Fattura (AL):** Somma algebrica dei premi fine anno (PFA Voci I-V) applicata sul Netto in Fattura 2 per calcolare il **Prezzo Net Net Reale Aziendale (AM)**.
+        Ecco un esempio reale di scomposizione per capire come si passa dal Listino al Prezzo Net Net (AM):
+        
+        #### Esempio Pratico: 1 Cartone di Sagra Extra Vergine Classico 1L
+        *   **LISTINO BASE (R):** **10,00 €**
+        *   **Sconto 1 (10,00%):** Rimane **9,00 €** *(Calcolo: 10,00 - 10%)*
+        *   **Sconto 2 (5,00%):** Rimane **8,55 €** *(Calcolo: 9,00 - 5%)*
+        *   **Sconto Continuativo Y (2,00%):** Rimane **8,379 €** *(Calcolo: 8,55 - 2%)*
+        *   **Sconto Promozionale Z (10,00%):** Rimane **7,541 €** *(Calcolo: 8,379 - 10%)*
+        *   **Sconto Taglio Prezzo Secco [AA] (0,10 €/Pz):** Rimane **7,441 €** *(Detrazione netta in Euro)*
+        *   **Oneri Logistica / Pagamento (AB + AC - es. 1,5% + 1% = 2,5%):** Rimane **7,255 €** ➔ **Questo è il Netto In Fattura 2 (AF)**.
+        
+        #### La Fase "Off-Invoice" (Fuori Fattura)
+        Sul valore di **7,255 € (AF)** si applicano i Premi Fine Anno (PFA Voci I-V) pattuiti con la Centrale. 
+        Se il totale dei PFA è del **5,00%**, il sistema calcola la trattenuta finale:
+        *   *Calcolo:* $7,255 \\times (1 - 0,05) = 6,892 €$
+        *   **PREZZO NET NET FINALE (AM):** **6,89 €**
+        
+        > **Regola del Cecchino:** Se questo 6,89 € scende anche solo di un centesimo sotto la soglia di sicurezza **G** registrata nel Back-Office per quell'EAN, l'applicazione spara il **ROSSO (BLOCCATO)**.
         """)
         
-    with st.expander("2. La Gerarchia dei Contratti (Regole di Ereditarietà a 4 Livelli)", expanded=False):
+    with st.expander("2. LA GERARCHIA DEI CONTRATTI: Le Regole di Ereditarietà (Esempio di Default e Override)", expanded=False):
         st.markdown("""
-        L'applicazione implementa un sistema di **ereditarietà gerarchica a 4 livelli**:
+        Per evitare di dover inserire migliaia di righe per ogni singolo cliente e referenza, il Bunker applica un algoritmo di scansione a cascata che cerca l'accordo commerciale seguendo 4 livelli logici.
         
-        ```text
-        [ LIVELLO 1: GRUPPO GDO (Macro) ] (es. COOP ITALIA)
-                     │
-                     ▼
-        [ LIVELLO 2: SOTTOGRUPPO ] (es. COOP ITALIA SOTTOGRUPPO)
-                     │
-                     ▼
-        [ LIVELLO 3: CATEGORIA MERCEOLOGICA ] (es. EXTRAVERGINE)
-                     │
-                     ▼
-        [ LIVELLO 4: REFERENZA SPECIFICA (EAN) ] (es. Sagra Classico 1L)
-        ```
+        #### I 4 Livelli del Mirino:
+        1. **GRUPPO MACRO** (es. *COOP ITALIA*) ➔ Regole generali valide per tutte le insegne e tutti i prodotti.
+        2. **SOTTOGRUPPO** (es. *ALLEANZA 3.0*) ➔ Condizioni specifiche che sovrascrivono la Centrale.
+        3. **CATEGORIA** (es. *EXTRAVERGINE*) ➔ Sconti validi solo per quel tipo di olio.
+        4. **REFERENZA (EAN)** (es. *Filippo Berio 100% ITA 0,75*) ➔ Il livello di massima precisione.
         
-        **Regole Fondamentali di Ereditarietà:**
-        * **Cella Vuota (Blank):** Eredita automaticamente il valore inserito al livello gerarchico superiore.
-        * **Override Esplicito (Valore 0.0):** Annulla e azzera lo sconto ereditato, bloccando sconti centrali non dovuti.
-        * **Filtro Assortimento:** Un prodotto è selezionabile solo se ha un valore di **Listino R** configurato a livello di Referenza (Livello 4).
+        #### Come gestire i campi in Tabella (Casi Reali):
+        
+        *   **Caso A: La Cella Vuota (Ereditarietà Automatica)**
+            Se a livello di Gruppo *COOP ITALIA* hai impostato uno Sconto 1 del **10%**, e nella riga della singola referenza lasci la cella dello Sconto 1 **vuota (blank)**, il sistema applica automaticamente il **10%**. Non serve duplicare i dati.
+            
+        *   **Caso B: L'Override di Forza (Disattivare uno sconto)**
+            Se la referenza *Sagra Spray 200ml* non deve subire lo Sconto 1 del 10% stabilito dalla Centrale, nella riga della referenza devi scrivere **`0.0`**. Questo valore azzera l'ereditarietà e blocca lo sconto per quel prodotto specifico.
+            
+        *   **Caso C: Il Fuori Assortimento**
+            Se per un determinato cliente l'applicazione mostra il messaggio `PRODOTTO FUORI ASSORTIMENTO`, significa che a livello di Referenza (Livello 4) manca il valore del **Listino Base R**. Inserisci il listino nel Back-Office per sbloccare la referenza.
         """)
 
-    with st.expander("3. Metodologie di Negoziazione (Target vs Spot)", expanded=False):
+    with st.expander("3. LE DUE MODALITÀ DI LAVORO: Target vs Manuale Spot", expanded=False):
         st.markdown("""
-        * **Metodo A (Prezzo Target):** Imposta come obiettivo la soglia minima di sicurezza **G** e calcola in automatico lo Sconto Promozionale Z (%) necessario.
-        * **Metodo B (Tentativi Spot Manuali):** Immissione libera dello Sconto Promozionale Z con monitoraggio costante dello **Sconto Massimo Consentito (AV)** per non violare i guardrail.
+        Nella scheda principale puoi scegliere due modi diversi di attaccare il pricing a seconda di cosa stai discutendo con il buyer della GDO:
+        
+        ####  Modalità A: Partenza da Prezzo Target (Consigliata)
+        La usi quando il buyer ti dice: *"Voglio vendere la bottiglia a scaffale a questo prezzo, quindi a te la pago esattamente X"*.
+        1. Seleziona la modalità **A**.
+        2. Inserisci nel campo il prezzo richiesto dal cliente.
+        3. Il motore calcola istantaneamente al millesimo lo **Sconto Promozionale Z (%)** necessario per arrivare a quel prezzo.
+        4. Se il target inserito fa scendere la marginalità sotto la soglia di sicurezza, il sistema calcolerà comunque lo sconto ma ti avviserà del blocco.
+        
+        ####  Modalità B: Tentativi Spot Manuali (Uso Libero)
+        La usi per fare simulazioni classiche o per testare scenari "Cosa succede se...".
+        1. Seleziona la modalità **B**.
+        2. Muovi manualmente lo Sconto Promozionale Z o lo Sconto AA.
+        3. Tieni d'occhio i campi **Sconto Promo MAX Consentito [Z]** e **Sconto Unitario MAX Consentito [AA]**: ti indicano esattamente fino a dove puoi spingerti con la percentuale o con l'Euro secco prima che il semaforo passi da Verde a Rosso.
         """)
 
-    with st.expander("4. Uso del Back-Office ed Excel (Sincronizzazione)", expanded=False):
+    with st.expander("4. BACK-OFFICE ED EXCEL: Come Aggiornare i Dati in Sicurezza", expanded=False):
         st.markdown("""
-        * **Modifica Diretta:** Doppio clic sulle celle della tabella Back-Office e clic su **Salva Modifiche**.
-        * **Importazione Excel:** Caricamento massivo tramite file tracciato `.xlsx`.
+        Il Bunker si alimenta con i dati reali delle anagrafiche e dei contratti. Puoi fare manutenzione in due modi:
         
-        **ATTENZIONE - FORMATTAZIONE EAN IN EXCEL:**
-        Assicurati che la colonna `CHIAVE_LIVELLO` ed `EAN` siano impostate in formato **Testo** prima del salvataggio in Excel per evitare la corruzione dei codici in notazione scientifica (es. `8.00E+12`).
+        ####  Variante 1: Modifiche rapide "a caldo" direttamente a schermo
+        1. Vai su **Back-Office (Contratti)** o **Dati Anagrafici**.
+        2. Fai doppio clic sulla cella che vuoi modificare all'interno della griglia dati.
+        3. Digita il nuovo valore (es. cambia un listino o modifica un PFA).
+        4. Clicca sul pulsante **SALVA MODIFICHE** per rendere la modifica operativa immediatamente su tutto il simulatore.
+        
+        ####  Variante 2: Caricamento Massivo in Excel (Operazioni Pesanti)
+        Se devi aggiornare l'intero piano contrattuale annuale:
+        1. Clicca su **Scarica Template Contratti (Excel)** per avere il backup completo del database attuale.
+        2. Lavora i dati comodamente sul tuo Excel aziendale.
+        3. ** ATTENZIONE AI CODICI EAN (Fuoco Amico):** Excel tende a trasformare i codici a 13 cifre in numeri scientifici (es. `800221E+12`). Prima di salvare, assicurati che la colonna **EAN** e **CHIAVE_LIVELLO** siano formattate esplicitamente come **TESTO**, altrimenti l'importazione corromperà l'anagrafica impedendo al simulatore di riconoscere i prodotti.
+        4. Trascina il file salvato nel box di importazione e clicca su **Conferma Scrittura**.
         """)
