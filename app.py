@@ -154,6 +154,7 @@ def seed_baseline_data(conn):
         INSERT OR REPLACE INTO guardrail_aziendali (ean, min_net_net_g) VALUES (?, ?)
         """, (p[0], p[6]))
         
+    # ANAGRAFICA ATTIVA INTEGRATA CON I NUOVI GRUPPI
     clienti_demo = [
         ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "ALLEANZA 3.0"),
         ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "NORDOVEST"),
@@ -162,27 +163,64 @@ def seed_baseline_data(conn):
         ("CONAD", "CONAD SOTTOGRUPPO", "CONAD CENTRO NORD"),
         ("CONAD", "CONAD SOTTOGRUPPO", "PAC 2000A"),
         ("ESSELUNGA GRUPPO", "ESSELUNGA SOTTOGRUPPO", "ESSELUNGA"),
-        ("SELEX GRUPPO", "SELEX SOTTOGRUPPO", "MAXI DI"),
-        ("SELEX GRUPPO", "SELEX SOTTOGRUPPO", "DIMAR"),
-        ("SELEX GRUPPO", "SELEX SOTTOGRUPPO", "UNICOMM")
+        ("SELEX GRUPPO", "SELEX SOTTOGRUPPO", "SELEX "),
+        ("PAM GRUPPO", "PAM SOTTOGRUPPO", "PAM"),
+        ("CRAI GRUPPO", "CRAI SOTTOGRUPPO", "CRAI TIRRENO")
     ]
     for c in clienti_demo:
         cursor.execute("INSERT OR IGNORE INTO clienti (gruppo_macro, sottogruppo, associato_insegna) VALUES (?, ?, ?)", c)
         
+    # ACCORDI BASE STRUTTURALI (FILE PULITO EXCEL INIETTATO NELL'ANIMA CORE)
     fallback_data = [
-        ('COOP ITALIA', '', '', 'GRUPPO', '', None, 10.0, 5.0, None, None, None, None, None, None, 1.5, 1.0, 5.0, 2.0, None, None, None),
-        ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', '', 'SOTTOGRUPPO', '', None, None, None, None, 2.0, None, None, None, None, None, None, None, None, None, None, None),
-        ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'CATEGORIA', 'EXTRAVERGINE', None, None, None, None, None, None, 3.0, None, None, None, None, None, None, None, None, 1.0),
+        # COOP ITALIA
+        ('COOP ITALIA', '', '', 'GRUPPO', '', None, 20.0, 30.0, None, None, None, None, None, None, 1.5, 1.0, 14.0, 8.0, None, None, None),
+        ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', '', 'SOTTOGRUPPO', '', None, None, None, None, 5.0, None, None, None, None, None, None, None, None, None, None, None),
+        ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'CATEGORIA', 'EXTRAVERGINE', None, None, None, None, None, None, 3.0, None, None, None, None, None, None, None, None, 3.0),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210131620', 66.00, None, None, None, None, None, None, 12.0, 5.0, None, None, None, None, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210111110', 60.80, None, None, None, None, None, None, 15.0, 0.0, None, None, None, None, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210001305', 43.20, None, None, None, None, None, None, 12.0, 0.0, None, None, None, None, None, None, None),
+        
+        # CONAD
         ('CONAD', '', '', 'GRUPPO', '', None, 10.0, 5.0, None, None, None, None, None, None, 1.5, 1.0, 5.0, 2.0, None, None, None),
         ('CONAD', 'CONAD SOTTOGRUPPO', '', 'SOTTOGRUPPO', '', None, None, None, None, 2.0, None, None, None, None, None, None, None, None, None, None, None),
         ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'CATEGORIA', 'EXTRAVERGINE', None, None, None, None, None, None, 3.0, None, None, None, None, None, None, None, None, 1.0),
         ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'REFERENZA', '8002210131620', 52.80, None, None, None, None, None, None, 12.0, 0.0, None, None, None, None, None, None, None),
         ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'REFERENZA', '8002210111110', 48.64, None, None, None, None, None, None, 15.0, 0.0, None, None, None, None, None, None, None),
         ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'REFERENZA', '8002210001305', 34.56, None, None, None, None, None, None, 12.0, 0.0, None, None, None, None, None, None, None),
+
+        # ESSELUNGA GRUPPO
+        ('ESSELUNGA GRUPPO', '', '', 'GRUPPO', '', None, 35.0, 15.0, None, None, None, None, None, None, 1.2, 1.0, 12.0, 5.0, None, None, None),
+        ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', '', 'SOTTOGRUPPO', '', None, None, None, None, 2.0, None, None, None, None, None, None, None, None, None, None, None),
+        ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', 'ESSELUNGA', 'CATEGORIA', 'EXTRAVERGINE', None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None),
+        ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', 'ESSELUNGA', 'REFERENZA', '8002210131620', 40.00, None, None, None, None, None, None, 10.0, 7.0, None, None, None, None, None, None, None),
+        ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', 'ESSELUNGA', 'REFERENZA', '8002210111110', 38.00, None, None, None, None, None, None, 11.0, 0.0, None, None, None, None, None, None, None),
+        ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', 'ESSELUNGA', 'REFERENZA', '8002210001305', 24.00, None, None, None, None, None, None, 13.0, 0.0, None, None, None, None, None, None, None),
+
+        # SELEX GRUPPO
+        ('SELEX GRUPPO', '', '', 'GRUPPO', '', None, 17.0, 18.0, None, None, None, None, None, None, 1.5, 1.0, 9.0, 11.0, None, None, None),
+        ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', '', 'SOTTOGRUPPO', '', None, None, None, None, 9.0, None, None, None, None, None, None, None, None, None, None, None),
+        ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', 'SELEX ', 'CATEGORIA', 'EXTRAVERGINE', None, None, None, None, None, None, 11.0, None, None, None, None, None, None, None, None, 5.0),
+        ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', 'SELEX ', 'REFERENZA', '8002210131620', 50.00, None, None, None, None, None, None, 12.0, 9.0, None, None, None, None, None, None, None),
+        ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', 'SELEX ', 'REFERENZA', '8002210111110', 44.00, None, None, None, None, None, None, 11.0, 4.0, None, None, None, None, None, None, None),
+        ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', 'SELEX ', 'REFERENZA', '8002210001305', 30.00, None, None, None, None, None, None, 10.0, 4.0, None, None, None, None, None, None, None),
+
+        # PAM GRUPPO
+        ('PAM GRUPPO', '', '', 'GRUPPO', '', None, 15.0, 20.0, None, None, None, None, None, None, 1.4, 1.0, 11.0, 6.0, None, None, None),
+        ('PAM GRUPPO', 'PAM SOTTOGRUPPO', '', 'SOTTOGRUPPO', '', None, None, None, None, 8.0, None, None, None, None, None, None, None, None, None, None, None),
+        ('PAM GRUPPO', 'PAM SOTTOGRUPPO', 'PAM', 'CATEGORIA', 'EXTRAVERGINE', None, None, None, None, None, None, 12.0, None, None, None, None, None, None, None, None, 4.0),
+        ('PAM GRUPPO', 'PAM SOTTOGRUPPO', 'PAM', 'REFERENZA', '8002210131620', 52.00, None, None, None, None, None, None, 14.0, 6.0, None, None, None, None, None, None, None),
+        ('PAM GRUPPO', 'PAM SOTTOGRUPPO', 'PAM', 'REFERENZA', '8002210111110', 48.00, None, None, None, None, None, None, 13.0, 3.0, None, None, None, None, None, None, None),
+        ('PAM GRUPPO', 'PAM SOTTOGRUPPO', 'PAM', 'REFERENZA', '8002210001305', 32.00, None, None, None, None, None, None, 9.0, 3.0, None, None, None, None, None, None, None),
+
+        # CRAI GRUPPO
+        ('CRAI GRUPPO', '', '', 'GRUPPO', '', None, 12.0, 25.0, None, None, None, None, None, None, 2.0, 1.0, 7.0, 12.0, None, None, None),
+        ('CRAI GRUPPO', 'CRAI SOTTOGRUPPO', '', 'SOTTOGRUPPO', '', None, 0.0, None, None, 10.0, None, None, None, None, None, None, None, None, None, None, None), 
+        ('CRAI GRUPPO', 'CRAI SOTTOGRUPPO', 'CRAI TIRRENO', 'CATEGORIA', 'EXTRAVERGINE', None, None, None, None, None, None, 14.0, None, None, None, None, None, None, None, None, 6.0),
+        ('CRAI GRUPPO', 'CRAI SOTTOGRUPPO', 'CRAI TIRRENO', 'REFERENZA', '8002210131620', 56.00, None, None, None, None, None, None, 15.0, 8.0, None, None, None, None, None, None, None),
+        ('CRAI GRUPPO', 'CRAI SOTTOGRUPPO', 'CRAI TIRRENO', 'REFERENZA', '8002210111110', 50.00, None, None, None, None, None, None, 12.0, 5.0, None, None, None, None, None, None, None),
+        ('CRAI GRUPPO', 'CRAI SOTTOGRUPPO', 'CRAI TIRRENO', 'REFERENZA', '8002210001305', 35.00, None, None, None, None, None, None, 11.0, 5.0, None, None, None, None, None, None, None)
     ]
+    
     cursor.executemany("""
     INSERT OR REPLACE INTO accordi_commerciali (
         gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello, listino_r,
