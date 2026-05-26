@@ -928,7 +928,7 @@ elif menu == "Back-Office (Contratti)":
 
     conn.close()
 # ==========================================
-# SCHEDA 4: REPORT SINTETICO (VERSIONE BENCHMARK COMPATTA SOTTOGRUPPI - FIXED)
+# SCHEDA 4: REPORT SINTETICO (VERSIONE BENCHMARK COMPATTA SOTTOGRUPPI - BULLETPROOF)
 # ==========================================
 elif menu == "Report Sintetico":
     st.title("Report Sintetico e Analisi Contratti")
@@ -984,18 +984,37 @@ elif menu == "Report Sintetico":
             prod_scelto_bench = None
 
     if prod_scelto_bench:
-        # ANTIDOTO COLLO DI BOTTIGLIA: Estraiamo solo le combinazioni uniche Gruppo-Sottogruppo
-        cursor.execute("SELECT DISTINCT gruppo_macro, sottogruppo FROM clienti WHERE attivo=1 ORDER BY gruppo_macro, sottogruppo")
+        # STRATEGIA DI ISOLAMENTO: Estraiamo i canali reali ignorando la tabella clienti demo
+        cursor.execute("""
+            SELECT DISTINCT gruppo_macro, sottogruppo 
+            FROM accordi_commerciali 
+            WHERE sottogruppo != '' AND sottogruppo IS NOT NULL
+            ORDER BY gruppo_macro, sottogruppo
+        """)
         sottogruppi_unici = cursor.fetchall()
         
         benchmark_data = []
         for g_macro, s_gruppo in sottogruppi_unici:
-            # CORREZIONE TATTICA: Peschiamo la prima insegna reale disponibile per attivare la risoluzione di Livello 4
-            cursor.execute("SELECT associato_insegna FROM clienti WHERE gruppo_macro=? AND sottogruppo=? AND attivo=1 LIMIT 1", (g_macro, s_gruppo))
+            # CACCIA ALL'INSEGNA REALE: Cerchiamo chi ha l'accordo specifico per questa referenza nel file caricato
+            cursor.execute("""
+                SELECT associato_insegna FROM accordi_commerciali
+                WHERE gruppo_macro=? AND sottogruppo=? AND livello='REFERENZA' AND chiave_livello=? AND associato_insegna != ''
+                LIMIT 1
+            """, (g_macro, s_gruppo, ean_bench))
             res_ins = cursor.fetchone()
+            
+            if not res_ins:
+                # Fallback: prendiamo una qualunque insegna reale valorizzata per quel sottogruppo
+                cursor.execute("""
+                    SELECT associato_insegna FROM accordi_commerciali
+                    WHERE gruppo_macro=? AND sottogruppo=? AND associato_insegna != ''
+                    LIMIT 1
+                """, (g_macro, s_gruppo))
+                res_ins = cursor.fetchone()
+            
             insegna_campione = res_ins[0] if res_ins else ""
             
-            # Adesso il resolver ha l'insegna target per scendere fino al livello REFERENZA se esiste
+            # Fuoco alle polveri: risoluzione gerarchica definitiva
             contratto_risolto = HierarchyResolver.resolve(conn, g_macro, s_gruppo, insegna_campione, ean_bench, tipo_olio_bench)
             
             if contratto_risolto.listino_r is not None:
@@ -1014,20 +1033,17 @@ elif menu == "Report Sintetico":
                 )
                 calcolo_strutturale = PricingEngine.calculate(input_strutturale)
                 
-                # COLLASSAMENTO DELLE COLONNE SECONDO I DEFINE AZIENDALI
+                # REGOLE DI COLLASSAMENTO AZIENDALE
                 stringa_s1_s3 = f"{float(contratto_risolto.sconto_1 or 0):.1f}% / {float(contratto_risolto.sconto_2 or 0):.1f}% / {float(contratto_risolto.sconto_3 or 0):.1f}%"
                 stringa_s4_s5 = f"{float(contratto_risolto.sconto_4 or 0):.1f}% / {float(contratto_risolto.sconto_5 or 0):.1f}%"
                 stringa_s6 = f"{float(contratto_risolto.sconto_6 or 0):.1f}%"
                 stringa_s7_y = f"S7:{float(contratto_risolto.sconto_7 or 0):.1f}% + Y:{float(contratto_risolto.sconto_y or 0):.1f}%"
                 stringa_oneri = f"Log:{float(contratto_risolto.sconto_carico or 0):.1f}% / Pag:{float(contratto_risolto.sconto_pagamento or 0):.1f}%"
                 
-                # Mostriamo come Sottogruppo il nome reale o specifichiamo se è andato in fallback sul Gruppo
-                mostra_sottogruppo = s_gruppo if contratto_risolto.livello_risolto != "GRUPPO" else f"{s_gruppo} (Eredita da Gruppo)"
-                
                 benchmark_data.append({
                     "Gruppo GDO": g_macro,
-                    "Sottogruppo": mostra_sottogruppo,
-                    "Livello Risoluzione": contratto_risolto.livello_risolto,
+                    "Sottogruppo": s_gruppo,
+                    "Insegna Target": insegna_campione if insegna_campione != "" else "Nazionale",
                     "Listino R (€)": float(contratto_risolto.listino_r),
                     "Gruppo (S1-S3)": stringa_s1_s3,
                     "Sottogruppo (S4-S5)": stringa_s4_s5,
@@ -1046,7 +1062,7 @@ elif menu == "Report Sintetico":
                 hide_index=True
             )
         else:
-            st.info("Nessun accordo commerciale trovato per i criteri selezionati.")
+            st.info("Nessun accordo commerciale strutturato trovato per questa referenza.")
 
     # -------------------------------------------------------------------------
     st.markdown("---")
