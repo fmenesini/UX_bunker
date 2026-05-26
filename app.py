@@ -927,9 +927,8 @@ elif menu == "Back-Office (Contratti)":
                 st.error(f"ROSSO (BLOCCATO) - Errore durante il reset: {ex}")
 
     conn.close()
-
 # ==========================================
-# SCHEDA 4: REPORT SINTETICO (VERSIONE BENCHMARK COMPATTA SOTTOGRUPPI)
+# SCHEDA 4: REPORT SINTETICO (VERSIONE BENCHMARK COMPATTA SOTTOGRUPPI - FIXED)
 # ==========================================
 elif menu == "Report Sintetico":
     st.title("Report Sintetico e Analisi Contratti")
@@ -991,8 +990,13 @@ elif menu == "Report Sintetico":
         
         benchmark_data = []
         for g_macro, s_gruppo in sottogruppi_unici:
-            # Risoluzione mirata al Sottogruppo (Insegna lasciata vuota per ereditare correttamente)
-            contratto_risolto = HierarchyResolver.resolve(conn, g_macro, s_gruppo, "", ean_bench, tipo_olio_bench)
+            # CORREZIONE TATTICA: Peschiamo la prima insegna reale disponibile per attivare la risoluzione di Livello 4
+            cursor.execute("SELECT associato_insegna FROM clienti WHERE gruppo_macro=? AND sottogruppo=? AND attivo=1 LIMIT 1", (g_macro, s_gruppo))
+            res_ins = cursor.fetchone()
+            insegna_campione = res_ins[0] if res_ins else ""
+            
+            # Adesso il resolver ha l'insegna target per scendere fino al livello REFERENZA se esiste
+            contratto_risolto = HierarchyResolver.resolve(conn, g_macro, s_gruppo, insegna_campione, ean_bench, tipo_olio_bench)
             
             if contratto_risolto.listino_r is not None:
                 cursor.execute("SELECT min_net_net_g FROM guardrail_aziendali WHERE ean=?", (ean_bench,))
@@ -1010,17 +1014,20 @@ elif menu == "Report Sintetico":
                 )
                 calcolo_strutturale = PricingEngine.calculate(input_strutturale)
                 
-                # COLLASSAMENTO DELLE COLONNE: Raggruppamento logico richiesto
+                # COLLASSAMENTO DELLE COLONNE SECONDO I DEFINE AZIENDALI
                 stringa_s1_s3 = f"{float(contratto_risolto.sconto_1 or 0):.1f}% / {float(contratto_risolto.sconto_2 or 0):.1f}% / {float(contratto_risolto.sconto_3 or 0):.1f}%"
                 stringa_s4_s5 = f"{float(contratto_risolto.sconto_4 or 0):.1f}% / {float(contratto_risolto.sconto_5 or 0):.1f}%"
                 stringa_s6 = f"{float(contratto_risolto.sconto_6 or 0):.1f}%"
                 stringa_s7_y = f"S7:{float(contratto_risolto.sconto_7 or 0):.1f}% + Y:{float(contratto_risolto.sconto_y or 0):.1f}%"
                 stringa_oneri = f"Log:{float(contratto_risolto.sconto_carico or 0):.1f}% / Pag:{float(contratto_risolto.sconto_pagamento or 0):.1f}%"
                 
+                # Mostriamo come Sottogruppo il nome reale o specifichiamo se è andato in fallback sul Gruppo
+                mostra_sottogruppo = s_gruppo if contratto_risolto.livello_risolto != "GRUPPO" else f"{s_gruppo} (Eredita da Gruppo)"
+                
                 benchmark_data.append({
                     "Gruppo GDO": g_macro,
-                    "Sottogruppo": s_gruppo if s_gruppo != "" else "Default Gruppo",
-                    "Origine Dati": contratto_risolto.livello_risolto,
+                    "Sottogruppo": mostra_sottogruppo,
+                    "Livello Risoluzione": contratto_risolto.livello_risolto,
                     "Listino R (€)": float(contratto_risolto.listino_r),
                     "Gruppo (S1-S3)": stringa_s1_s3,
                     "Sottogruppo (S4-S5)": stringa_s4_s5,
@@ -1125,7 +1132,7 @@ elif menu == "Report Sintetico":
                 })
         
         if not rows_report:
-            st.warning("ATTENZIONE: Nessuna referenza in assortimento trouvata per questo cliente nel database.")
+            st.warning("ATTENZIONE: Nessuna referenza in assortimento trovata per questo cliente nel database.")
         else:
             df_rep_out = pd.DataFrame(rows_report)
             
