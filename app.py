@@ -385,6 +385,7 @@ if menu == "Simulatore Offerte":
         st.subheader("Manovre e Leve Sconti")
         col_l1, col_l2 = st.columns(2)
         st.markdown("---")
+        
         with col_l1:
             sconto_y = st.number_input(
                 "Sconto Continuativo Y (%)", 
