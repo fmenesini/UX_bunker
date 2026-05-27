@@ -306,7 +306,7 @@ menu = st.sidebar.radio("SELEZIONA SCHEDA", ["Simulatore Offerte", "Dati Anagraf
 # SCHEDA 1: SIMULATORE
 # ==========================================
 if menu == "Simulatore Offerte":
-    st.title("Bunker Commerciale Salov - Simulatore")
+    st.title("Commerciale Salov - Simulatore")
     conn = sqlite3.connect(DB_FILE)
     
     st.sidebar.header("Parametri Negoziazione")
@@ -398,8 +398,8 @@ if menu == "Simulatore Offerte":
                 st.markdown("<br>", unsafe_allow_html=True)
                 aa_box = st.container(border=True)
                 with aa_box:
-                    st.markdown("<h4 style='color: #1A3E2F; margin-bottom: 5px;'>💶 Leva Promozionale Diretta</h4>", unsafe_allow_html=True)
-                    st.markdown("<span style='font-size: 0.9em; color: #4B5563;'>In Modalità Target lo Sconto Z è automatico. Usa questo campo per forzare un taglio prezzo secco in fattura.</span>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color: #1A3E2F; margin-bottom: 5px;'> Leva Promozionale Diretta</h4>", unsafe_allow_html=True)
+                    st.markdown("<span style='font-size: 0.9em; color: #4B5563;'>In Modalità Target lo Sconto Z è automatico. Usa questo campo per forzare un taglio prezzo unitario in fattura.</span>", unsafe_allow_html=True)
                     st.markdown("<br>", unsafe_allow_html=True)
                     sconto_aa = st.number_input(
                         "Sconto Unitario in fattura (Euro/Pz) [AA]", 
