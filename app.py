@@ -1,13 +1,13 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+import plotly.graph_objects as go
 import io
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date
 import logging
-import plotly.graph_objects as go
 
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
@@ -516,13 +516,51 @@ if menu == "Simulatore Offerte":
                     sell_out_dal = st.date_input("Inizio Sell-Out", date.today(), key="so_dal")
                     sell_out_al = st.date_input("Fine Sell-Out", date.today(), key="so_al")
 
+# --- NUOVA TELEMETRIA WATERFALL PLOTLY ---
         st.markdown("---")
-        st.subheader("Tabella Sequenziale Estesa della Struttura di Costo")
-        df_waterfall = pd.DataFrame([
-            {"Fase Pricing": step.fase, "Valore Unitario": step.valore, "Dettaglio Operazione": step.descrizione}
-            for step in result.steps
-        ])
-        st.dataframe(df_waterfall, use_container_width=True, hide_index=True)
+        st.subheader("📊 Telemetria Margine (Waterfall Cascata)")
+        
+        # Estrazione dati per il grafico
+        listino_euro = float(contract.listino_r)
+        # Recuperiamo il netto in fattura in modo sicuro. Se il tuo result non ce l'ha espanso, lo peschiamo dai passaggi intermedi o usiamo il delta finale.
+        netto_fattura_euro = float(result.netto_in_fattura_2) if hasattr(result, 'netto_in_fattura_2') else float(result.net_net_finale) + float(result.contratto_tot_pfa/100) # Fallback di sicurezza
+        net_net_euro = float(result.net_net_finale)
+        
+        erosione_in_fattura = netto_fattura_euro - listino_euro
+        erosione_pfa = net_net_euro - netto_fattura_euro
+        
+        fig = go.Figure(go.Waterfall(
+            name="Pricing Margine",
+            orientation="v",
+            measure=["absolute", "relative", "total", "relative", "total"],
+            x=["Listino Base [R]", "Sconti/Oneri (Fattura)", "Netto in Fattura", "Premi (PFA)", "Net Net Finale"],
+            y=[listino_euro, erosione_in_fattura, netto_fattura_euro, erosione_pfa, net_net_euro],
+            textposition="outside",
+            text=[f"{listino_euro:.2f} €", f"{erosione_in_fattura:.2f} €", f"{netto_fattura_euro:.2f} €", f"{erosione_pfa:.2f} €", f"{net_net_euro:.2f} €"],
+            increasing={"marker": {"color": "#2E7D32"}}, 
+            decreasing={"marker": {"color": "#D32F2F"}}, 
+            totals={"marker": {"color": "#1A3E2F"}},     
+            connector={"line": {"color": "#E0E0E0", "width": 2}},
+            hovertemplate="<b>%{x}</b><br>Valore: %{y:.3f} €<extra></extra>"
+        ))
+
+        fig.update_layout(
+            margin=dict(l=20, r=20, t=30, b=20),
+            height=450,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            yaxis=dict(title="Valore Unitario (€)", tickformat=".2f"),
+            showlegend=False
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        # La tua vecchia tabella salvata nel bunker
+        with st.expander("🔍 Esplosione Dettagliata Variabili (Debug Commerciale)", expanded=False):
+            df_waterfall = pd.DataFrame([
+                {"Fase Pricing": step.fase, "Valore Unitario": step.valore, "Dettaglio Operazione": step.descrizione}
+                for step in result.steps
+            ])
+            st.dataframe(df_waterfall, use_container_width=True, hide_index=True)
 
         st.markdown("---")
         
