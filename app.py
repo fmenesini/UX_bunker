@@ -306,7 +306,7 @@ menu = st.sidebar.radio("SELEZIONA SCHEDA", ["Simulatore Offerte", "Dati Anagraf
 # SCHEDA 1: SIMULATORE
 # ==========================================
 if menu == "Simulatore Offerte":
-    st.title("Commerciale Salov - Simulatore")
+    st.title("Bunker Commerciale Salov - Simulatore")
     conn = sqlite3.connect(DB_FILE)
     
     st.sidebar.header("Parametri Negoziazione")
@@ -328,15 +328,19 @@ if menu == "Simulatore Offerte":
         associati = [r[0] for r in cursor.fetchall()]
         associato_sel = st.sidebar.selectbox("3. Insegna Locale / Associato", associati, help="Seleziona l'associato locale.")
 
+        # AGGIUNTA: Estrazione dei dati logistici dalla tabella anagrafica_master
         cursor.execute("""
-            SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0), a.codice_sap, a.formato_lt 
+            SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0), a.codice_sap, a.formato_lt,
+                   a.pezzi_cartone, a.cartoni_strato, a.strati_pallet, a.cartoni_pallet
             FROM anagrafica_master a
             LEFT JOIN guardrail_aziendali g ON a.ean = g.ean
         """)
         prodotti = cursor.fetchall()
-        prodotti_dict = {f"{p[1]} [EAN: {p[0]}]": (p[0], p[2], p[3], p[4], p[5]) for p in prodotti}
+        prodotti_dict = {f"{p[1]} [EAN: {p[0]}]": (p[0], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9]) for p in prodotti}
         prodotto_scelto = st.sidebar.selectbox("4. Referenza Salov", list(prodotti_dict.keys()), help="Seleziona la referenza.")
-        ean, tipo_olio, min_net_net_g, codice_sap, formato_lt = prodotti_dict[prodotto_scelto]
+        
+        # Unpacking con i nuovi dati logistici
+        ean, tipo_olio, min_net_net_g, codice_sap, formato_lt, pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet = prodotti_dict[prodotto_scelto]
 
         contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, ean, tipo_olio)
 
@@ -393,20 +397,18 @@ if menu == "Simulatore Offerte":
                 unsafe_allow_html=True
             )
             
-            # Nel Caso A, lo Sconto AA rimane a sinistra ed è l'unica leva manuale
             if "A. Partenza" in metodo_lavoro:
                 st.markdown("<br>", unsafe_allow_html=True)
                 aa_box = st.container(border=True)
                 with aa_box:
-                    st.markdown("<h4 style='color: #1A3E2F; margin-bottom: 5px;'> Leva Promozionale Diretta</h4>", unsafe_allow_html=True)
-                    st.markdown("<span style='font-size: 0.9em; color: #4B5563;'>In Modalità Target lo Sconto Z è automatico. Usa questo campo per forzare un taglio prezzo unitario in fattura.</span>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color: #1A3E2F; margin-bottom: 5px;'>💶 Leva Promozionale Diretta</h4>", unsafe_allow_html=True)
+                    st.markdown("<span style='font-size: 0.9em; color: #4B5563;'>In Modalità Target lo Sconto Z è automatico. Usa questo campo per forzare un taglio prezzo secco in fattura.</span>", unsafe_allow_html=True)
                     st.markdown("<br>", unsafe_allow_html=True)
                     sconto_aa = st.number_input(
                         "Sconto Unitario in fattura (Euro/Pz) [AA]", 
                         min_value=0.0, value=0.0, step=0.05
                     )
 
-        # Calcolo in background dello Sconto Z se siamo in Modalità A
         if "A. Partenza" in metodo_lavoro:
             target_dec = Decimal(f"{target_net_net:.5f}")
             temp_input = PricingInput(
@@ -424,7 +426,6 @@ if menu == "Simulatore Offerte":
             if "A. Partenza" in metodo_lavoro:
                 st.markdown("**Analisi Limiti Promozionali**")
                 
-                # Calcolo Z Max Consentito
                 temp_input_max_z = PricingInput(
                     listino_r=contract.listino_r,
                     sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
@@ -439,7 +440,6 @@ if menu == "Simulatore Offerte":
                 st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f", help="Il massimo Sconto Z che puoi inserire (a parità di AA) prima di andare in blocco.")
                 
             else:
-                # CASO B: Leve Promozionali in alto a destra
                 st.markdown("**Leve Promozionali**")
                 sconto_z_input = st.number_input("Sconto Promozionale (%) [Z] (Manuale)", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
                 sconto_z = Decimal(f"{sconto_z_input:.5f}")
@@ -452,7 +452,6 @@ if menu == "Simulatore Offerte":
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("**Analisi Limiti Promozionali**")
                 
-                # Calcolo Z Max Consentito
                 temp_input_max_z = PricingInput(
                     listino_r=contract.listino_r,
                     sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
@@ -465,7 +464,6 @@ if menu == "Simulatore Offerte":
                 z_max_consentito = PricingEngine.calculate_inverse(Decimal(str(min_net_net_g)), temp_input_max_z, "Z")
                 st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f")
                 
-                # Calcolo AA Max Consentito
                 temp_input_max_aa = PricingInput(
                     listino_r=contract.listino_r,
                     sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
@@ -581,32 +579,55 @@ if menu == "Simulatore Offerte":
                 ws[f'A{r}'].font = font_label
                 ws[f'B{r}'].font = font_value
                 
-            ws['A14'] = "FINESTRE TEMPORALI PROMO"
+            # --- NUOVA SEZIONE: DATI LOGISTICI E PALLETTIZZAZIONE ---
+            ws['A14'] = "DATI LOGISTICI E PALLETTIZZAZIONE"
             ws['A14'].font = font_section
             ws['A14'].fill = fill_sub
             ws.merge_cells('A14:D14')
             
-            ws['A15'] = "Periodo Sell-In:"
-            ws['B15'] = f"Dal {sell_in_dal.strftime('%d/%m/%Y')} al {sell_in_al.strftime('%d/%m/%Y')}"
-            ws['A16'] = "Periodo Sell-Out:"
-            ws['B16'] = f"Dal {sell_out_dal.strftime('%d/%m/%Y')} al {sell_out_al.strftime('%d/%m/%Y')}"
+            ws['A15'] = "Pezzi per Cartone:"
+            ws['B15'] = pezzi_cartone if pezzi_cartone is not None else 0
+            ws['A16'] = "Cartoni per Strato:"
+            ws['B16'] = cartoni_strato if cartoni_strato is not None else 0
+            ws['A17'] = "Strati per Pallet:"
+            ws['B17'] = strati_pallet if strati_pallet is not None else 0
+            ws['A18'] = "Cartoni per Pallet:"
+            ws['B18'] = cartoni_pallet if cartoni_pallet is not None else 0
+            ws['A19'] = "Pezzi Totali per Pallet:"
+            ws['B19'] = (pezzi_cartone or 0) * (cartoni_pallet or 0)
             
-            for r in range(15, 17):
+            for r in range(15, 20):
+                ws[f'A{r}'].font = font_label
+                ws[f'B{r}'].font = font_value
+                
+            # --- FINESTRE TEMPORALI PROMO ---
+            ws['A21'] = "FINESTRE TEMPORALI PROMO"
+            ws['A21'].font = font_section
+            ws['A21'].fill = fill_sub
+            ws.merge_cells('A21:D21')
+            
+            ws['A22'] = "Periodo Sell-In:"
+            ws['B22'] = f"Dal {sell_in_dal.strftime('%d/%m/%Y')} al {sell_in_al.strftime('%d/%m/%Y')}"
+            ws['A23'] = "Periodo Sell-Out:"
+            ws['B23'] = f"Dal {sell_out_dal.strftime('%d/%m/%Y')} al {sell_out_al.strftime('%d/%m/%Y')}"
+            
+            for r in range(22, 24):
                 ws[f'A{r}'].font = font_label
                 ws[f'B{r}'].font = font_value
             
-            ws['A18'] = "CASCATA DI PRICING NEGOZIALE"
-            ws['A18'].font = font_section
-            ws['A18'].fill = fill_sub
-            ws.merge_cells('A18:D18')
+            # --- CASCATA DI PRICING NEGOZIALE ---
+            ws['A25'] = "CASCATA DI PRICING NEGOZIALE"
+            ws['A25'].font = font_section
+            ws['A25'].fill = fill_sub
+            ws.merge_cells('A25:D25')
             
-            ws['A19'] = "Elemento di Costo"
-            ws['B19'] = "Valore"
-            ws['C19'] = "Tipologia Operazione"
+            ws['A26'] = "Elemento di Costo"
+            ws['B26'] = "Valore"
+            ws['C26'] = "Tipologia Operazione"
             for col in ['A', 'B', 'C']:
-                ws[f'{col}19'].font = font_label
+                ws[f'{col}26'].font = font_label
                 
-            row_idx = 20
+            row_idx = 27
             for step in result.steps:
                 ws.cell(row=row_idx, column=1, value=step.fase).font = font_value
                 ws.cell(row=row_idx, column=2, value=float(step.valore)).font = font_value
