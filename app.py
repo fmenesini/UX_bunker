@@ -306,7 +306,7 @@ menu = st.sidebar.radio("SELEZIONA SCHEDA", ["Simulatore Offerte", "Dati Anagraf
 # SCHEDA 1: SIMULATORE
 # ==========================================
 if menu == "Simulatore Offerte":
-    st.title("Bunker Commerciale Salov - Simulatore")
+    st.title("Commerciale Salov - Simulatore")
     conn = sqlite3.connect(DB_FILE)
     
     st.sidebar.header("Parametri Negoziazione")
@@ -328,7 +328,7 @@ if menu == "Simulatore Offerte":
         associati = [r[0] for r in cursor.fetchall()]
         associato_sel = st.sidebar.selectbox("3. Insegna Locale / Associato", associati, help="Seleziona l'associato locale.")
 
-        # AGGIUNTA: Estrazione dei dati logistici dalla tabella anagrafica_master
+        # Estrazione dei dati logistici dalla tabella anagrafica_master
         cursor.execute("""
             SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0), a.codice_sap, a.formato_lt,
                    a.pezzi_cartone, a.cartoni_strato, a.strati_pallet, a.cartoni_pallet
@@ -383,9 +383,10 @@ if menu == "Simulatore Offerte":
 
         st.markdown("---")
         st.subheader("Manovre e Leve Sconti")
-        col_l1, col_l2 = st.columns(2)
         
-        with col_l1:
+        # --- RIGA 1: Sconto Continuativo Y (Isolato in alto a sinistra) ---
+        col_y1, col_y2 = st.columns(2)
+        with col_y1:
             sconto_y = st.number_input(
                 "Sconto Continuativo Y (%)", 
                 min_value=0.0, max_value=100.0, 
@@ -397,18 +398,33 @@ if menu == "Simulatore Offerte":
                 unsafe_allow_html=True
             )
             
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # --- RIGA 2: Leve Promozionali (SX) e Limiti (DX) perfettamente allineati ---
+        col_l1, col_l2 = st.columns(2)
+        
+        with col_l1:
             if "A. Partenza" in metodo_lavoro:
-                st.markdown("<br>", unsafe_allow_html=True)
                 aa_box = st.container(border=True)
                 with aa_box:
-                    st.markdown("<h4 style='color: #1A3E2F; margin-bottom: 5px;'>💶 Leva Promozionale Diretta</h4>", unsafe_allow_html=True)
-                    st.markdown("<span style='font-size: 0.9em; color: #4B5563;'>In Modalità Target lo Sconto Z è automatico. Usa questo campo per forzare un taglio prezzo secco in fattura.</span>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color: #1A3E2F; margin-bottom: 5px;'>Leva Promozionale Diretta</h4>", unsafe_allow_html=True)
+                    st.markdown("<span style='font-size: 0.9em; color: #4B5563;'>In Modalità Target lo Sconto Z è automatico. Usa questo campo per forzare un taglio prezzo unitario in fattura.</span>", unsafe_allow_html=True)
                     st.markdown("<br>", unsafe_allow_html=True)
                     sconto_aa = st.number_input(
                         "Sconto Unitario in fattura (Euro/Pz) [AA]", 
                         min_value=0.0, value=0.0, step=0.05
                     )
+            else:
+                st.markdown("**Leve Promozionali**")
+                sconto_z_input = st.number_input("Sconto Promozionale (%) [Z] (Manuale)", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+                sconto_z = Decimal(f"{sconto_z_input:.5f}")
+                
+                sconto_aa = st.number_input(
+                    "Sconto Unitario in fattura (Euro/Pz) [AA]", 
+                    min_value=0.0, value=0.0, step=0.05
+                )
 
+        # Calcolo in background dello Sconto Z se siamo in Modalità A
         if "A. Partenza" in metodo_lavoro:
             target_dec = Decimal(f"{target_net_net:.5f}")
             temp_input = PricingInput(
@@ -440,16 +456,6 @@ if menu == "Simulatore Offerte":
                 st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f", help="Il massimo Sconto Z che puoi inserire (a parità di AA) prima di andare in blocco.")
                 
             else:
-                st.markdown("**Leve Promozionali**")
-                sconto_z_input = st.number_input("Sconto Promozionale (%) [Z] (Manuale)", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
-                sconto_z = Decimal(f"{sconto_z_input:.5f}")
-                
-                sconto_aa = st.number_input(
-                    "Sconto Unitario in fattura (Euro/Pz) [AA]", 
-                    min_value=0.0, value=0.0, step=0.05
-                )
-                
-                st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("**Analisi Limiti Promozionali**")
                 
                 temp_input_max_z = PricingInput(
@@ -669,7 +675,7 @@ if menu == "Simulatore Offerte":
         )
 
     conn.close()
-
+    
 # ==========================================
 # SCHEDA 2: DATI ANAGRAFICI (PRODOTTI E LOGISTICA)
 # ==========================================
