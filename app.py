@@ -99,9 +99,10 @@ st.markdown("""
         overflow: hidden;
     }
     
+    * 10. NASCONDERE MENU STREAMLIT MA SALVARE IL PULSANTE DELLA SIDEBAR */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    header {background: transparent !important;}
 </style>
 """, unsafe_allow_html=True)
 
