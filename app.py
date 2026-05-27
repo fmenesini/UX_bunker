@@ -1385,7 +1385,7 @@ else:
     st.markdown("### Guida per la Gestione della Marginalità Salov")
     st.markdown("---")
     
-    with st.expander("1.IL MOTORE DI PRICING: La Cascata Sequenziale (Esempio Numerico)", expanded=True):
+    with st.expander("1. IL MOTORE DI PRICING: La Cascata Sequenziale (Esempio Numerico)", expanded=True):
         st.markdown("""
         Il simulatore non esegue mai la somma algebrica degli sconti (es. 10% + 5% non fa 15%). Il calcolo segue una **cascata geometrica sequenziale** in cui ogni sconto si applica sul risultato del passaggio precedente.
         
@@ -1406,29 +1406,30 @@ else:
         *   *Calcolo:* $7,255 \\times (1 - 0,05) = 6,892 €$
         *   **PREZZO NET NET FINALE (AM):** **6,89 €**
         
-        > **Regola** Se questo 6,89 € scende anche solo di un centesimo sotto la soglia di sicurezza **del minimo NET NET** registrata nel Back-Office per quell'EAN, l'applicazione avvisa **ROSSO (BLOCCATO)**.
+        > **Regola:** Se questo 6,89 € scende anche solo di un centesimo sotto la soglia di sicurezza **del minimo NET NET** registrata nel Back-Office per quell'EAN, l'applicazione avvisa **ROSSO (BLOCCATO)**.
         """)
         
-    with st.expander("2. LA GERARCHIA DEI CONTRATTI: Le Regole di Ereditarietà (Esempio di Default e Override)", expanded=False):
+    with st.expander("2. LA GERARCHIA DEI CONTRATTI: La Regola del 'Livello Superiore Comanda'", expanded=False):
         st.markdown("""
-        Per evitare di dover inserire migliaia di righe per ogni singolo cliente e referenza, l'applicazione utilizza un algoritmo di scansione a cascata che cerca l'accordo commerciale seguendo 4 livelli logici.
+        L'applicazione utilizza un motore di risoluzione a 5 livelli. A differenza dei sistemi tradizionali, qui vige la regola del **Blocco Gerarchico (Top-Down)**: se un livello superiore definisce uno sconto, i livelli inferiori NON possono sovrascriverlo.
         
-        #### I 4 Livelli:
-        1. **GRUPPO MACRO** (es. *COOP ITALIA*) ➔ Regole generali valide per tutte le insegne e tutti i prodotti.
-        2. **SOTTOGRUPPO** (es. *ALLEANZA 3.0*) ➔ Condizioni specifiche che sovrascrivono la Centrale.
-        3. **CATEGORIA** (es. *EXTRAVERGINE*) ➔ Sconti validi solo per quel tipo di olio.
-        4. **REFERENZA (EAN)** (es. *Filippo Berio 100% ITA 0,75*) ➔ Il livello di massima precisione.
+        #### I 5 Livelli (dal più forte al più debole):
+        1. **GRUPPO MACRO** (es. *COOP ITALIA*) ➔ Le regole impostate qui sono blindate (Accordo Quadro). Nessun livello sottostante può modificarle.
+        2. **SOTTOGRUPPO** (es. *COOP ITALIA SOTTOGRUPPO*) ➔ Può aggiungere sconti solo se il Gruppo Macro ha lasciato la cella vuota. Non può essere sovrascritto dai livelli inferiori.
+        3. **CATEGORIA** (es. *EXTRAVERGINE*) ➔ Comanda su Insegna e Referenza, ma subisce le regole di Gruppo e Sottogruppo.
+        4. **ASSOCIATO / INSEGNA** (es. *ALLEANZA 3.0*) ➔ Regole locali. Non possono sovrascrivere la Categoria o i Gruppi.
+        5. **REFERENZA (EAN)** ➔ Il livello più basso. Definisce il Listino Base (R) e sconti specifici solo se nessun livello superiore li ha già bloccati.
         
         #### Come gestire i campi in Tabella (Casi Reali):
         
-        *   **Caso A: La Cella Vuota (Ereditarietà Automatica)**
-            Se a livello di Gruppo *COOP ITALIA* hai impostato uno Sconto 1 del **10%**, e nella riga della singola referenza lasci la cella dello Sconto 1 **vuota (blank)**, il sistema applica automaticamente il **10%**. Non serve duplicare i dati.
+        *   **Caso A: Il Blocco della Centrale (Nessuna Sovrascrittura)**
+            Se il Gruppo COOP ITALIA fissa lo Sconto 1 al **10%**, anche se per sbaglio inserisci 15% sulla singola Referenza, il sistema ignorerà il 15% e manterrà il 10%. Il livello superiore vince sempre.
             
-        *   **Caso B: L'Override di Forza (Disattivare uno sconto)**
-            Se la referenza *Sagra Spray 200ml* non deve subire lo Sconto 1 del 10% stabilito dalla Centrale, nella riga della referenza devi scrivere **`0.0`**. Questo valore azzera l'ereditarietà e blocca lo sconto per quel prodotto specifico.
+        *   **Caso B: L'Ereditarietà (La Cella Vuota)**
+            Se il Gruppo lascia lo Sconto 6 vuoto (NULL), il Sottogruppo o l'Insegna sono liberi di valorizzarlo. Il primo livello (partendo dall'alto) che inserisce un valore, lo blocca per tutti i livelli sottostanti.
             
         *   **Caso C: Il Fuori Assortimento**
-            Se per un determinato cliente l'applicazione mostra il messaggio `PRODOTTO FUORI ASSORTIMENTO`, significa che a livello di Referenza (Livello 4) manca il valore del **Listino Base R**. Inserisci il listino nel Back-Office per sbloccare la referenza.
+            Il Listino Base (R) si inserisce quasi sempre al livello 5 (Referenza). Se manca, il prodotto risulta "Fuori Assortimento" e non può essere simulato.
         """)
 
     with st.expander("3. LE DUE MODALITÀ DI LAVORO: Target vs Manuale Spot", expanded=False):
@@ -1439,9 +1440,8 @@ else:
         La usi quando il buyer ti dice: *"Voglio vendere la bottiglia a scaffale a questo prezzo, quindi a te la pago esattamente X"*.
         1. Seleziona la modalità **A**.
         2. Inserisci nel campo il prezzo richiesto dal cliente.
-        3. Il motore calcola istantaneamente al millesimo lo **Sconto Promozionale Z (%)** necessario per arrivare a quel prezzo che non è modificabile e automaticamente aggiunto alla proposta commerciale
-        4. L'unica leva promozionale attiva è lo sconto unitario in fattura, alla modifica di questo, lo sconto promozinale varia di conseguenza
-        5. Se il target inserito fa scendere la marginalità sotto la soglia di sicurezza, il sistema calcolerà comunque lo sconto ma ti avviserà del blocco.
+        3. Il motore calcola istantaneamente al millesimo lo **Sconto Promozionale Z (%)** necessario per arrivare a quel prezzo.
+        4. Se il target inserito fa scendere la marginalità sotto la soglia di sicurezza, il sistema calcolerà comunque lo sconto ma ti avviserà del blocco.
         
         ####  Modalità B: Tentativi Spot Manuali (Uso Libero)
         La usi per fare simulazioni classiche o per testare scenari "Cosa succede se...".
