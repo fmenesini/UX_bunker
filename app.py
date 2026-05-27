@@ -14,7 +14,7 @@ from core.hierarchy_resolver import HierarchyResolver
 
 logging.basicConfig(level=logging.WARNING)
 
-st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide")
+st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
@@ -99,26 +99,30 @@ st.markdown("""
         overflow: hidden;
     }
     
-    * 10. NASCONDERE MENU STREAMLIT MA SALVARE IL PULSANTE DELLA SIDEBAR */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {background: transparent !important;}
-    * 11. MIRINO SULL'ICONA DELLA SIDEBAR (Pulsante di espansione) */
-    [data-testid="collapsedControl"] {
-        color: #FFFFFF !important; /* Icona bianca */
-        background-color: #1A3E2F !important; /* Sfondo verde aziendale */
-        border-radius: 6px !important; /* Bordi morbidi */
-        padding: 5px !important; 
-        margin-top: 10px !important;
-        margin-left: 10px !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.15) !important; /* Ombra per sollevarlo */
-        transition: all 0.2s ease-in-out;
+    /* --- FIX FORZATO PER LA FRECCIA DELLA SIDEBAR --- */
+    header[data-testid="stHeader"] {
+        visibility: visible !important;
+        display: block !important;
+        opacity: 1 !important;
+        z-index: 999998 !important;
+        background: transparent !important;
     }
     
-    [data-testid="collapsedControl"]:hover {
-        background-color: #2E7D32 !important; /* Verde più chiaro al passaggio del mouse */
-        transform: scale(1.05); /* Effetto ingrandimento */
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        z-index: 999999 !important;
+        color: #1A3E2F !important; 
+        background-color: #E8F5E9 !important; 
+        border-radius: 6px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+        margin-top: 10px !important;
+        margin-left: 10px !important;
     }
+    
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -126,7 +130,6 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # CRITICO: Verifichiamo l'esistenza reale delle tabelle senza basarci sulle eccezioni di Lock
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='anagrafica_master'")
     db_inizializzato = cursor.fetchone()
     
@@ -246,7 +249,6 @@ def seed_baseline_data(conn):
         INSERT OR REPLACE INTO guardrail_aziendali (ean, min_net_net_g) VALUES (?, ?)
         """, (p[0], p[6]))
         
-    # ANAGRAFICA ATTIVA INTEGRATA CON I NUOVI GRUPPI
     clienti_demo = [
         ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "ALLEANZA 3.0"),
         ("CONAD", "CONAD SOTTOGRUPPO", "CONAD ADRIATICO"),
@@ -258,7 +260,6 @@ def seed_baseline_data(conn):
     for c in clienti_demo:
         cursor.execute("INSERT OR IGNORE INTO clienti (gruppo_macro, sottogruppo, associato_insegna) VALUES (?, ?, ?)", c)
         
-    # ACCORDI BASE STRUTTURALI (FILE PULITO EXCEL INIETTATO NELL'ANIMA CORE)
     fallback_data = [
         ('COOP ITALIA', '', '', 'GRUPPO', '', None, 20.0, 30.0, None, None, None, None, None, None, 1.5, 1.0, 14.0, 8.0, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210131620', 66.00, None, None, None, None, None, None, 12.0, 5.0, None, None, None, None, None, None, None),
@@ -392,35 +393,32 @@ if menu == "Simulatore Offerte":
                 unsafe_allow_html=True
             )
             
-            sconto_aa = st.number_input(
-                "Sconto Unitario in fattura (Euro/Pz) [AA]", 
-                min_value=0.0, value=0.0, step=0.05
+            # Nel Caso A, lo Sconto AA rimane a sinistra
+            if "A. Partenza" in metodo_lavoro:
+                sconto_aa = st.number_input(
+                    "Sconto Unitario in fattura (Euro/Pz) [AA]", 
+                    min_value=0.0, value=0.0, step=0.05
+                )
+
+        # Calcolo in background dello Sconto Z se siamo in Modalità A
+        if "A. Partenza" in metodo_lavoro:
+            target_dec = Decimal(f"{target_net_net:.5f}")
+            temp_input = PricingInput(
+                listino_r=contract.listino_r,
+                sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
+                sconto_4=contract.sconto_4, sconto_5=contract.sconto_5, sconto_6=contract.sconto_6, sconto_7=contract.sconto_7,
+                sconto_y=Decimal(f"{sconto_y:.5f}"), sconto_z=Decimal("0.00"), sconto_aa=Decimal(f"{sconto_aa:.5f}"),
+                sconto_carico=contract.sconto_carico, sconto_pagamento=contract.sconto_pagamento,
+                voce_i=contract.voce_i, voce_ii=contract.voce_ii, voce_iii=contract.voce_iii, voce_iv=contract.voce_iv, voce_v=contract.voce_v,
+                min_net_net_g=Decimal(str(min_net_net_g))
             )
+            sconto_z = PricingEngine.calculate_inverse(target_dec, temp_input, "Z")
 
         with col_l2:
-            st.markdown("**Analisi Limiti Promozionali**")
-            col_z1, col_z2 = st.columns(2)
-            
-            with col_z1:
-                if target_net_net > 0:
-                    target_dec = Decimal(f"{target_net_net:.5f}")
-                    temp_input = PricingInput(
-                        listino_r=contract.listino_r,
-                        sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
-                        sconto_4=contract.sconto_4, sconto_5=contract.sconto_5, sconto_6=contract.sconto_6, sconto_7=contract.sconto_7,
-                        sconto_y=Decimal(f"{sconto_y:.5f}"), sconto_z=Decimal("0.00"), sconto_aa=Decimal(f"{sconto_aa:.5f}"),
-                        sconto_carico=contract.sconto_carico, sconto_pagamento=contract.sconto_pagamento,
-                        voce_i=contract.voce_i, voce_ii=contract.voce_ii, voce_iii=contract.voce_iii, voce_iv=contract.voce_iv, voce_v=contract.voce_v,
-                        min_net_net_g=Decimal(str(min_net_net_g))
-                    )
-                    sconto_z_val = PricingEngine.calculate_inverse(target_dec, temp_input, "Z")
-                    sconto_z = sconto_z_val
-                    st.number_input("Sconto Promozionale (%) [Z]", value=float(sconto_z), disabled=True, format="%.2f", help="Calcolato automaticamente per raggiungere il Net Net target.")
-                else:
-                    sconto_z_input = st.number_input("Sconto Promozionale (%) [Z] (Manuale)", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
-                    sconto_z = Decimal(f"{sconto_z_input:.5f}")
-            
-            with col_z2:
+            if "A. Partenza" in metodo_lavoro:
+                st.markdown("**Analisi Limiti Promozionali**")
+                
+                # Calcolo Z Max Consentito
                 temp_input_max_z = PricingInput(
                     listino_r=contract.listino_r,
                     sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
@@ -432,6 +430,36 @@ if menu == "Simulatore Offerte":
                 )
                 z_max_consentito = PricingEngine.calculate_inverse(Decimal(str(min_net_net_g)), temp_input_max_z, "Z")
                 
+                st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f", help="Il massimo Sconto Z che puoi inserire (a parità di AA) prima di andare in blocco.")
+                
+            else:
+                # CASO B: Leve Promozionali in alto a destra
+                st.markdown("**Leve Promozionali**")
+                sconto_z_input = st.number_input("Sconto Promozionale (%) [Z] (Manuale)", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+                sconto_z = Decimal(f"{sconto_z_input:.5f}")
+                
+                sconto_aa = st.number_input(
+                    "Sconto Unitario in fattura (Euro/Pz) [AA]", 
+                    min_value=0.0, value=0.0, step=0.05
+                )
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("**Analisi Limiti Promozionali**")
+                
+                # Calcolo Z Max Consentito
+                temp_input_max_z = PricingInput(
+                    listino_r=contract.listino_r,
+                    sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
+                    sconto_4=contract.sconto_4, sconto_5=contract.sconto_5, sconto_6=contract.sconto_6, sconto_7=contract.sconto_7,
+                    sconto_y=Decimal(f"{sconto_y:.5f}"), sconto_z=Decimal("0.00"), sconto_aa=Decimal(f"{sconto_aa:.5f}"),
+                    sconto_carico=contract.sconto_carico, sconto_pagamento=contract.sconto_pagamento,
+                    voce_i=contract.voce_i, voce_ii=contract.voce_ii, voce_iii=contract.voce_iii, voce_iv=contract.voce_iv, voce_v=contract.voce_v,
+                    min_net_net_g=Decimal(str(min_net_net_g))
+                )
+                z_max_consentito = PricingEngine.calculate_inverse(Decimal(str(min_net_net_g)), temp_input_max_z, "Z")
+                st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f")
+                
+                # Calcolo AA Max Consentito
                 temp_input_max_aa = PricingInput(
                     listino_r=contract.listino_r,
                     sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
@@ -442,10 +470,7 @@ if menu == "Simulatore Offerte":
                     min_net_net_g=Decimal(str(min_net_net_g))
                 )
                 aa_max_consentito = PricingEngine.calculate_inverse(Decimal(str(min_net_net_g)), temp_input_max_aa, "AA")
-                
-                st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f", help="Il massimo Sconto Z che puoi inserire (a parità di AA) prima di andare in blocco.")
-                if not "A. Partenza" in metodo_lavoro:
-                    st.number_input("Sconto Unitario MAX Consentito [AA]", value=float(aa_max_consentito), disabled=True, format="%.2f", help="Il massimo Sconto AA in Euro che puoi inserire (a parità di Z) prima di andare in blocco.")
+                st.number_input("Sconto Unitario MAX Consentito [AA]", value=float(aa_max_consentito), disabled=True, format="%.2f")
 
         engine_input = PricingInput(
             listino_r=contract.listino_r,
@@ -706,7 +731,6 @@ elif menu == "Dati Anagrafici (Logistica)":
                 try:
                     df_prod_import = pd.read_excel(uploaded_prod_file)
                     
-                    # CORREZIONE TATTICA: Mappiamo esplicitamente i campi del Guardrail dal tracciato Excel
                     col_map = {
                         "EAN": "ean",
                         "Codice Articolo": "codice_sap",
@@ -759,7 +783,6 @@ elif menu == "Dati Anagrafici (Logistica)":
                                     try: return int(float(val))
                                     except: return default
 
-                                # Se la colonna non esiste nel file, eseguiamo fallback sul valore DB esistente
                                 min_g = row.get("min_net_net_g")
                                 if pd.isna(min_g) or str(min_g).strip() == "":
                                     cursor.execute("SELECT min_net_net_g FROM guardrail_aziendali WHERE ean=?", (ean_val,))
@@ -789,7 +812,6 @@ elif menu == "Dati Anagrafici (Logistica)":
                                     get_int("shelf_life_mesi")
                                 ))
 
-                                # Allineamento del guardrail aziendale
                                 cursor.execute("""
                                 INSERT OR REPLACE INTO guardrail_aziendali (ean, min_net_net_g) VALUES (?, ?)
                                 """, (ean_val, min_g))
@@ -1061,7 +1083,6 @@ elif menu == "Report Sintetico":
     
     st.markdown("---")
     
-    # [!] QUI APPLICHIAMO IL CONTAINER CHE ATTIVA L'EFFETTO CARD DEL CSS
     contenitore_bench = st.container(border=True)
     with contenitore_bench:
         st.subheader("🔍 Benchmark Comparativo di Canale (Livello Sottogruppo)")
@@ -1155,7 +1176,6 @@ elif menu == "Report Sintetico":
             else:
                 st.info("Nessun accordo strutturato trovato per i filtri selezionati.")
 
-    # -------------------------------------------------------------------------
     st.markdown("---")
     st.subheader("Sintesi Dinamica e Analisi per Canale GDO")
     
@@ -1175,8 +1195,6 @@ elif menu == "Report Sintetico":
     """
     df_sintesi = pd.read_sql_query(query_sintesi, conn)
     st.dataframe(df_sintesi, use_container_width=True, hide_index=True)
-    
-    # Rimuovi l'esportazione Excel se vuoi mantenere il tab compatto, oppure riaggiungi il blocco del download
     
     st.markdown("---")
     st.subheader("Generatore ed Esportazione Report Consolidato di Sintesi")
