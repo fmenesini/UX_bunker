@@ -103,6 +103,22 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {background: transparent !important;}
+    * 11. MIRINO SULL'ICONA DELLA SIDEBAR (Pulsante di espansione) */
+    [data-testid="collapsedControl"] {
+        color: #FFFFFF !important; /* Icona bianca */
+        background-color: #1A3E2F !important; /* Sfondo verde aziendale */
+        border-radius: 6px !important; /* Bordi morbidi */
+        padding: 5px !important; 
+        margin-top: 10px !important;
+        margin-left: 10px !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.15) !important; /* Ombra per sollevarlo */
+        transition: all 0.2s ease-in-out;
+    }
+    
+    [data-testid="collapsedControl"]:hover {
+        background-color: #2E7D32 !important; /* Verde più chiaro al passaggio del mouse */
+        transform: scale(1.05); /* Effetto ingrandimento */
+    }
 </style>
 """, unsafe_allow_html=True)
 
