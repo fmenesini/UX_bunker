@@ -1160,7 +1160,7 @@ elif menu == "Report Sintetico":
     st.dataframe(df_sintesi, use_container_width=True, hide_index=True)
     
     # Rimuovi l'esportazione Excel se vuoi mantenere il tab compatto, oppure riaggiungi il blocco del download
-    conn.close()
+    
     st.markdown("---")
     st.subheader("Generatore ed Esportazione Report Consolidato di Sintesi")
     
