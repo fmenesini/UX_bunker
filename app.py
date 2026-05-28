@@ -543,7 +543,7 @@ if menu == "Simulatore Offerte":
         # -----------------------------------------------------------------
         # 2. DOPO AGGIUNGIAMO I CONTRIBUTI EXTRA (VOLANTINO / SELL-OUT)
         # -----------------------------------------------------------------
-        st.markdown("### 📢 Contributi Promozionali Extra (Volantino / Sell-Out)")
+        st.markdown("### Contributi Promozionali Extra (Volantino / Sell-Out)")
         st.markdown("<span style='font-size: 0.9em; color: #4B5563;'>Inserisci eventuali costi extra richiesti dalla GDO per l'operazione. Se non inserisci i volumi, il costo fisso verrà registrato ma non impatterà il calcolo unitario.</span>", unsafe_allow_html=True)
         
         box_sellout = st.container(border=True)
