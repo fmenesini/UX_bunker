@@ -514,7 +514,35 @@ if menu == "Simulatore Offerte":
 
         st.markdown("---")
         
-        # --- NUOVA SEZIONE: CONTRIBUTI PROMOZIONALI EXTRA (SELL-OUT) ---
+        # -----------------------------------------------------------------
+        # 1. PRIMA MOSTRIAMO LA VERIFICA MARGINE E LE FINESTRE TEMPORALI
+        # -----------------------------------------------------------------
+        col_c1, col_c2 = st.columns(2)
+        
+        with col_c1:
+            with st.expander("Verifica Margine e Stato (Contrattuale)", expanded=True):
+                st.metric("PREZZO NET NET RISULTANTE (AM)", f"{result.net_net_finale:.2f} Euro")
+                st.metric("SOGLIA MINIMA NET NET (G)", f"{min_net_net_g:.2f} Euro")
+                if result.guardrail_ok:
+                    st.success(f"VERDE (APPROVATO) - Margine sicuro. Delta: +{result.delta_vs_min:.2f} Euro")
+                else:
+                    st.error(f"BLOCCATO! SI PERDE SOLDI !!! - Sotto soglia di {abs(result.delta_vs_min):.2f} Euro")
+        
+        with col_c2:
+            with st.expander("Finestra Temporale Promo", expanded=True):
+                col_d1, col_d2 = st.columns(2)
+                with col_d1:
+                    sell_in_dal = st.date_input("Inizio Sell-In", date.today(), key="si_dal")
+                    sell_in_al = st.date_input("Fine Sell-In", date.today(), key="si_al")
+                with col_d2:
+                    sell_out_dal = st.date_input("Inizio Sell-Out", date.today(), key="so_dal")
+                    sell_out_al = st.date_input("Fine Sell-Out", date.today(), key="so_al")
+
+        st.markdown("---")
+
+        # -----------------------------------------------------------------
+        # 2. DOPO AGGIUNGIAMO I CONTRIBUTI EXTRA (VOLANTINO / SELL-OUT)
+        # -----------------------------------------------------------------
         st.markdown("### 📢 Contributi Promozionali Extra (Volantino / Sell-Out)")
         st.markdown("<span style='font-size: 0.9em; color: #4B5563;'>Inserisci eventuali costi extra richiesti dalla GDO per l'operazione. Se non inserisci i volumi, il costo fisso verrà registrato ma non impatterà il calcolo unitario.</span>", unsafe_allow_html=True)
         
@@ -541,28 +569,6 @@ if menu == "Simulatore Offerte":
                 else:
                     st.warning(f"**Costo Promozionale Extra Totale:** {costo_totale_extra:.2f} €")
                     st.info("ℹ️ Volumi non inseriti: l'impatto unitario del contributo fisso non è calcolabile, ma il costo totale verrà registrato nello storico.")
-
-        st.markdown("---")
-        col_c1, col_c2 = st.columns(2)
-        
-        with col_c1:
-            with st.expander("Verifica Margine e Stato (Contrattuale)", expanded=True):
-                st.metric("PREZZO NET NET RISULTANTE (AM)", f"{result.net_net_finale:.2f} Euro")
-                st.metric("SOGLIA MINIMA NET NET (G)", f"{min_net_net_g:.2f} Euro")
-                if result.guardrail_ok:
-                    st.success(f"VERDE (APPROVATO) - Margine sicuro. Delta: +{result.delta_vs_min:.2f} Euro")
-                else:
-                    st.error(f"BLOCCATO! SI PERDE SOLDI !!! - Sotto soglia di {abs(result.delta_vs_min):.2f} Euro")
-        
-        with col_c2:
-            with st.expander("Finestra Temporale Promo", expanded=True):
-                col_d1, col_d2 = st.columns(2)
-                with col_d1:
-                    sell_in_dal = st.date_input("Inizio Sell-In", date.today(), key="si_dal")
-                    sell_in_al = st.date_input("Fine Sell-In", date.today(), key="si_al")
-                with col_d2:
-                    sell_out_dal = st.date_input("Inizio Sell-Out", date.today(), key="so_dal")
-                    sell_out_al = st.date_input("Fine Sell-Out", date.today(), key="so_al")
 
         st.markdown("---")
         st.subheader("Tabella Sequenziale Estesa della Struttura di Costo")
