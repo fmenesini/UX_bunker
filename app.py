@@ -165,6 +165,24 @@ def init_db():
         )""")
         conn.commit()
         seed_baseline_data(conn)
+        
+    # AGGIUNTA: Tabella per la storicizzazione delle promozioni
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS storico_promo (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        data_salvataggio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        stato_promo TEXT,
+        gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT,
+        ean TEXT, descrizione_commerciale TEXT,
+        listino_r REAL, sconto_y REAL, sconto_z REAL, sconto_aa REAL,
+        net_net_am REAL,
+        volumi_stimati INTEGER, contributo_fisso REAL, contributo_pezzo REAL, costo_totale_extra REAL,
+        note TEXT
+    )""")
+    conn.commit()
+    conn.close()
+    
+        seed_baseline_data(conn)
     else:
         conn.close()
 
@@ -305,7 +323,14 @@ def seed_baseline_data(conn):
 
 init_db()
 
-menu = st.sidebar.radio("SELEZIONA SCHEDA", ["Simulatore Offerte", "Dati Anagrafici (Logistica)", "Back-Office (Contratti)", "Report Sintetico", "Guida Operativa"])
+menu = st.sidebar.radio("SELEZIONA SCHEDA", [
+    "Simulatore Offerte", 
+    "Storico Promozioni", 
+    "Dati Anagrafici (Logistica)", 
+    "Back-Office (Contratti)", 
+    "Report Sintetico", 
+    "Guida Operativa"
+])
 
 
 # ==========================================
@@ -334,7 +359,6 @@ if menu == "Simulatore Offerte":
         associati = [r[0] for r in cursor.fetchall()]
         associato_sel = st.sidebar.selectbox("3. Insegna Locale / Associato", associati, help="Seleziona l'associato locale.")
 
-        # Estrazione dei dati logistici dalla tabella anagrafica_master
         cursor.execute("""
             SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0), a.codice_sap, a.formato_lt,
                    a.pezzi_cartone, a.cartoni_strato, a.strati_pallet, a.cartoni_pallet
@@ -345,7 +369,6 @@ if menu == "Simulatore Offerte":
         prodotti_dict = {f"{p[1]} [EAN: {p[0]}]": (p[0], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9]) for p in prodotti}
         prodotto_scelto = st.sidebar.selectbox("4. Referenza Salov", list(prodotti_dict.keys()), help="Seleziona la referenza.")
         
-        # Unpacking con i nuovi dati logistici
         ean, tipo_olio, min_net_net_g, codice_sap, formato_lt, pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet = prodotti_dict[prodotto_scelto]
 
         contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, ean, tipo_olio)
@@ -390,7 +413,6 @@ if menu == "Simulatore Offerte":
         st.markdown("---")
         st.subheader("Manovre e Leve Sconti")
         
-        # --- RIGA 1: Sconto Continuativo Y (Isolato in alto a sinistra) ---
         col_y1, col_y2 = st.columns(2)
         with col_y1:
             sconto_y = st.number_input(
@@ -406,7 +428,6 @@ if menu == "Simulatore Offerte":
             
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # --- RIGA 2: Leve Promozionali (SX) e Limiti (DX) perfettamente allineati ---
         col_l1, col_l2 = st.columns(2)
         
         with col_l1:
@@ -430,7 +451,6 @@ if menu == "Simulatore Offerte":
                     min_value=0.0, value=0.0, step=0.05
                 )
 
-        # Calcolo in background dello Sconto Z se siamo in Modalità A
         if "A. Partenza" in metodo_lavoro:
             target_dec = Decimal(f"{target_net_net:.5f}")
             temp_input = PricingInput(
@@ -447,7 +467,6 @@ if menu == "Simulatore Offerte":
         with col_l2:
             if "A. Partenza" in metodo_lavoro:
                 st.markdown("**Analisi Limiti Promozionali**")
-                
                 temp_input_max_z = PricingInput(
                     listino_r=contract.listino_r,
                     sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
@@ -458,12 +477,10 @@ if menu == "Simulatore Offerte":
                     min_net_net_g=Decimal(str(min_net_net_g))
                 )
                 z_max_consentito = PricingEngine.calculate_inverse(Decimal(str(min_net_net_g)), temp_input_max_z, "Z")
-                
                 st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f", help="Il massimo Sconto Z che puoi inserire (a parità di AA) prima di andare in blocco.")
                 
             else:
                 st.markdown("**Analisi Limiti Promozionali**")
-                
                 temp_input_max_z = PricingInput(
                     listino_r=contract.listino_r,
                     sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
@@ -500,11 +517,41 @@ if menu == "Simulatore Offerte":
         result = PricingEngine.calculate(engine_input)
 
         st.markdown("---")
+        
+        # --- NUOVA SEZIONE: CONTRIBUTI PROMOZIONALI EXTRA (SELL-OUT) ---
+        st.markdown("### 📢 Contributi Promozionali Extra (Volantino / Sell-Out)")
+        st.markdown("<span style='font-size: 0.9em; color: #4B5563;'>Inserisci eventuali costi extra richiesti dalla GDO per l'operazione. Se non inserisci i volumi, il costo fisso verrà registrato ma non impatterà il calcolo unitario.</span>", unsafe_allow_html=True)
+        
+        box_sellout = st.container(border=True)
+        with box_sellout:
+            col_v1, col_v2, col_v3 = st.columns(3)
+            with col_v1:
+                volumi_stimati = st.number_input("Volumi Stimati (Pezzi)", min_value=0, value=0, step=100, help="Numero di bottiglie previste per la promo.")
+            with col_v2:
+                contributo_fisso = st.number_input("Contributo Fisso Totale (€)", min_value=0.0, value=0.0, step=50.0, help="Es. Costo testata gondola, inserimento volantino.")
+            with col_v3:
+                contributo_pezzo = st.number_input("Contributo a Pezzo (€/Pz)", min_value=0.0, value=0.0, step=0.05, help="Es. Contributo di 0.10€ per ogni pezzo venduto in cassa.")
+
+            costo_totale_extra = contributo_fisso + (contributo_pezzo * volumi_stimati)
+            impatto_unitario_extra = contributo_pezzo
+            
+            if costo_totale_extra > 0:
+                st.markdown("---")
+                if volumi_stimati > 0:
+                    impatto_unitario_extra += (contributo_fisso / volumi_stimati)
+                    net_net_post_promo = float(result.net_net_finale) - impatto_unitario_extra
+                    st.warning(f"**Costo Promozionale Extra Totale:** {costo_totale_extra:.2f} €")
+                    st.error(f"**Impatto Unitario Extra:** -{impatto_unitario_extra:.3f} €/Pz ➔ **NET NET POST-VOLANTINO: {net_net_post_promo:.3f} €**")
+                else:
+                    st.warning(f"**Costo Promozionale Extra Totale:** {costo_totale_extra:.2f} €")
+                    st.info("ℹ️ Volumi non inseriti: l'impatto unitario del contributo fisso non è calcolabile, ma il costo totale verrà registrato nello storico.")
+
+        st.markdown("---")
         col_c1, col_c2 = st.columns(2)
         
         with col_c1:
-            with st.expander("Verifica Margine e Stato", expanded=True):
-                st.metric("PREZZO NET NET RISULTANTE", f"{result.net_net_finale:.2f} Euro")
+            with st.expander("Verifica Margine e Stato (Contrattuale)", expanded=True):
+                st.metric("PREZZO NET NET RISULTANTE (AM)", f"{result.net_net_finale:.2f} Euro")
                 st.metric("SOGLIA MINIMA NET NET (G)", f"{min_net_net_g:.2f} Euro")
                 if result.guardrail_ok:
                     st.success(f"VERDE (APPROVATO) - Margine sicuro. Delta: +{result.delta_vs_min:.2f} Euro")
@@ -528,6 +575,40 @@ if menu == "Simulatore Offerte":
             for step in result.steps
         ])
         st.dataframe(df_waterfall, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        
+        # --- NUOVA SEZIONE: SALVATAGGIO STORICO PROMOZIONI ---
+        st.markdown("### 💾 Storicizzazione Promozione")
+        box_salvataggio = st.container(border=True)
+        with box_salvataggio:
+            col_s1, col_s2, col_s3 = st.columns([1, 2, 1])
+            with col_s1:
+                stato_promo = st.radio("Stato della Promozione:", ["Proposta", "Confermata"])
+            with col_s2:
+                note_promo = st.text_area("Note opzionali (es. Riferimento Volantino, Accordi verbali):", height=68)
+            with col_s3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("SALVA PROMOZIONE NEL DATABASE", type="primary", use_container_width=True):
+                    try:
+                        c_save = conn.cursor()
+                        c_save.execute("""
+                            INSERT INTO storico_promo (
+                                stato_promo, gruppo_macro, sottogruppo, associato_insegna,
+                                ean, descrizione_commerciale, listino_r, sconto_y, sconto_z, sconto_aa,
+                                net_net_am, volumi_stimati, contributo_fisso, contributo_pezzo, costo_totale_extra, note
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            stato_promo, gruppo_sel, sottogruppo_sel, associato_sel,
+                            ean, prodotto_scelto.split(" [EAN:")[0],
+                            float(contract.listino_r), float(sconto_y), float(sconto_z), float(sconto_aa),
+                            float(result.net_net_finale),
+                            volumi_stimati, contributo_fisso, contributo_pezzo, costo_totale_extra, note_promo
+                        ))
+                        conn.commit()
+                        st.success(f"✅ Promozione salvata con successo come '{stato_promo}'!")
+                    except Exception as e:
+                        st.error(f"Errore durante il salvataggio: {e}")
 
         st.markdown("---")
         
@@ -591,7 +672,6 @@ if menu == "Simulatore Offerte":
                 ws[f'A{r}'].font = font_label
                 ws[f'B{r}'].font = font_value
                 
-            # --- NUOVA SEZIONE: DATI LOGISTICI E PALLETTIZZAZIONE ---
             ws['A14'] = "DATI LOGISTICI E PALLETTIZZAZIONE"
             ws['A14'].font = font_section
             ws['A14'].fill = fill_sub
@@ -612,7 +692,6 @@ if menu == "Simulatore Offerte":
                 ws[f'A{r}'].font = font_label
                 ws[f'B{r}'].font = font_value
                 
-            # --- FINESTRE TEMPORALI PROMO ---
             ws['A21'] = "FINESTRE TEMPORALI PROMO"
             ws['A21'].font = font_section
             ws['A21'].fill = fill_sub
@@ -627,7 +706,6 @@ if menu == "Simulatore Offerte":
                 ws[f'A{r}'].font = font_label
                 ws[f'B{r}'].font = font_value
             
-            # --- CASCATA DI PRICING NEGOZIALE ---
             ws['A25'] = "CASCATA DI PRICING NEGOZIALE"
             ws['A25'].font = font_section
             ws['A25'].fill = fill_sub
@@ -659,11 +737,30 @@ if menu == "Simulatore Offerte":
             stato_txt = "VERDE (APPROVATO)" if result.guardrail_ok else "ROSSO (SOTTO SOGLIA)"
             ws.cell(row=row_idx+3, column=2, value=stato_txt).font = font_label
             
+            # AGGIUNTA: Dati Sell-Out nell'Excel
+            if costo_totale_extra > 0:
+                row_idx += 5
+                ws.cell(row=row_idx, column=1, value="CONTRIBUTI EXTRA (SELL-OUT)").font = font_section
+                ws.cell(row=row_idx, column=1).fill = fill_sub
+                ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=3)
+                
+                ws.cell(row=row_idx+1, column=1, value="Volumi Stimati (Pz):").font = font_label
+                ws.cell(row=row_idx+1, column=2, value=volumi_stimati).font = font_value
+                
+                ws.cell(row=row_idx+2, column=1, value="Costo Totale Extra:").font = font_label
+                ws.cell(row=row_idx+2, column=2, value=costo_totale_extra).font = font_value
+                ws.cell(row=row_idx+2, column=2).number_format = '#,##0.00 €'
+                
+                if volumi_stimati > 0:
+                    ws.cell(row=row_idx+3, column=1, value="Net Net Post-Volantino:").font = font_label
+                    ws.cell(row=row_idx+3, column=2, value=net_net_post_promo).font = font_value
+                    ws.cell(row=row_idx+3, column=2).number_format = '#,##0.000 €'
+            
             ws.column_dimensions['A'].width = 32
             ws.column_dimensions['B'].width = 38
             ws.column_dimensions['C'].width = 45
             
-            for row in ws.iter_rows(min_row=1, max_row=row_idx+4, min_col=1, max_col=3):
+            for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=3):
                 for cell in row:
                     cell.border = thin_border
             
@@ -680,6 +777,84 @@ if menu == "Simulatore Offerte":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
+# ==========================================
+# NUOVA SCHEDA: STORICO PROMOZIONI
+# ==========================================
+elif menu == "Storico Promozioni":
+    st.title("📚 Storico Promozioni (CRM Commerciale)")
+    st.markdown("Archivio delle simulazioni salvate. Filtra per cliente o stato per recuperare le trattative passate.")
+    
+    conn = sqlite3.connect(DB_FILE)
+    
+    col_f1, col_f2, col_f3 = st.columns(3)
+    with col_f1:
+        filtro_stato = st.selectbox("Filtra per Stato", ["Tutti", "Confermata", "Proposta"])
+    with col_f2:
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT gruppo_macro FROM storico_promo ORDER BY gruppo_macro")
+        gruppi_storico = ["Tutti"] + [r[0] for r in cursor.fetchall()]
+        filtro_gruppo = st.selectbox("Filtra per Gruppo", gruppi_storico)
+    with col_f3:
+        if filtro_gruppo != "Tutti":
+            cursor.execute("SELECT DISTINCT associato_insegna FROM storico_promo WHERE gruppo_macro=? ORDER BY associato_insegna", (filtro_gruppo,))
+            insegne_storico = ["Tutte"] + [r[0] for r in cursor.fetchall()]
+        else:
+            insegne_storico = ["Tutte"]
+        filtro_insegna = st.selectbox("Filtra per Insegna", insegne_storico)
+
+    # Costruzione Query Dinamica
+    query = "SELECT data_salvataggio, stato_promo, gruppo_macro, associato_insegna, descrizione_commerciale, listino_r, sconto_z, sconto_aa, net_net_am, volumi_stimati, costo_totale_extra, note FROM storico_promo WHERE 1=1"
+    params = []
+    
+    if filtro_stato != "Tutti":
+        query += " AND stato_promo = ?"
+        params.append(filtro_stato)
+    if filtro_gruppo != "Tutti":
+        query += " AND gruppo_macro = ?"
+        params.append(filtro_gruppo)
+    if filtro_insegna != "Tutte":
+        query += " AND associato_insegna = ?"
+        params.append(filtro_insegna)
+        
+    query += " ORDER BY data_salvataggio DESC"
+    
+    df_storico = pd.read_sql_query(query, conn, params=params)
+    
+    # Formattazione colonne per la visualizzazione
+    st.dataframe(
+        df_storico, 
+        use_container_width=True, 
+        hide_index=True,
+        column_config={
+            "data_salvataggio": st.column_config.DatetimeColumn("Data Salvataggio", format="DD/MM/YYYY HH:mm"),
+            "stato_promo": "Stato",
+            "gruppo_macro": "Gruppo",
+            "associato_insegna": "Insegna",
+            "descrizione_commerciale": "Prodotto",
+            "listino_r": st.column_config.NumberColumn("Listino R", format="€ %.2f"),
+            "sconto_z": st.column_config.NumberColumn("Sc. Z (%)", format="%.2f %%"),
+            "sconto_aa": st.column_config.NumberColumn("Sc. AA (€)", format="€ %.2f"),
+            "net_net_am": st.column_config.NumberColumn("Net Net (AM)", format="€ %.3f"),
+            "volumi_stimati": "Volumi (Pz)",
+            "costo_totale_extra": st.column_config.NumberColumn("Costo Extra", format="€ %.2f"),
+            "note": "Note"
+        }
+    )
+    
+    if not df_storico.empty:
+        buffer_storico = io.BytesIO()
+        with pd.ExcelWriter(buffer_storico, engine='openpyxl') as writer:
+            df_storico.to_excel(writer, index=False, sheet_name="Storico_Promo")
+            
+        st.download_button(
+            label="📥 SCARICA ESTRAZIONE STORICO (Excel)",
+            data=buffer_storico.getvalue(),
+            file_name=f"Storico_Promozioni_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("Nessuna promozione salvata corrisponde ai filtri selezionati.")
+        
     conn.close()
 
 # ==========================================
