@@ -163,23 +163,36 @@ def init_db():
             voce_contratto_1 REAL, voce_contratto_2 REAL, voce_contratto_3 REAL, voce_contratto_4 REAL, voce_contratto_5 REAL,
             UNIQUE(gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello)
         )""")
+        
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS storico_promo (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data_salvataggio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            stato_promo TEXT,
+            gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT,
+            ean TEXT, descrizione_commerciale TEXT,
+            listino_r REAL, sconto_y REAL, sconto_z REAL, sconto_aa REAL,
+            net_net_am REAL,
+            volumi_stimati INTEGER, contributo_fisso REAL, contributo_pezzo REAL, costo_totale_extra REAL,
+            note TEXT,
+            sell_in_dal DATE, sell_in_al DATE, sell_out_dal DATE, sell_out_al DATE,
+            min_net_net_g REAL, net_net_post_promo REAL
+        )""")
         conn.commit()
         seed_baseline_data(conn)
-        
-    # AGGIUNTA: Tabella per la storicizzazione delle promozioni
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS storico_promo (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        data_salvataggio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        stato_promo TEXT,
-        gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT,
-        ean TEXT, descrizione_commerciale TEXT,
-        listino_r REAL, sconto_y REAL, sconto_z REAL, sconto_aa REAL,
-        net_net_am REAL,
-        volumi_stimati INTEGER, contributo_fisso REAL, contributo_pezzo REAL, costo_totale_extra REAL,
-        note TEXT
-    )""")
-    conn.commit()
+    else:
+        # Migrazione automatica per aggiungere le nuove colonne se la tabella esiste già
+        try:
+            cursor.execute("ALTER TABLE storico_promo ADD COLUMN sell_in_dal DATE")
+            cursor.execute("ALTER TABLE storico_promo ADD COLUMN sell_in_al DATE")
+            cursor.execute("ALTER TABLE storico_promo ADD COLUMN sell_out_dal DATE")
+            cursor.execute("ALTER TABLE storico_promo ADD COLUMN sell_out_al DATE")
+            cursor.execute("ALTER TABLE storico_promo ADD COLUMN min_net_net_g REAL")
+            cursor.execute("ALTER TABLE storico_promo ADD COLUMN net_net_post_promo REAL")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass # Le colonne esistono già
+            
     conn.close()
     
 def seed_baseline_data(conn):
@@ -514,9 +527,6 @@ if menu == "Simulatore Offerte":
 
         st.markdown("---")
         
-        # -----------------------------------------------------------------
-        # 1. PRIMA MOSTRIAMO LA VERIFICA MARGINE E LE FINESTRE TEMPORALI
-        # -----------------------------------------------------------------
         col_c1, col_c2 = st.columns(2)
         
         with col_c1:
@@ -540,9 +550,6 @@ if menu == "Simulatore Offerte":
 
         st.markdown("---")
 
-        # -----------------------------------------------------------------
-        # 2. DOPO AGGIUNGIAMO I CONTRIBUTI EXTRA (VOLANTINO / SELL-OUT)
-        # -----------------------------------------------------------------
         st.markdown("### Contributi Promozionali Extra (Volantino / Sell-Out)")
         st.markdown("<span style='font-size: 0.9em; color: #4B5563;'>Inserisci eventuali costi extra richiesti dalla GDO per l'operazione. Se non inserisci i volumi, il costo fisso verrà registrato ma non impatterà il calcolo unitario.</span>", unsafe_allow_html=True)
         
@@ -557,31 +564,48 @@ if menu == "Simulatore Offerte":
                 contributo_pezzo = st.number_input("Contributo a Pezzo (€/Pz)", min_value=0.0, value=0.0, step=0.05, help="Es. Contributo di 0.10€ per ogni pezzo venduto in cassa.")
 
             costo_totale_extra = contributo_fisso + (contributo_pezzo * volumi_stimati)
-            impatto_unitario_extra = contributo_pezzo
+            impatto_unitario_extra = Decimal("0.00")
+            net_net_post_promo = result.net_net_finale
+            mostra_impatto = False
             
-            if costo_totale_extra > 0:
-                st.markdown("---")
+            if (volumi_stimati > 0 and contributo_fisso > 0) or (contributo_pezzo > 0):
+                mostra_impatto = True
                 if volumi_stimati > 0:
-                    impatto_unitario_extra += (contributo_fisso / volumi_stimati)
-                    net_net_post_promo = float(result.net_net_finale) - impatto_unitario_extra
-                    st.warning(f"**Costo Promozionale Extra Totale:** {costo_totale_extra:.2f} €")
-                    st.error(f"**Impatto Unitario Extra:** -{impatto_unitario_extra:.3f} €/Pz ➔ **NET NET POST-VOLANTINO: {net_net_post_promo:.3f} €**")
+                    impatto_unitario_extra = Decimal(str(contributo_pezzo)) + (Decimal(str(contributo_fisso)) / Decimal(str(volumi_stimati)))
                 else:
-                    st.warning(f"**Costo Promozionale Extra Totale:** {costo_totale_extra:.2f} €")
-                    st.info("ℹ️ Volumi non inseriti: l'impatto unitario del contributo fisso non è calcolabile, ma il costo totale verrà registrato nello storico.")
+                    impatto_unitario_extra = Decimal(str(contributo_pezzo))
+                
+                net_net_post_promo = result.net_net_finale - impatto_unitario_extra
+                
+                st.markdown("---")
+                st.warning(f"**Costo Promozionale Extra Totale:** {costo_totale_extra:.2f} €")
+                st.error(f"**Impatto Unitario Extra:** -{impatto_unitario_extra:.3f} €/Pz ➔ **NET NET POST-VOLANTINO: {net_net_post_promo:.3f} €**")
+            elif costo_totale_extra > 0:
+                st.markdown("---")
+                st.warning(f"**Costo Promozionale Extra Totale:** {costo_totale_extra:.2f} €")
+                st.info("ℹ️ Volumi non inseriti: l'impatto unitario del contributo fisso non è calcolabile, ma il costo totale verrà registrato nello storico.")
 
         st.markdown("---")
         st.subheader("Tabella Sequenziale Estesa della Struttura di Costo")
-        df_waterfall = pd.DataFrame([
+        
+        waterfall_data = [
             {"Fase Pricing": step.fase, "Valore Unitario": step.valore, "Dettaglio Operazione": step.descrizione}
             for step in result.steps
-        ])
+        ]
+        
+        if mostra_impatto:
+            waterfall_data.append({
+                "Fase Pricing": "Impatto Extra (Sell-Out)", 
+                "Valore Unitario": net_net_post_promo.quantize(Decimal("0.001")), 
+                "Dettaglio Operazione": f"-{impatto_unitario_extra.quantize(Decimal('0.001'))} €/Pz"
+            })
+            
+        df_waterfall = pd.DataFrame(waterfall_data)
         st.dataframe(df_waterfall, use_container_width=True, hide_index=True)
 
         st.markdown("---")
         
-        # --- NUOVA SEZIONE: SALVATAGGIO STORICO PROMOZIONI ---
-        st.markdown("### 💾 Storicizzazione Promozione")
+        st.markdown("### Storicizzazione Promozione")
         box_salvataggio = st.container(border=True)
         with box_salvataggio:
             col_s1, col_s2, col_s3 = st.columns([1, 2, 1])
@@ -598,14 +622,18 @@ if menu == "Simulatore Offerte":
                             INSERT INTO storico_promo (
                                 stato_promo, gruppo_macro, sottogruppo, associato_insegna,
                                 ean, descrizione_commerciale, listino_r, sconto_y, sconto_z, sconto_aa,
-                                net_net_am, volumi_stimati, contributo_fisso, contributo_pezzo, costo_totale_extra, note
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                net_net_am, volumi_stimati, contributo_fisso, contributo_pezzo, costo_totale_extra, note,
+                                sell_in_dal, sell_in_al, sell_out_dal, sell_out_al, min_net_net_g, net_net_post_promo
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (
                             stato_promo, gruppo_sel, sottogruppo_sel, associato_sel,
                             ean, prodotto_scelto.split(" [EAN:")[0],
                             float(contract.listino_r), float(sconto_y), float(sconto_z), float(sconto_aa),
                             float(result.net_net_finale),
-                            volumi_stimati, contributo_fisso, contributo_pezzo, costo_totale_extra, note_promo
+                            volumi_stimati, contributo_fisso, contributo_pezzo, costo_totale_extra, note_promo,
+                            sell_in_dal.strftime('%Y-%m-%d'), sell_in_al.strftime('%Y-%m-%d'), 
+                            sell_out_dal.strftime('%Y-%m-%d'), sell_out_al.strftime('%Y-%m-%d'),
+                            float(min_net_net_g), float(net_net_post_promo)
                         ))
                         conn.commit()
                         st.success(f"✅ Promozione salvata con successo come '{stato_promo}'!")
@@ -727,6 +755,13 @@ if menu == "Simulatore Offerte":
                 ws.cell(row=row_idx, column=3, value=step.descrizione).font = font_value
                 row_idx += 1
                 
+            if mostra_impatto:
+                ws.cell(row=row_idx, column=1, value="Impatto Extra (Sell-Out)").font = font_value
+                ws.cell(row=row_idx, column=2, value=float(net_net_post_promo)).font = font_value
+                ws.cell(row=row_idx, column=2).number_format = '#,##0.000 €'
+                ws.cell(row=row_idx, column=3, value=f"-{float(impatto_unitario_extra):.3f} €/Pz").font = font_value
+                row_idx += 1
+                
             ws.cell(row=row_idx+1, column=1, value="SOGLIA MINIMA AM (G):").font = font_label
             ws.cell(row=row_idx+1, column=2, value=float(min_net_net_g)).font = font_value
             ws.cell(row=row_idx+1, column=2).number_format = '#,##0.00 €'
@@ -739,7 +774,6 @@ if menu == "Simulatore Offerte":
             stato_txt = "VERDE (APPROVATO)" if result.guardrail_ok else "ROSSO (SOTTO SOGLIA)"
             ws.cell(row=row_idx+3, column=2, value=stato_txt).font = font_label
             
-            # AGGIUNTA: Dati Sell-Out nell'Excel
             if costo_totale_extra > 0:
                 row_idx += 5
                 ws.cell(row=row_idx, column=1, value="CONTRIBUTI EXTRA (SELL-OUT)").font = font_section
@@ -755,7 +789,7 @@ if menu == "Simulatore Offerte":
                 
                 if volumi_stimati > 0:
                     ws.cell(row=row_idx+3, column=1, value="Net Net Post-Volantino:").font = font_label
-                    ws.cell(row=row_idx+3, column=2, value=net_net_post_promo).font = font_value
+                    ws.cell(row=row_idx+3, column=2, value=float(net_net_post_promo)).font = font_value
                     ws.cell(row=row_idx+3, column=2).number_format = '#,##0.000 €'
             
             ws.column_dimensions['A'].width = 32
@@ -783,7 +817,7 @@ if menu == "Simulatore Offerte":
 # NUOVA SCHEDA: STORICO PROMOZIONI
 # ==========================================
 elif menu == "Storico Promozioni":
-    st.title("📚 Storico Promozioni (CRM Commerciale)")
+    st.title("Storico Promozioni (CRM Commerciale)")
     st.markdown("Archivio delle simulazioni salvate. Filtra per cliente o stato per recuperare le trattative passate.")
     
     conn = sqlite3.connect(DB_FILE)
@@ -804,8 +838,13 @@ elif menu == "Storico Promozioni":
             insegne_storico = ["Tutte"]
         filtro_insegna = st.selectbox("Filtra per Insegna", insegne_storico)
 
-    # Costruzione Query Dinamica
-    query = "SELECT data_salvataggio, stato_promo, gruppo_macro, associato_insegna, descrizione_commerciale, listino_r, sconto_z, sconto_aa, net_net_am, volumi_stimati, costo_totale_extra, note FROM storico_promo WHERE 1=1"
+    query = """
+        SELECT id, data_salvataggio, stato_promo, gruppo_macro, associato_insegna, descrizione_commerciale, 
+               sell_in_dal, sell_in_al, sell_out_dal, sell_out_al,
+               listino_r, sconto_z, sconto_aa, min_net_net_g, net_net_am, net_net_post_promo, 
+               volumi_stimati, costo_totale_extra, note 
+        FROM storico_promo WHERE 1=1
+    """
     params = []
     
     if filtro_stato != "Tutti":
@@ -822,40 +861,65 @@ elif menu == "Storico Promozioni":
     
     df_storico = pd.read_sql_query(query, conn, params=params)
     
-    # Formattazione colonne per la visualizzazione
     st.dataframe(
         df_storico, 
         use_container_width=True, 
         hide_index=True,
         column_config={
+            "id": "ID",
             "data_salvataggio": st.column_config.DatetimeColumn("Data Salvataggio", format="DD/MM/YYYY HH:mm"),
             "stato_promo": "Stato",
             "gruppo_macro": "Gruppo",
             "associato_insegna": "Insegna",
             "descrizione_commerciale": "Prodotto",
+            "sell_in_dal": st.column_config.DateColumn("Inizio Sell-In", format="DD/MM/YYYY"),
+            "sell_in_al": st.column_config.DateColumn("Fine Sell-In", format="DD/MM/YYYY"),
+            "sell_out_dal": st.column_config.DateColumn("Inizio Sell-Out", format="DD/MM/YYYY"),
+            "sell_out_al": st.column_config.DateColumn("Fine Sell-Out", format="DD/MM/YYYY"),
             "listino_r": st.column_config.NumberColumn("Listino R", format="€ %.2f"),
             "sconto_z": st.column_config.NumberColumn("Sc. Z (%)", format="%.2f %%"),
             "sconto_aa": st.column_config.NumberColumn("Sc. AA (€)", format="€ %.2f"),
+            "min_net_net_g": st.column_config.NumberColumn("Min Net Net (G)", format="€ %.3f"),
             "net_net_am": st.column_config.NumberColumn("Net Net (AM)", format="€ %.3f"),
+            "net_net_post_promo": st.column_config.NumberColumn("Net Net Post-Promo", format="€ %.3f"),
             "volumi_stimati": "Volumi (Pz)",
             "costo_totale_extra": st.column_config.NumberColumn("Costo Extra", format="€ %.2f"),
             "note": "Note"
         }
     )
     
-    if not df_storico.empty:
-        buffer_storico = io.BytesIO()
-        with pd.ExcelWriter(buffer_storico, engine='openpyxl') as writer:
-            df_storico.to_excel(writer, index=False, sheet_name="Storico_Promo")
+    col_export, col_delete = st.columns(2)
+    
+    with col_export:
+        if not df_storico.empty:
+            buffer_storico = io.BytesIO()
+            with pd.ExcelWriter(buffer_storico, engine='openpyxl') as writer:
+                df_storico.to_excel(writer, index=False, sheet_name="Storico_Promo")
+                
+            st.download_button(
+                label="SCARICA ESTRAZIONE STORICO (Excel)",
+                data=buffer_storico.getvalue(),
+                file_name=f"Storico_Promozioni_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.info("Nessuna promozione salvata corrisponde ai filtri selezionati.")
             
-        st.download_button(
-            label="📥 SCARICA ESTRAZIONE STORICO (Excel)",
-            data=buffer_storico.getvalue(),
-            file_name=f"Storico_Promozioni_{datetime.now().strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    else:
-        st.info("Nessuna promozione salvata corrisponde ai filtri selezionati.")
+    with col_delete:
+        st.markdown("### Gestione Record")
+        with st.expander("Elimina Promozione Salvata"):
+            if not df_storico.empty:
+                id_to_delete = st.selectbox("Seleziona l'ID della promozione da eliminare:", df_storico['id'].tolist())
+                if st.button("ELIMINA DEFINITIVAMENTE", type="primary"):
+                    try:
+                        cursor.execute("DELETE FROM storico_promo WHERE id=?", (id_to_delete,))
+                        conn.commit()
+                        st.success(f"Promozione ID {id_to_delete} eliminata con successo.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore durante l'eliminazione: {e}")
+            else:
+                st.write("Nessun record disponibile per l'eliminazione.")
         
     conn.close()
 
@@ -1233,6 +1297,14 @@ elif menu == "Back-Office (Contratti)":
             use_container_width=True,
             hide_index=True,
             disabled=["descrizione_commerciale"],
+            column_config={
+                "min_net_net_g": st.column_config.NumberColumn(
+                    "Min Net Net (€)",
+                    help="Soglia minima di margine in Euro",
+                    format="€ %.2f",
+                    step=0.01,
+                )
+            },
             key="guardrail_editor"
         )
         
@@ -1249,6 +1321,64 @@ elif menu == "Back-Office (Contratti)":
                 st.rerun()
             except Exception as e:
                 st.error(f"ROSSO (BLOCCATO) - Errore salvataggio guardrail: {e}")
+
+        st.markdown("---")
+        
+        col_g1, col_g2 = st.columns(2)
+        
+        with col_g1:
+            st.subheader("Esportazione Guardrail")
+            st.markdown("Scarica i limiti minimi attuali per lavorarli in Excel.")
+            
+            buffer_guardrail = io.BytesIO()
+            with pd.ExcelWriter(buffer_guardrail, engine='openpyxl') as writer:
+                df_guardrail.to_excel(writer, index=False, sheet_name="Guardrail_NetNet")
+                
+            st.download_button(
+                label="Scarica Guardrail (Excel)",
+                data=buffer_guardrail.getvalue(),
+                file_name=f"Guardrail_Minimi_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        with col_g2:
+            st.subheader("Importazione Massiva Guardrail")
+            st.markdown("Carica un file Excel contenente le colonne **ean** e **min_net_net_g**.")
+            uploaded_guardrail = st.file_uploader("Trascina il file Excel Guardrail (.xlsx)", type=["xlsx"], key="up_guardrail")
+            
+            if uploaded_guardrail is not None:
+                if st.button("Conferma Scrittura Guardrail"):
+                    try:
+                        df_g_import = pd.read_excel(uploaded_guardrail)
+                        df_g_import.columns = [str(c).lower().strip() for c in df_g_import.columns]
+                        
+                        if "ean" not in df_g_import.columns or "min_net_net_g" not in df_g_import.columns:
+                            st.error("ROSSO (BLOCCATO) - Il file Excel deve contenere obbligatoriamente le colonne 'ean' e 'min_net_net_g'.")
+                        else:
+                            cursor = conn.cursor()
+                            righe_inserite = 0
+                            
+                            with conn:
+                                for idx, row in df_g_import.iterrows():
+                                    ean_val = str(row.get("ean", "")).split('.')[0].zfill(13)
+                                    if not ean_val or ean_val == "0000000000000" or ean_val == "nan":
+                                        continue
+                                        
+                                    min_g = row.get("min_net_net_g", 0.0)
+                                    try:
+                                        min_g = float(str(min_g).replace(',', '.'))
+                                    except:
+                                        min_g = 0.0
+                                        
+                                    cursor.execute("""
+                                    INSERT OR REPLACE INTO guardrail_aziendali (ean, min_net_net_g) VALUES (?, ?)
+                                    """, (ean_val, min_g))
+                                    righe_inserite += 1
+                                    
+                            st.success(f"VERDE (APPROVATO) - Aggiornati {righe_inserite} limiti minimi di margine.")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"ROSSO (BLOCCATO) - Errore durante l'importazione: {e}")
 
     st.markdown("---")
     st.markdown("<h3 style='color: #D32F2F;'>Sezione Pericolo (Danger Zone)</h3>", unsafe_allow_html=True)
@@ -1272,7 +1402,7 @@ elif menu == "Back-Office (Contratti)":
 # SCHEDA 4: REPORT SINTETICO (VERSIONE BENCHMARK COMPATTA SOTTOGRUPPI - BULLETPROOF)
 # ==========================================
 elif menu == "Report Sintetico":
-    st.title("📊 Report Sintetico e Analisi Contratti")
+    st.title("Report Sintetico e Analisi Contratti")
     st.markdown("---")
     
     conn = sqlite3.connect(DB_FILE)
@@ -1301,7 +1431,7 @@ elif menu == "Report Sintetico":
     
     contenitore_bench = st.container(border=True)
     with contenitore_bench:
-        st.subheader("🔍 Benchmark Comparativo di Canale (Livello Sottogruppo)")
+        st.subheader("Benchmark Comparativo di Canale (Livello Sottogruppo)")
         st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione logica. In fase di test mettere Sagra Ex.v. CLassico lt1")
         
         col_f1, col_f2 = st.columns(2)
