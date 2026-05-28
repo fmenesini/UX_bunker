@@ -1,7 +1,6 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-import plotly.graph_objects as go
 import io
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -272,6 +271,11 @@ def seed_baseline_data(conn):
         ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', 'ESSELUNGA', 'REFERENZA', '8002210111110', 38.00, None, None, None, None, None, None, 11.0, 0.0, None, None, None, None, None, None, None),
         ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', 'ESSELUNGA', 'REFERENZA', '8002210001305', 24.00, None, None, None, None, None, None, 13.0, 0.0, None, None, None, None, None, None, None),
 
+        ('CONAD', '', '', 'GRUPPO', '', None, 17.0, 18.0, None, None, None, None, None, None, 1.5, 1.0, 9.0, 11.0, None, None, None),
+        ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'REFERENZA', '8002210131620', 50.00, None, None, None, None, None, None, 12.0, 9.0, None, None, None, None, None, None, None),
+        ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'REFERENZA', '8002210111110', 44.00, None, None, None, None, None, None, 11.0, 4.0, None, None, None, None, None, None, None),
+        ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'REFERENZA', '8002210001305', 30.00, None, None, None, None, None, None, 10.0, 4.0, None, None, None, None, None, None, None),
+
         ('SELEX GRUPPO', '', '', 'GRUPPO', '', None, 17.0, 18.0, None, None, None, None, None, None, 1.5, 1.0, 9.0, 11.0, None, None, None),
         ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', 'SELEX ', 'REFERENZA', '8002210131620', 50.00, None, None, None, None, None, None, 12.0, 9.0, None, None, None, None, None, None, None),
         ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', 'SELEX ', 'REFERENZA', '8002210111110', 44.00, None, None, None, None, None, None, 11.0, 4.0, None, None, None, None, None, None, None),
@@ -302,6 +306,7 @@ def seed_baseline_data(conn):
 init_db()
 
 menu = st.sidebar.radio("SELEZIONA SCHEDA", ["Simulatore Offerte", "Dati Anagrafici (Logistica)", "Back-Office (Contratti)", "Report Sintetico", "Guida Operativa"])
+
 
 # ==========================================
 # SCHEDA 1: SIMULATORE
@@ -357,7 +362,7 @@ if menu == "Simulatore Offerte":
         st.markdown("### Scegli Metodologia di Negoziazione")
         metodo_lavoro = st.radio(
             "Seleziona l'approccio negoziale:",
-            ["A. Partenza da Prezzo Target (Calcolo automatico Sconto Promo Z)", "B. Tentativi Spot Manuali (Immissione Sconto Z libera)"],
+            ["A. Partenza da Prezzo Target (Calcolo automatico Sconto Promo)", "B. Tentativi Spot Manuali (Immissione Sconto Promo libera)"],
             horizontal=True
         )
 
@@ -504,7 +509,7 @@ if menu == "Simulatore Offerte":
                 if result.guardrail_ok:
                     st.success(f"VERDE (APPROVATO) - Margine sicuro. Delta: +{result.delta_vs_min:.2f} Euro")
                 else:
-                    st.error(f"ROSSO (BLOCCATO) - Sotto soglia di {abs(result.delta_vs_min):.2f} Euro")
+                    st.error(f"BLOCCATO! SI PERDE SOLDI !!! - Sotto soglia di {abs(result.delta_vs_min):.2f} Euro")
         
         with col_c2:
             with st.expander("Finestra Temporale Promo", expanded=True):
@@ -516,51 +521,13 @@ if menu == "Simulatore Offerte":
                     sell_out_dal = st.date_input("Inizio Sell-Out", date.today(), key="so_dal")
                     sell_out_al = st.date_input("Fine Sell-Out", date.today(), key="so_al")
 
-# --- NUOVA TELEMETRIA WATERFALL PLOTLY ---
         st.markdown("---")
-        st.subheader("📊 Telemetria Margine (Waterfall Cascata)")
-        
-        # Estrazione dati per il grafico
-        listino_euro = float(contract.listino_r)
-        # Recuperiamo il netto in fattura in modo sicuro. Se il tuo result non ce l'ha espanso, lo peschiamo dai passaggi intermedi o usiamo il delta finale.
-        netto_fattura_euro = float(result.netto_in_fattura_2) if hasattr(result, 'netto_in_fattura_2') else float(result.net_net_finale) + float(result.contratto_tot_pfa/100) # Fallback di sicurezza
-        net_net_euro = float(result.net_net_finale)
-        
-        erosione_in_fattura = netto_fattura_euro - listino_euro
-        erosione_pfa = net_net_euro - netto_fattura_euro
-        
-        fig = go.Figure(go.Waterfall(
-            name="Pricing Margine",
-            orientation="v",
-            measure=["absolute", "relative", "total", "relative", "total"],
-            x=["Listino Base [R]", "Sconti/Oneri (Fattura)", "Netto in Fattura", "Premi (PFA)", "Net Net Finale"],
-            y=[listino_euro, erosione_in_fattura, netto_fattura_euro, erosione_pfa, net_net_euro],
-            textposition="outside",
-            text=[f"{listino_euro:.2f} €", f"{erosione_in_fattura:.2f} €", f"{netto_fattura_euro:.2f} €", f"{erosione_pfa:.2f} €", f"{net_net_euro:.2f} €"],
-            increasing={"marker": {"color": "#2E7D32"}}, 
-            decreasing={"marker": {"color": "#D32F2F"}}, 
-            totals={"marker": {"color": "#1A3E2F"}},     
-            connector={"line": {"color": "#E0E0E0", "width": 2}},
-            hovertemplate="<b>%{x}</b><br>Valore: %{y:.3f} €<extra></extra>"
-        ))
-
-        fig.update_layout(
-            margin=dict(l=20, r=20, t=30, b=20),
-            height=450,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            yaxis=dict(title="Valore Unitario (€)", tickformat=".2f"),
-            showlegend=False
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        # La tua vecchia tabella salvata nel bunker
-        with st.expander("🔍 Esplosione Dettagliata Variabili (Debug Commerciale)", expanded=False):
-            df_waterfall = pd.DataFrame([
-                {"Fase Pricing": step.fase, "Valore Unitario": step.valore, "Dettaglio Operazione": step.descrizione}
-                for step in result.steps
-            ])
-            st.dataframe(df_waterfall, use_container_width=True, hide_index=True)
+        st.subheader("Tabella Sequenziale Estesa della Struttura di Costo")
+        df_waterfall = pd.DataFrame([
+            {"Fase Pricing": step.fase, "Valore Unitario": step.valore, "Dettaglio Operazione": step.descrizione}
+            for step in result.steps
+        ])
+        st.dataframe(df_waterfall, use_container_width=True, hide_index=True)
 
         st.markdown("---")
         
@@ -714,7 +681,7 @@ if menu == "Simulatore Offerte":
         )
 
     conn.close()
-    
+
 # ==========================================
 # SCHEDA 2: DATI ANAGRAFICI (PRODOTTI E LOGISTICA)
 # ==========================================
@@ -1158,7 +1125,7 @@ elif menu == "Report Sintetico":
     contenitore_bench = st.container(border=True)
     with contenitore_bench:
         st.subheader("🔍 Benchmark Comparativo di Canale (Livello Sottogruppo)")
-        st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione logica.")
+        st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione logica. In fase di test mettere Sagra Ex.v. CLassico lt1")
         
         col_f1, col_f2 = st.columns(2)
         with col_f1:
@@ -1445,7 +1412,7 @@ else:
         *   *Calcolo:* $7,255 \\times (1 - 0,05) = 6,892 €$
         *   **PREZZO NET NET FINALE (AM):** **6,89 €**
         
-        > **Regola:** Se questo 6,89 € scende anche solo di un centesimo sotto la soglia di sicurezza **del minimo NET NET** registrata nel Back-Office per quell'EAN, l'applicazione avvisa **ROSSO (BLOCCATO)**.
+        > **Regola:** Se questo 6,89 € scende anche solo di un centesimo sotto la soglia di sicurezza **del minimo NET NET** registrata nel Back-Office per quell'EAN, l'applicazione avvisa ** BLOCCATO **.
         """)
         
     with st.expander("2. LA GERARCHIA DEI CONTRATTI: La Regola del 'Livello Superiore Comanda'", expanded=False):
