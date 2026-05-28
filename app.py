@@ -182,10 +182,6 @@ def init_db():
     conn.commit()
     conn.close()
     
-        seed_baseline_data(conn)
-    else:
-        conn.close()
-
 def seed_baseline_data(conn):
     cursor = conn.cursor()
     cursor.execute("DELETE FROM accordi_commerciali")
