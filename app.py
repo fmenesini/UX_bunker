@@ -56,7 +56,7 @@ st.markdown("""
         background-color: #FFFFFF;
         padding: 15px;
         border-radius: 8px;
-        border: 1px solid #E2E8F0;
+        border: 1px solid #EAEAEA;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         text-align: center;
     }
@@ -122,7 +122,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# INIZIALIZZAZIONE DATABASE (Logica Invariata)
+# INIZIALIZZAZIONE DATABASE
 # ==========================================
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -347,8 +347,7 @@ menu = st.sidebar.radio("", [
 if menu == "Simulatore Offerte":
     conn = sqlite3.connect(DB_FILE)
     
-    # --- HEADER CONTESTO (Spostato dalla sidebar per maggiore visibilità) ---
-    st.markdown("## Simulatore Offerte Commerciali")
+    st.markdown("## Commerciale Salov - Simulatore")
     
     cursor = conn.cursor()
     cursor.execute("SELECT DISTINCT gruppo_macro FROM clienti WHERE attivo=1 ORDER BY gruppo_macro")
@@ -358,23 +357,22 @@ if menu == "Simulatore Offerte":
         st.warning("ATTENZIONE: Nessun cliente caricato. Sblocca il sistema caricando i dati dal Back-Office.")
         st.stop()
 
-    # Box di selezione contesto
     with st.container(border=True):
         st.markdown("#### Contesto Negoziale")
         col_ctx1, col_ctx2, col_ctx3, col_ctx4 = st.columns(4)
         
         with col_ctx1:
-            gruppo_sel = st.selectbox("Gruppo GDO", gruppi)
+            gruppo_sel = st.selectbox("1. Gruppo GDO", gruppi, help="Seleziona la centrale d'acquisto.")
         
         cursor.execute("SELECT DISTINCT sottogruppo FROM clienti WHERE gruppo_macro=? AND attivo=1 ORDER BY sottogruppo", (gruppo_sel,))
         sottogruppi = [r[0] for r in cursor.fetchall()]
         with col_ctx2:
-            sottogruppo_sel = st.selectbox("Sottogruppo GDO", sottogruppi)
+            sottogruppo_sel = st.selectbox("2. Sottogruppo GDO", sottogruppi, help="Seleziona il sottogruppo di canale.")
         
         cursor.execute("SELECT DISTINCT associato_insegna FROM clienti WHERE gruppo_macro=? AND sottogruppo=? AND attivo=1 ORDER BY associato_insegna", (gruppo_sel, sottogruppo_sel))
         associati = [r[0] for r in cursor.fetchall()]
         with col_ctx3:
-            associato_sel = st.selectbox("Insegna Locale", associati)
+            associato_sel = st.selectbox("3. Insegna Locale", associati, help="Seleziona l'associato locale.")
 
         cursor.execute("""
             SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0), a.codice_sap, a.formato_lt,
@@ -385,16 +383,15 @@ if menu == "Simulatore Offerte":
         prodotti = cursor.fetchall()
         prodotti_dict = {f"{p[1]} [EAN: {p[0]}]": (p[0], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9]) for p in prodotti}
         with col_ctx4:
-            prodotto_scelto = st.selectbox("Referenza Salov", list(prodotti_dict.keys()))
+            prodotto_scelto = st.selectbox("4. Referenza Salov", list(prodotti_dict.keys()), help="Seleziona la referenza.")
         
     ean, tipo_olio, min_net_net_g, codice_sap, formato_lt, pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet = prodotti_dict[prodotto_scelto]
     contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, ean, tipo_olio)
 
     if contract.listino_r is None:
-        st.error("PRODOTTO FUORI ASSORTIMENTO PER QUESTO CLIENTE (Manca Listino R)")
+        st.error("ATTENZIONE: PRODOTTO FUORI ASSORTIMENTO PER QUESTO CLIENTE")
         st.stop()
 
-    # --- METRICHE PRINCIPALI (Sempre visibili in alto) ---
     col_m1, col_m2, col_m3 = st.columns(3)
     col_m1.metric("Listino Base (R)", f"€ {contract.listino_r:.2f}")
     col_m2.metric("Soglia Minima Net Net (G)", f"€ {min_net_net_g:.2f}")
@@ -402,12 +399,11 @@ if menu == "Simulatore Offerte":
 
     st.divider()
 
-    # --- METODOLOGIA E LEVE ---
     col_met1, col_met2 = st.columns([1, 1])
     with col_met1:
         st.markdown("#### Metodologia di Calcolo")
         metodo_lavoro = st.radio(
-            "Seleziona l'approccio:",
+            "Seleziona l'approccio negoziale:",
             ["A. Partenza da Prezzo Target (Calcolo automatico Sconto Promo)", "B. Tentativi Spot Manuali (Immissione Sconto Promo libera)"],
             horizontal=False,
             label_visibility="collapsed"
@@ -417,17 +413,17 @@ if menu == "Simulatore Offerte":
         if "A. Partenza" in metodo_lavoro:
             st.markdown("#### Obiettivo Economico")
             target_net_net = st.number_input(
-                "Prezzo Target Net Net Desiderato (€/Pz)", 
+                "PREZZO TARGET NET NET DESIDERATO (Euro/Pz)", 
                 min_value=0.0, 
                 value=float(min_net_net_g), 
-                step=0.10
+                step=0.10,
+                help="Fissa il ricavo reale netto a bottiglia (AM) che desideri ottenere. Di default è la soglia minima di sicurezza (G)."
             )
         else:
             target_net_net = 0.0
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # --- LEVE SCONTI E LIMITI (Allineati) ---
     col_l1, col_l2 = st.columns(2)
     
     with col_l1:
@@ -435,18 +431,21 @@ if menu == "Simulatore Offerte":
         with st.container(border=True):
             sconto_y = st.number_input("Sconto Continuativo Y (%)", min_value=0.0, max_value=100.0, value=float(contract.sconto_y), step=0.5)
             if contract.sconto_y > 0:
-                st.markdown(f"<div class='alert-box alert-warning'>Attenzione: Sconto Y deriva da accordo ({contract.sconto_y:.2f}%). Modificare con cautela.</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='alert-box alert-warning'>ATTENZIONE - UNO SCONTO CONTINUATIVO PUO' DERIVARE DA UN ACCORDO LOCALE - valore attuale: {contract.sconto_y:.2f}%<br><span style='font-size:0.8em; font-weight:normal;'>La modifica in corsa potrebbe violare tale accordo che va quindi ridiscusso prima di confermare la promozione.</span></div>", unsafe_allow_html=True)
             
             if "A. Partenza" in metodo_lavoro:
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
-                sconto_aa = st.number_input("Sconto Unitario in fattura (€/Pz) [AA]", min_value=0.0, value=0.0, step=0.05)
+                st.markdown("<h5 style='color: #1A3E2F; margin-bottom: 5px;'>Leva Promozionale Diretta</h5>", unsafe_allow_html=True)
+                st.markdown("<span style='font-size: 0.9em; color: #4B5563;'>In Modalità Target lo Sconto Z è automatico. Usa questo campo per forzare un taglio prezzo unitario in fattura.</span>", unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
+                sconto_aa = st.number_input("Sconto Unitario in fattura (Euro/Pz) [AA]", min_value=0.0, value=0.0, step=0.05)
             else:
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
+                st.markdown("**Leve Promozionali**")
                 sconto_z_input = st.number_input("Sconto Promozionale (%) [Z] (Manuale)", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
                 sconto_z = Decimal(f"{sconto_z_input:.5f}")
-                sconto_aa = st.number_input("Sconto Unitario in fattura (€/Pz) [AA]", min_value=0.0, value=0.0, step=0.05)
+                sconto_aa = st.number_input("Sconto Unitario in fattura (Euro/Pz) [AA]", min_value=0.0, value=0.0, step=0.05)
 
-    # Calcolo in background dello Sconto Z se siamo in Modalità A
     if "A. Partenza" in metodo_lavoro:
         target_dec = Decimal(f"{target_net_net:.5f}")
         temp_input = PricingInput(
@@ -472,8 +471,8 @@ if menu == "Simulatore Offerte":
                     min_net_net_g=Decimal(str(min_net_net_g))
                 )
                 z_max_consentito = PricingEngine.calculate_inverse(Decimal(str(min_net_net_g)), temp_input_max_z, "Z")
-                st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f")
-                st.markdown("<div style='height: 85px;'></div>", unsafe_allow_html=True) # Spaziatore per allineamento
+                st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f", help="Il massimo Sconto Z che puoi inserire (a parità di AA) prima di andare in blocco.")
+                st.markdown("<div style='height: 85px;'></div>", unsafe_allow_html=True) 
             else:
                 temp_input_max_z = PricingInput(
                     listino_r=contract.listino_r, sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
@@ -484,7 +483,7 @@ if menu == "Simulatore Offerte":
                     min_net_net_g=Decimal(str(min_net_net_g))
                 )
                 z_max_consentito = PricingEngine.calculate_inverse(Decimal(str(min_net_net_g)), temp_input_max_z, "Z")
-                st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f")
+                st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f", help="Il massimo Sconto Z che puoi inserire (a parità di AA) prima di andare in blocco.")
                 
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
                 
@@ -497,9 +496,8 @@ if menu == "Simulatore Offerte":
                     min_net_net_g=Decimal(str(min_net_net_g))
                 )
                 aa_max_consentito = PricingEngine.calculate_inverse(Decimal(str(min_net_net_g)), temp_input_max_aa, "AA")
-                st.number_input("Sconto Unitario MAX Consentito [AA]", value=float(aa_max_consentito), disabled=True, format="%.2f")
+                st.number_input("Sconto Unitario MAX Consentito [AA]", value=float(aa_max_consentito), disabled=True, format="%.2f", help="Il massimo Sconto AA in Euro che puoi inserire (a parità di Z) prima di andare in blocco.")
 
-    # Esecuzione Motore
     engine_input = PricingInput(
         listino_r=contract.listino_r, sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
         sconto_4=contract.sconto_4, sconto_5=contract.sconto_5, sconto_6=contract.sconto_6, sconto_7=contract.sconto_7,
@@ -512,29 +510,20 @@ if menu == "Simulatore Offerte":
 
     st.divider()
 
-    # --- RISULTATO FINALE (Dashboard Card) ---
     st.markdown("#### Risultato Simulazione")
     res_col1, res_col2 = st.columns([2, 1])
     
     with res_col1:
-        if result.guardrail_ok:
-            st.markdown(f"""
-            <div class='alert-box alert-success' style='padding: 20px; text-align: center;'>
-                <h2 style='color: #166534 !important; margin:0;'>€ {result.net_net_finale:.3f}</h2>
-                <strong>APPROVATO</strong> - Margine sicuro (Delta: +€ {result.delta_vs_min:.2f})
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class='alert-box alert-danger' style='padding: 20px; text-align: center;'>
-                <h2 style='color: #991B1B !important; margin:0;'>€ {result.net_net_finale:.3f}</h2>
-                <strong>BLOCCATO</strong> - Sotto soglia di € {abs(result.delta_vs_min):.2f}
-            </div>
-            """, unsafe_allow_html=True)
+        with st.expander("Verifica Margine e Stato (Contrattuale)", expanded=True):
+            st.metric("PREZZO NET NET RISULTANTE (AM)", f"{result.net_net_finale:.2f} Euro")
+            st.metric("SOGLIA MINIMA NET NET (G)", f"{min_net_net_g:.2f} Euro")
+            if result.guardrail_ok:
+                st.success(f"VERDE (APPROVATO) - Margine sicuro. Delta: +{result.delta_vs_min:.2f} Euro")
+            else:
+                st.error(f"BLOCCATO! SI PERDE SOLDI !!! - Sotto soglia di {abs(result.delta_vs_min):.2f} Euro")
             
     with res_col2:
-        with st.container(border=True):
-            st.markdown("**Date Validità**")
+        with st.expander("Finestra Temporale Promo", expanded=True):
             col_d1, col_d2 = st.columns(2)
             with col_d1:
                 sell_in_dal = st.date_input("Inizio Sell-In", date.today())
@@ -545,16 +534,15 @@ if menu == "Simulatore Offerte":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # --- CONTRIBUTI EXTRA (SELL-OUT) ---
     st.markdown("#### Contributi Promozionali Extra (Sell-Out)")
     with st.container(border=True):
         col_v1, col_v2, col_v3 = st.columns(3)
         with col_v1:
-            volumi_stimati = st.number_input("Volumi Stimati (Pezzi)", min_value=0, value=0, step=100)
+            volumi_stimati = st.number_input("Volumi Stimati (Pezzi)", min_value=0, value=0, step=100, help="Numero di bottiglie previste per la promo.")
         with col_v2:
-            contributo_fisso = st.number_input("Contributo Fisso Totale (€)", min_value=0.0, value=0.0, step=50.0)
+            contributo_fisso = st.number_input("Contributo Fisso Totale (€)", min_value=0.0, value=0.0, step=50.0, help="Es. Costo testata gondola, inserimento volantino.")
         with col_v3:
-            contributo_pezzo = st.number_input("Contributo a Pezzo (€/Pz)", min_value=0.0, value=0.0, step=0.05)
+            contributo_pezzo = st.number_input("Contributo a Pezzo (€/Pz)", min_value=0.0, value=0.0, step=0.05, help="Es. Contributo di 0.10€ per ogni pezzo venduto in cassa.")
 
         costo_totale_extra = contributo_fisso + (contributo_pezzo * volumi_stimati)
         impatto_unitario_extra = Decimal("0.00")
@@ -576,7 +564,6 @@ if menu == "Simulatore Offerte":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # --- WATERFALL TABLE ---
     st.markdown("#### Struttura di Costo (Waterfall)")
     waterfall_data = [{"Fase Pricing": step.fase, "Valore Unitario": step.valore, "Dettaglio Operazione": step.descrizione} for step in result.steps]
     if mostra_impatto:
@@ -586,7 +573,6 @@ if menu == "Simulatore Offerte":
 
     st.divider()
     
-    # --- SALVATAGGIO E EXPORT ---
     col_act1, col_act2 = st.columns(2)
     
     with col_act1:
@@ -1236,6 +1222,7 @@ elif menu == "Back-Office (Contratti)":
                             st.error(f"Errore durante l'importazione: {e}")
 
     with tab_guardrail:
+        st.markdown("Questa tabella è isolata dall'anagrafica logistica. Modifica qui i limiti minimi di margine per ogni referenza.")
         with st.container(border=True):
             st.markdown("#### Modifica Diretta Guardrail")
             
@@ -1322,7 +1309,7 @@ elif menu == "Back-Office (Contratti)":
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     with st.container(border=True):
-        st.markdown("<h4 style='color: #991B1B;'>Danger Zone</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color: #991B1B;'>Sezione Pericolo (Danger Zone)</h4>", unsafe_allow_html=True)
         if PRODUCTION_MODE:
             st.info("Modalità Production: Ripristino demo disattivato.")
         else:
@@ -1370,6 +1357,7 @@ elif menu == "Report Sintetico":
     
     with st.container(border=True):
         st.markdown("#### Benchmark Comparativo di Canale (Livello Sottogruppo)")
+        st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione logica. In fase di test mettere Sagra Ex.v. CLassico lt1")
         
         col_f1, col_f2 = st.columns(2)
         with col_f1:
@@ -1569,8 +1557,7 @@ else:
     st.title("Manuale d'Istruzione")
     st.markdown("### Guida per la Gestione della Marginalità Salov")
     
-    with st.container(border=True):
-        st.markdown("#### 1. IL MOTORE DI PRICING: La Cascata Sequenziale")
+    with st.expander("1. IL MOTORE DI PRICING: La Cascata Sequenziale (Esempio Numerico)", expanded=True):
         st.markdown("""
         Il simulatore non esegue mai la somma algebrica degli sconti (es. 10% + 5% non fa 15%). Il calcolo segue una **cascata geometrica sequenziale** in cui ogni sconto si applica sul risultato del passaggio precedente.
         
@@ -1588,10 +1575,11 @@ else:
         Se il totale dei PFA è del **5,00%**, il sistema calcola la trattenuta finale:
         *   *Calcolo:* $7,255 \\times (1 - 0,05) = 6,892 €$
         *   **PREZZO NET NET FINALE (AM):** **6,89 €**
+        
+        > **Regola:** Se questo 6,89 € scende anche solo di un centesimo sotto la soglia di sicurezza **del minimo NET NET** registrata nel Back-Office per quell'EAN, l'applicazione avvisa ** BLOCCATO **.
         """)
         
-    with st.container(border=True):
-        st.markdown("#### 2. LA GERARCHIA DEI CONTRATTI: La Regola del 'Livello Superiore Comanda'")
+    with st.expander("2. LA GERARCHIA DEI CONTRATTI: La Regola del 'Livello Superiore Comanda'", expanded=False):
         st.markdown("""
         L'applicazione utilizza un motore di risoluzione a 5 livelli. A differenza dei sistemi tradizionali, qui vige la regola del **Blocco Gerarchico (Top-Down)**: se un livello superiore definisce uno sconto, i livelli inferiori NON possono sovrascriverlo.
         
@@ -1601,20 +1589,51 @@ else:
         3. **CATEGORIA** (es. *EXTRAVERGINE*) ➔ Comanda su Insegna e Referenza, ma subisce le regole di Gruppo e Sottogruppo.
         4. **ASSOCIATO / INSEGNA** (es. *ALLEANZA 3.0*) ➔ Regole locali. Non possono sovrascrivere la Categoria o i Gruppi.
         5. **REFERENZA (EAN)** ➔ Il livello più basso. Definisce il Listino Base (R) e sconti specifici solo se nessun livello superiore li ha già bloccati.
+        
+        **Come gestire i campi in Tabella (Casi Reali):**
+        
+        *   **Caso A: Il Blocco della Centrale (Nessuna Sovrascrittura)**
+            Se il Gruppo COOP ITALIA fissa lo Sconto 1 al **10%**, anche se per sbaglio inserisci 15% sulla singola Referenza, il sistema ignorerà il 15% e manterrà il 10%. Il livello superiore vince sempre.
+            
+        *   **Caso B: L'Ereditarietà (La Cella Vuota)**
+            Se il Gruppo lascia lo Sconto 6 vuoto (NULL), il Sottogruppo o l'Insegna sono liberi di valorizzarlo. Il primo livello (partendo dall'alto) che inserisce un valore, lo blocca per tutti i livelli sottostanti.
+            
+        *   **Caso C: Il Fuori Assortimento**
+            Il Listino Base (R) si inserisce quasi sempre al livello 5 (Referenza). Se manca, il prodotto risulta "Fuori Assortimento" e non può essere simulato.
         """)
 
-    with st.container(border=True):
-        st.markdown("#### 3. LE DUE MODALITÀ DI LAVORO: Target vs Manuale Spot")
+    with st.expander("3. LE DUE MODALITÀ DI LAVORO: Target vs Manuale Spot", expanded=False):
         st.markdown("""
+        Nella scheda principale puoi scegliere due modi diversi di attaccare il pricing a seconda di cosa stai discutendo con il buyer della GDO:
+        
         **Modalità A: Partenza da Prezzo Target (Consigliata)**
         La usi quando il buyer ti dice: *"Voglio vendere la bottiglia a scaffale a questo prezzo, quindi a te la pago esattamente X"*.
         1. Seleziona la modalità **A**.
         2. Inserisci nel campo il prezzo richiesto dal cliente.
         3. Il motore calcola istantaneamente al millesimo lo **Sconto Promozionale Z (%)** necessario per arrivare a quel prezzo.
+        4. Se il target inserito fa scendere la marginalità sotto la soglia di sicurezza, il sistema calcolerà comunque lo sconto ma ti avviserà del blocco.
         
         **Modalità B: Tentativi Spot Manuali (Uso Libero)**
         La usi per fare simulazioni classiche o per testare scenari "Cosa succede se...".
         1. Seleziona la modalità **B**.
         2. Muovi manualmente lo Sconto Promozionale Z o lo Sconto AA.
         3. Tieni d'occhio i campi **Sconto Promo MAX Consentito [Z]** e **Sconto Unitario MAX Consentito [AA]**: ti indicano esattamente fino a dove puoi spingerti prima che il semaforo passi da Verde a Rosso.
+        """)
+
+    with st.expander("4. BACK-OFFICE ED EXCEL: Come Aggiornare i Dati in Sicurezza", expanded=False):
+        st.markdown("""
+        L'applicazione si alimenta con i dati reali delle anagrafiche e dei contratti. Puoi fare manutenzione in due modi:
+        
+        **Variante 1: Modifiche rapide "a caldo" direttamente a schermo**
+        1. Vai su **Back-Office (Contratti)** o **Dati Anagrafici**.
+        2. Fai doppio clic sulla cella che vuoi modificare all'interno della griglia dati.
+        3. Digita il nuovo valore (es. cambia un listino o modifica un PFA).
+        4. Clicca sul pulsante **SALVA MODIFICHE** per rendere la modifica operativa immediatamente su tutto il simulatore.
+        
+        **Variante 2: Caricamento Massivo in Excel (Operazioni Pesanti)**
+        Se devi aggiornare l'intero piano contrattuale annuale:
+        1. Clicca su **Scarica Template Contratti (Excel)** per avere il backup completo del database attuale.
+        2. Lavora i dati comodamente sul tuo Excel aziendale.
+        3. ** ATTENZIONE AI CODICI EAN ** Excel tende a trasformare i codici a 13 cifre in numeri scientifici (es. `800221E+12`). Prima di salvare, assicurati che la colonna **EAN** e **CHIAVE_LIVELLO** siano formattate esplicitamente come **TESTO**, altrimenti l'importazione corromperà l'anagrafica impedendo al simulatore di riconoscere i prodotti.
+        4. Trascina il file salvato nel box di importazione e clicca su **Conferma Scrittura**.
         """)
