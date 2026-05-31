@@ -1618,4 +1618,3 @@ else:
         2. Muovi manualmente lo Sconto Promozionale Z o lo Sconto AA.
         3. Tieni d'occhio i campi **Sconto Promo MAX Consentito [Z]** e **Sconto Unitario MAX Consentito [AA]**: ti indicano esattamente fino a dove puoi spingerti prima che il semaforo passi da Verde a Rosso.
         """)
-`
