@@ -775,15 +775,15 @@ if menu == "Simulatore Offerte":
 
     conn.close()
 
+#  ==========================================
+# NUOVA SCHEDA: SIMULAZIONE RINNOVI (N vs N+1)
 # ==========================================
-# NUOVA SCHEDA: SIMULAZIONE RINNOVI (SUB-CATEGORIE)
-# ==========================================
-elif menu == "Simulazione Rinnovi (Sub-Categorie)":
+elif menu == "Simulazione Rinnovi (N vs N+1)":
     import modulo_rinnovi
     modulo_rinnovi.render_simulazione_rinnovi()
-# ==========================================
 
-# NUOVA SCHEDA: STORICO PROMOZIONI
+# ==========================================
+# SCHEDA: STORICO PROMOZIONI
 # ==========================================
 elif menu == "Storico Promozioni":
     st.title("Storico Promozioni (CRM Commerciale)")
