@@ -330,7 +330,6 @@ def seed_baseline_data(conn):
 init_db()
 
 # Menu di navigazione laterale
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/1200px-Python-logo-notext.svg.png", width=50) # Placeholder logo
 st.sidebar.markdown("## Menu Principale")
 menu = st.sidebar.radio("", [
     "Simulatore Offerte", 
@@ -779,11 +778,38 @@ if menu == "Simulatore Offerte":
 # NUOVA SCHEDA: SIMULAZIONE RINNOVI (N vs N+1)
 # ==========================================
 elif menu == "Simulazione Rinnovi (N vs N+1)":
-    st.title("🔄 Simulazione Rinnovi Contrattuali (N vs N+1)")
+    st.title("Simulazione Rinnovi Contrattuali (N vs N+1)")
     st.markdown("Analisi differenziale dei margini, calcolo dello Spazio Promo e Roll-up per Sub-Categorie.")
     
     anno_corrente = date.today().year
+    conn = sqlite3.connect(DB_FILE)
     
+    st.markdown("#### 1. Contesto di Riferimento (Pre-compilazione Anno N)")
+    st.markdown("Seleziona il cliente per pre-caricare automaticamente i listini e gli sconti attualmente in vigore (Anno N).")
+    
+    with st.container(border=True):
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT gruppo_macro FROM clienti WHERE attivo=1 ORDER BY gruppo_macro")
+        gruppi = [r[0] for r in cursor.fetchall()]
+        
+        col_ctx1, col_ctx2, col_ctx3 = st.columns(3)
+        with col_ctx1:
+            gruppo_sel = st.selectbox("Gruppo GDO", ["Nessuno"] + gruppi)
+        
+        sottogruppi = []
+        if gruppo_sel != "Nessuno":
+            cursor.execute("SELECT DISTINCT sottogruppo FROM clienti WHERE gruppo_macro=? AND attivo=1 ORDER BY sottogruppo", (gruppo_sel,))
+            sottogruppi = [r[0] for r in cursor.fetchall()]
+        with col_ctx2:
+            sottogruppo_sel = st.selectbox("Sottogruppo GDO", [""] + sottogruppi if gruppo_sel != "Nessuno" else [""])
+            
+        associati = []
+        if gruppo_sel != "Nessuno":
+            cursor.execute("SELECT DISTINCT associato_insegna FROM clienti WHERE gruppo_macro=? AND sottogruppo=? AND attivo=1 ORDER BY associato_insegna", (gruppo_sel, sottogruppo_sel))
+            associati = [r[0] for r in cursor.fetchall()]
+        with col_ctx3:
+            associato_sel = st.selectbox("Insegna Locale", [""] + associati if gruppo_sel != "Nessuno" else [""])
+
     with st.container(border=True):
         col_s1, col_s2 = st.columns([1, 3])
         with col_s1:
@@ -791,14 +817,12 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
         with col_s2:
             st.info(f"**Anno N (Attuale):** {anno_corrente} | **Anno N+1 (Rinnovo):** {anno_corrente + 1}")
 
-    conn = sqlite3.connect(DB_FILE)
     query = """
         SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0) as min_net_net_g
         FROM anagrafica_master a
         LEFT JOIN guardrail_aziendali g ON a.ean = g.ean
     """
     df_base = pd.read_sql_query(query, conn)
-    conn.close()
     
     def get_subcat(row):
         desc = str(row['descrizione_commerciale']).upper()
@@ -834,20 +858,59 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
     for col in operative_cols:
         df_base[col] = 0.0 if '€' in col or '%' in col else 0
 
+    if gruppo_sel != "Nessuno":
+        for idx, row in df_base.iterrows():
+            contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
+            if contract.listino_r is not None:
+                df_base.at[idx, '[N] Listino €'] = float(contract.listino_r)
+                
+                p = contract.listino_r
+                for s in [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5, contract.sconto_6, contract.sconto_7, contract.sconto_y, contract.sconto_carico, contract.sconto_pagamento]:
+                    p = p * (Decimal('1') - (s / Decimal('100')))
+                
+                if contract.listino_r > 0:
+                    sc_fatt_eq = (Decimal('1') - (p / contract.listino_r)) * Decimal('100')
+                    df_base.at[idx, '[N] Sc. Fattura %'] = float(sc_fatt_eq.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                
+                pfa_tot = contract.voce_i + contract.voce_ii + contract.voce_iii + contract.voce_iv + contract.voce_v
+                df_base.at[idx, '[N] PFA %'] = float(pfa_tot)
+
+    conn.close()
+
     tab_storico, tab_simulazione, tab_risultati = st.tabs([
-        "📅 1. Dati Storici", 
-        "⚙️ 2. Simulazione N vs N+1", 
-        "📊 3. Analisi & Spazio Promo"
+        "2. Dati Storici", 
+        "3. Simulazione N vs N+1", 
+        "4. Analisi & Spazio Promo"
     ])
     
     with tab_storico:
         st.markdown("#### Inserimento Net-Net Storici (Opzionale)")
         st.markdown("Inserisci i valori net-net degli anni passati per avere un riferimento durante la trattativa.")
+        
         if anni_storico > 0:
-            cols_to_show = ['Sub-Categoria', 'Prodotto'] + storico_cols
+            col_up1, col_up2 = st.columns(2)
+            with col_up1:
+                with st.container(border=True):
+                    st.markdown("**Esporta Template Storico**")
+                    buf_storico = io.BytesIO()
+                    df_base[['ean', 'Sub-Categoria', 'Prodotto'] + storico_cols].to_excel(buf_storico, index=False)
+                    st.download_button("Scarica Tabella Storico", buf_storico.getvalue(), "Template_Storico.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            with col_up2:
+                with st.container(border=True):
+                    st.markdown("**Importa Dati Storici**")
+                    up_storico = st.file_uploader("Carica Excel Storico", type=['xlsx'], key="up_storico")
+                    if up_storico:
+                        df_up_storico = pd.read_excel(up_storico, dtype={'ean': str})
+                        df_up_storico['ean'] = df_up_storico['ean'].astype(str).str.zfill(13)
+                        for col in storico_cols:
+                            if col in df_up_storico.columns:
+                                mapping = df_up_storico.set_index('ean')[col].to_dict()
+                                df_base[col] = df_base['ean'].map(mapping).fillna(df_base[col])
+
+            cols_to_show = ['ean', 'Sub-Categoria', 'Prodotto'] + storico_cols
             df_storico_edited = st.data_editor(
                 df_base[cols_to_show],
-                disabled=['Sub-Categoria', 'Prodotto'],
+                disabled=['ean', 'Sub-Categoria', 'Prodotto'],
                 hide_index=True,
                 use_container_width=True,
                 key="editor_storico"
@@ -861,7 +924,27 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
         st.markdown("#### Griglia di Simulazione Contrattuale")
         st.markdown("Inserisci i dati per l'anno in corso [N] e per il rinnovo [N+1]. **Verranno analizzate solo le referenze con Volumi [N+1] > 0.**")
         
+        col_up3, col_up4 = st.columns(2)
+        with col_up3:
+            with st.container(border=True):
+                st.markdown("**Esporta Template Simulazione**")
+                buf_sim = io.BytesIO()
+                df_base[['ean', 'Sub-Categoria', 'Prodotto', 'Floor Minimo €'] + operative_cols].to_excel(buf_sim, index=False)
+                st.download_button("Scarica Tabella Simulazione", buf_sim.getvalue(), "Template_Simulazione.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        with col_up4:
+            with st.container(border=True):
+                st.markdown("**Importa Dati Simulazione**")
+                up_sim = st.file_uploader("Carica Excel Simulazione", type=['xlsx'], key="up_sim")
+                if up_sim:
+                    df_up_sim = pd.read_excel(up_sim, dtype={'ean': str})
+                    df_up_sim['ean'] = df_up_sim['ean'].astype(str).str.zfill(13)
+                    for col in operative_cols:
+                        if col in df_up_sim.columns:
+                            mapping = df_up_sim.set_index('ean')[col].to_dict()
+                            df_base[col] = df_base['ean'].map(mapping).fillna(df_base[col])
+
         col_config = {
+            "ean": st.column_config.TextColumn("EAN", disabled=True),
             "Sub-Categoria": st.column_config.TextColumn(disabled=True),
             "Prodotto": st.column_config.TextColumn(disabled=True),
             "Floor Minimo €": st.column_config.NumberColumn(format="€ %.2f", disabled=True),
@@ -875,7 +958,7 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
             "[N+1] PFA %": st.column_config.NumberColumn(format="%.2f %%", step=0.5),
         }
         
-        cols_to_edit = ['Sub-Categoria', 'Prodotto', 'Floor Minimo €'] + operative_cols
+        cols_to_edit = ['ean', 'Sub-Categoria', 'Prodotto', 'Floor Minimo €'] + operative_cols
         
         df_sim_edited = st.data_editor(
             df_base[cols_to_edit],
