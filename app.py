@@ -7,6 +7,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date
 import logging
+import modulo_rinnovi
 
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
