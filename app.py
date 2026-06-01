@@ -780,6 +780,13 @@ if menu == "Simulatore Offerte":
     conn.close()
 
 # ==========================================
+# NUOVA SCHEDA: SIMULAZIONE RINNOVI (SUB-CATEGORIE)
+# ==========================================
+elif menu == "Simulazione Rinnovi (Sub-Categorie)":
+    import modulo_rinnovi
+    modulo_rinnovi.render_simulazione_rinnovi()
+# ==========================================
+
 # NUOVA SCHEDA: STORICO PROMOZIONI
 # ==========================================
 elif menu == "Storico Promozioni":
