@@ -7,6 +7,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date
 import logging
+import random
 
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
@@ -792,7 +793,7 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
         cursor.execute("SELECT DISTINCT gruppo_macro FROM clienti WHERE attivo=1 ORDER BY gruppo_macro")
         gruppi = [r[0] for r in cursor.fetchall()]
         
-        col_ctx1, col_ctx2, col_ctx3 = st.columns(3)
+        col_ctx1, col_ctx2 = st.columns(2)
         with col_ctx1:
             gruppo_sel = st.selectbox("Gruppo GDO", ["Nessuno"] + gruppi)
         
@@ -803,12 +804,7 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
         with col_ctx2:
             sottogruppo_sel = st.selectbox("Sottogruppo GDO", [""] + sottogruppi if gruppo_sel != "Nessuno" else [""])
             
-        associati = []
-        if gruppo_sel != "Nessuno":
-            cursor.execute("SELECT DISTINCT associato_insegna FROM clienti WHERE gruppo_macro=? AND sottogruppo=? AND attivo=1 ORDER BY associato_insegna", (gruppo_sel, sottogruppo_sel))
-            associati = [r[0] for r in cursor.fetchall()]
-        with col_ctx3:
-            associato_sel = st.selectbox("Insegna Locale", [""] + associati if gruppo_sel != "Nessuno" else [""])
+        associato_sel = "" # Fermo al sottogruppo
 
     with st.container(border=True):
         col_s1, col_s2 = st.columns([1, 3])
@@ -843,7 +839,7 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
         return 'Altro'
         
     df_base['Sub-Categoria'] = df_base.apply(get_subcat, axis=1)
-    df_base = df_base.rename(columns={'descrizione_commerciale': 'Prodotto', 'min_net_net_g': 'Floor Minimo €'})
+    df_base = df_base.rename(columns={'descrizione_commerciale': 'Prodotto', 'min_net_net_g': 'Minimo Net Net €'})
     
     storico_cols = []
     for i in range(anni_storico, 0, -1):
@@ -858,22 +854,49 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
     for col in operative_cols:
         df_base[col] = 0.0 if '€' in col or '%' in col else 0
 
-    if gruppo_sel != "Nessuno":
-        for idx, row in df_base.iterrows():
-            contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
-            if contract.listino_r is not None:
-                df_base.at[idx, '[N] Listino €'] = float(contract.listino_r)
-                
-                p = contract.listino_r
-                for s in [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5, contract.sconto_6, contract.sconto_7, contract.sconto_y, contract.sconto_carico, contract.sconto_pagamento]:
-                    p = p * (Decimal('1') - (s / Decimal('100')))
-                
-                if contract.listino_r > 0:
-                    sc_fatt_eq = (Decimal('1') - (p / contract.listino_r)) * Decimal('100')
-                    df_base.at[idx, '[N] Sc. Fattura %'] = float(sc_fatt_eq.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-                
-                pfa_tot = contract.voce_i + contract.voce_ii + contract.voce_iii + contract.voce_iv + contract.voce_v
-                df_base.at[idx, '[N] PFA %'] = float(pfa_tot)
+    # Inizializzazione Session State per la griglia
+    if 'rinnovi_df' not in st.session_state:
+        st.session_state.rinnovi_df = df_base.copy()
+
+    # --- PULSANTI AZIONE ---
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("🔄 Carica Condizioni Attuali da DB", use_container_width=True):
+            if gruppo_sel != "Nessuno":
+                df_temp = st.session_state.rinnovi_df.copy()
+                for idx, row in df_temp.iterrows():
+                    contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
+                    if contract.listino_r is not None:
+                        df_temp.at[idx, '[N] Listino €'] = float(contract.listino_r)
+                        p = contract.listino_r
+                        for s in [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5, contract.sconto_6, contract.sconto_7, contract.sconto_y, contract.sconto_carico, contract.sconto_pagamento]:
+                            p = p * (Decimal('1') - (s / Decimal('100')))
+                        if contract.listino_r > 0:
+                            sc_fatt_eq = (Decimal('1') - (p / contract.listino_r)) * Decimal('100')
+                            df_temp.at[idx, '[N] Sc. Fattura %'] = float(sc_fatt_eq.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                        pfa_tot = contract.voce_i + contract.voce_ii + contract.voce_iii + contract.voce_iv + contract.voce_v
+                        df_temp.at[idx, '[N] PFA %'] = float(pfa_tot)
+                st.session_state.rinnovi_df = df_temp
+                st.rerun()
+            else:
+                st.warning("Seleziona un Gruppo GDO prima di caricare i dati.")
+
+    with col_btn2:
+        if st.button("🪄 Popola con Dati di Test (Mock Data)", use_container_width=True):
+            df_mock = st.session_state.rinnovi_df.copy()
+            for idx, row in df_mock.iterrows():
+                floor = row['Minimo Net Net €'] if row['Minimo Net Net €'] > 0 else 3.0
+                vol = random.randint(5, 50) * 100
+                df_mock.at[idx, '[N] Volumi'] = vol
+                df_mock.at[idx, '[N] Listino €'] = float(round(floor * 1.6, 2))
+                df_mock.at[idx, '[N] Sc. Fattura %'] = 15.0
+                df_mock.at[idx, '[N] PFA %'] = 5.0
+                df_mock.at[idx, '[N+1] Volumi'] = int(vol * 1.05)
+                df_mock.at[idx, '[N+1] Listino €'] = float(round(floor * 1.7, 2))
+                df_mock.at[idx, '[N+1] Sc. Fattura %'] = 16.0
+                df_mock.at[idx, '[N+1] PFA %'] = 5.5
+            st.session_state.rinnovi_df = df_mock
+            st.rerun()
 
     conn.close()
 
@@ -893,7 +916,7 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
                 with st.container(border=True):
                     st.markdown("**Esporta Template Storico**")
                     buf_storico = io.BytesIO()
-                    df_base[['ean', 'Sub-Categoria', 'Prodotto'] + storico_cols].to_excel(buf_storico, index=False)
+                    st.session_state.rinnovi_df[['ean', 'Sub-Categoria', 'Prodotto'] + storico_cols].to_excel(buf_storico, index=False)
                     st.download_button("Scarica Tabella Storico", buf_storico.getvalue(), "Template_Storico.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             with col_up2:
                 with st.container(border=True):
@@ -902,21 +925,24 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
                     if up_storico:
                         df_up_storico = pd.read_excel(up_storico, dtype={'ean': str})
                         df_up_storico['ean'] = df_up_storico['ean'].astype(str).str.zfill(13)
+                        df_temp = st.session_state.rinnovi_df.copy()
                         for col in storico_cols:
                             if col in df_up_storico.columns:
                                 mapping = df_up_storico.set_index('ean')[col].to_dict()
-                                df_base[col] = df_base['ean'].map(mapping).fillna(df_base[col])
+                                df_temp[col] = df_temp['ean'].map(mapping).fillna(df_temp[col])
+                        st.session_state.rinnovi_df = df_temp
+                        st.rerun()
 
             cols_to_show = ['ean', 'Sub-Categoria', 'Prodotto'] + storico_cols
             df_storico_edited = st.data_editor(
-                df_base[cols_to_show],
+                st.session_state.rinnovi_df[cols_to_show],
                 disabled=['ean', 'Sub-Categoria', 'Prodotto'],
                 hide_index=True,
                 use_container_width=True,
                 key="editor_storico"
             )
             for col in storico_cols:
-                df_base[col] = df_storico_edited[col]
+                st.session_state.rinnovi_df[col] = df_storico_edited[col]
         else:
             st.info("Hai scelto di non visualizzare lo storico. Vai alla scheda Simulazione.")
 
@@ -929,7 +955,7 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
             with st.container(border=True):
                 st.markdown("**Esporta Template Simulazione**")
                 buf_sim = io.BytesIO()
-                df_base[['ean', 'Sub-Categoria', 'Prodotto', 'Floor Minimo €'] + operative_cols].to_excel(buf_sim, index=False)
+                st.session_state.rinnovi_df[['ean', 'Sub-Categoria', 'Prodotto', 'Minimo Net Net €'] + operative_cols].to_excel(buf_sim, index=False)
                 st.download_button("Scarica Tabella Simulazione", buf_sim.getvalue(), "Template_Simulazione.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         with col_up4:
             with st.container(border=True):
@@ -938,16 +964,34 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
                 if up_sim:
                     df_up_sim = pd.read_excel(up_sim, dtype={'ean': str})
                     df_up_sim['ean'] = df_up_sim['ean'].astype(str).str.zfill(13)
+                    df_temp = st.session_state.rinnovi_df.copy()
                     for col in operative_cols:
                         if col in df_up_sim.columns:
                             mapping = df_up_sim.set_index('ean')[col].to_dict()
-                            df_base[col] = df_base['ean'].map(mapping).fillna(df_base[col])
+                            df_temp[col] = df_temp['ean'].map(mapping).fillna(df_temp[col])
+                    st.session_state.rinnovi_df = df_temp
+                    st.rerun()
+
+        # Calcoli Live per la griglia
+        df_display = st.session_state.rinnovi_df.copy()
+        df_display['Net Net [N] €'] = df_display['[N] Listino €'] * (1 - df_display['[N] Sc. Fattura %']/100) * (1 - df_display['[N] PFA %']/100)
+        df_display['Net Net [N+1] €'] = df_display['[N+1] Listino €'] * (1 - df_display['[N+1] Sc. Fattura %']/100) * (1 - df_display['[N+1] PFA %']/100)
+        df_display['Delta Assoluto €'] = df_display['Net Net [N+1] €'] - df_display['Net Net [N] €']
+        
+        def calc_max_promo(row):
+            nn_base = row['Net Net [N+1] €']
+            floor = row['Minimo Net Net €']
+            if nn_base > 0 and nn_base > floor:
+                return (1 - (floor / nn_base)) * 100
+            return 0.0
+            
+        df_display['Sc. Promo MAX [N+1] %'] = df_display.apply(calc_max_promo, axis=1)
 
         col_config = {
             "ean": st.column_config.TextColumn("EAN", disabled=True),
             "Sub-Categoria": st.column_config.TextColumn(disabled=True),
             "Prodotto": st.column_config.TextColumn(disabled=True),
-            "Floor Minimo €": st.column_config.NumberColumn(format="€ %.2f", disabled=True),
+            "Minimo Net Net €": st.column_config.NumberColumn(format="€ %.2f", disabled=True),
             "[N] Volumi": st.column_config.NumberColumn(step=100),
             "[N] Listino €": st.column_config.NumberColumn(format="€ %.2f", step=0.1),
             "[N] Sc. Fattura %": st.column_config.NumberColumn(format="%.2f %%", step=0.5),
@@ -956,35 +1000,38 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
             "[N+1] Listino €": st.column_config.NumberColumn(format="€ %.2f", step=0.1),
             "[N+1] Sc. Fattura %": st.column_config.NumberColumn(format="%.2f %%", step=0.5),
             "[N+1] PFA %": st.column_config.NumberColumn(format="%.2f %%", step=0.5),
+            "Net Net [N] €": st.column_config.NumberColumn(format="€ %.3f", disabled=True),
+            "Net Net [N+1] €": st.column_config.NumberColumn(format="€ %.3f", disabled=True),
+            "Delta Assoluto €": st.column_config.NumberColumn(format="€ %+.3f", disabled=True),
+            "Sc. Promo MAX [N+1] %": st.column_config.NumberColumn(format="%.2f %%", disabled=True),
         }
         
-        cols_to_edit = ['ean', 'Sub-Categoria', 'Prodotto', 'Floor Minimo €'] + operative_cols
+        cols_to_edit = ['ean', 'Sub-Categoria', 'Prodotto', 'Minimo Net Net €'] + operative_cols + ['Net Net [N] €', 'Net Net [N+1] €', 'Delta Assoluto €', 'Sc. Promo MAX [N+1] %']
         
         df_sim_edited = st.data_editor(
-            df_base[cols_to_edit],
+            df_display[cols_to_edit],
             column_config=col_config,
             hide_index=True,
             use_container_width=True,
             height=600,
             key="editor_simulazione"
         )
+        
+        # Salviamo solo le colonne editabili nel session state
+        for col in operative_cols:
+            st.session_state.rinnovi_df[col] = df_sim_edited[col]
 
     with tab_risultati:
-        df_active = df_sim_edited[df_sim_edited['[N+1] Volumi'] > 0].copy()
+        df_active = df_display[df_display['[N+1] Volumi'] > 0].copy()
         
         if df_active.empty:
             st.warning("Nessuna referenza attiva. Inserisci dei volumi nella colonna '[N+1] Volumi' nella scheda precedente.")
         else:
-            df_active['Net_Net_N'] = df_active['[N] Listino €'] * (1 - (df_active['[N] Sc. Fattura %'] / 100)) * (1 - (df_active['[N] PFA %'] / 100))
-            df_active['Fatturato_N'] = df_active['Net_Net_N'] * df_active['[N] Volumi']
-            
-            df_active['Net_Net_N1'] = df_active['[N+1] Listino €'] * (1 - (df_active['[N+1] Sc. Fattura %'] / 100)) * (1 - (df_active['[N+1] PFA %'] / 100))
-            df_active['Fatturato_N1'] = df_active['Net_Net_N1'] * df_active['[N+1] Volumi']
-            
-            df_active['Delta_Net_Net_€'] = df_active['Net_Net_N1'] - df_active['Net_Net_N']
-            df_active['Spazio_Promo_€'] = df_active['Net_Net_N1'] - df_active['Floor Minimo €']
-            df_active['Allarme_SKU'] = df_active['Net_Net_N1'] < df_active['Floor Minimo €']
-            df_active['Valore_Floor_Totale_N1'] = df_active['Floor Minimo €'] * df_active['[N+1] Volumi']
+            df_active['Fatturato_N'] = df_active['Net Net [N] €'] * df_active['[N] Volumi']
+            df_active['Fatturato_N1'] = df_active['Net Net [N+1] €'] * df_active['[N+1] Volumi']
+            df_active['Valore_Floor_Totale_N1'] = df_active['Minimo Net Net €'] * df_active['[N+1] Volumi']
+            df_active['Allarme_SKU'] = df_active['Net Net [N+1] €'] < df_active['Minimo Net Net €']
+            df_active['Delta_Net_Net_%'] = df_active.apply(lambda x: ((x['Net Net [N+1] €'] - x['Net Net [N] €']) / x['Net Net [N] €'] * 100) if x['Net Net [N] €'] > 0 else 0, axis=1)
             
             df_subcat = df_active.groupby('Sub-Categoria').agg(
                 Volumi_N=('[N] Volumi', 'sum'),
@@ -998,21 +1045,21 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
             df_subcat['Net_Net_Pond_N1'] = df_subcat.apply(lambda x: x['Fatturato_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
             df_subcat['Floor_Pond_N1'] = df_subcat.apply(lambda x: x['Valore_Floor_Totale_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
             
-            df_subcat['Delta_Pond_€'] = df_subcat['Net_Net_Pond_N1'] - df_subcat['Net_Net_Pond_N']
-            df_subcat['Spazio_Promo_Pond_€'] = df_subcat['Net_Net_Pond_N1'] - df_subcat['Floor_Pond_N1']
+            df_subcat['Delta_Pond_%'] = df_subcat.apply(lambda x: ((x['Net_Net_Pond_N1'] - x['Net_Net_Pond_N']) / x['Net_Net_Pond_N'] * 100) if x['Net_Net_Pond_N'] > 0 else 0, axis=1)
             df_subcat['Allarme_SubCat'] = df_subcat['Net_Net_Pond_N1'] < df_subcat['Floor_Pond_N1']
             
             tot_vol_n1 = df_active['[N+1] Volumi'].sum()
             tot_net_n = df_active['Fatturato_N'].sum() / df_active['[N] Volumi'].sum() if df_active['[N] Volumi'].sum() > 0 else 0
             tot_net_n1 = df_active['Fatturato_N1'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
             tot_floor_n1 = df_active['Valore_Floor_Totale_N1'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
+            tot_delta_perc = ((tot_net_n1 - tot_net_n) / tot_net_n * 100) if tot_net_n > 0 else 0
             
             st.markdown("#### KPI Totali Cliente (Media Ponderata)")
             col_k1, col_k2, col_k3, col_k4 = st.columns(4)
             col_k1.metric("Volumi Totali [N+1]", f"{tot_vol_n1:,.0f} Pz")
             col_k2.metric("Net-Net Pond. [N]", f"€ {tot_net_n:.3f}")
             col_k3.metric("Net-Net Pond. [N+1]", f"€ {tot_net_n1:.3f}", f"{tot_net_n1 - tot_net_n:+.3f} € vs [N]")
-            col_k4.metric("Spazio Promo Globale", f"€ {tot_net_n1 - tot_floor_n1:+.3f}", "Margine residuo medio")
+            col_k4.metric("Variazione Totale (%)", f"{tot_delta_perc:+.2f} %", "Delta % vs Anno N")
             
             st.divider()
             
@@ -1021,15 +1068,15 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
             
             def highlight_subcat(row):
                 if row['Allarme_SubCat']: return ['background-color: #FEF2F2; color: #991B1B; font-weight: bold'] * len(row)
-                if row['Delta_Pond_€'] < 0: return ['color: #D97706'] * len(row)
+                if row['Delta_Pond_%'] < 0: return ['color: #D97706'] * len(row)
                 return [''] * len(row)
 
-            df_subcat_disp = df_subcat[['Sub-Categoria', 'Volumi_N1', 'Net_Net_Pond_N', 'Net_Net_Pond_N1', 'Delta_Pond_€', 'Floor_Pond_N1', 'Spazio_Promo_Pond_€', 'Allarme_SubCat']]
+            df_subcat_disp = df_subcat[['Sub-Categoria', 'Volumi_N1', 'Net_Net_Pond_N', 'Net_Net_Pond_N1', 'Delta_Pond_%', 'Floor_Pond_N1', 'Allarme_SubCat']]
             
             st.dataframe(
                 df_subcat_disp.style.apply(highlight_subcat, axis=1).format({
                     'Net_Net_Pond_N': '€ {:.3f}', 'Net_Net_Pond_N1': '€ {:.3f}', 
-                    'Delta_Pond_€': '€ {:+.3f}', 'Floor_Pond_N1': '€ {:.3f}', 'Spazio_Promo_Pond_€': '€ {:+.3f}'
+                    'Delta_Pond_%': '{:+.2f} %', 'Floor_Pond_N1': '€ {:.3f}'
                 }),
                 column_config={"Allarme_SubCat": "Sotto Floor!"},
                 hide_index=True, use_container_width=True
@@ -1037,19 +1084,19 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
             
             st.divider()
             
-            st.markdown("#### 2. Dettaglio Referenze (SKU) e Spazio Promo")
-            st.markdown("Esplosione del Net-Net per singola referenza. La colonna **Spazio Promo (€)** indica quanto margine unitario hai a disposizione per finanziare volantini o tagli prezzo prima di andare in perdita.")
+            st.markdown("#### 2. Dettaglio Referenze (SKU)")
+            st.markdown("Esplosione del Net-Net per singola referenza con Variazione Percentuale.")
             
             def highlight_sku(row):
                 if row['Allarme_SKU']: return ['background-color: #FEF2F2; color: #991B1B'] * len(row)
                 return [''] * len(row)
 
-            cols_sku_disp = ['Sub-Categoria', 'Prodotto', 'Net_Net_N', 'Net_Net_N1', 'Delta_Net_Net_€', 'Floor Minimo €', 'Spazio_Promo_€', 'Allarme_SKU']
+            cols_sku_disp = ['Sub-Categoria', 'Prodotto', 'Net Net [N] €', 'Net Net [N+1] €', 'Delta_Net_Net_%', 'Minimo Net Net €', 'Allarme_SKU']
             
             st.dataframe(
                 df_active[cols_sku_disp].style.apply(highlight_sku, axis=1).format({
-                    'Net_Net_N': '€ {:.3f}', 'Net_Net_N1': '€ {:.3f}', 
-                    'Delta_Net_Net_€': '€ {:+.3f}', 'Floor Minimo €': '€ {:.3f}', 'Spazio_Promo_€': '€ {:+.3f}'
+                    'Net Net [N] €': '€ {:.3f}', 'Net Net [N+1] €': '€ {:.3f}', 
+                    'Delta_Net_Net_%': '{:+.2f} %', 'Minimo Net Net €': '€ {:.3f}'
                 }),
                 column_config={"Allarme_SKU": "Sotto Floor!"},
                 hide_index=True, use_container_width=True
@@ -1697,7 +1744,7 @@ elif menu == "Report Sintetico":
                         sconto_4=contratto_risolto.sconto_4, sconto_5=contratto_risolto.sconto_5, sconto_6=contratto_risolto.sconto_6, sconto_7=contratto_risolto.sconto_7,
                         sconto_y=contratto_risolto.sconto_y, sconto_z=Decimal("0.00"), sconto_aa=Decimal("0.00"),
                         sconto_carico=contratto_risolto.sconto_carico, sconto_pagamento=contratto_risolto.sconto_pagamento,
-                        voce_i=contratto_risolto.voce_i, voce_ii=contratto_risolto.voce_ii, voce_iii=contratto_risolto.voce_iii, voce_iv=contratto_risolto.voce_iv, voce_v=contratto_risolto.voce_v,
+                        voce_i=contratto_risolto.voce_i, voce_ii=contratto_risolto.voce_ii, voce_iii=contratto_risolto.voce_iii, voce_iv=contract.voce_iv, voce_v=contratto_risolto.voce_v,
                         min_net_net_g=Decimal(str(soglia_g))
                     )
                     calcolo_strutturale = PricingEngine.calculate(input_strutturale)
