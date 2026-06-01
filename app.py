@@ -13,6 +13,9 @@ from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
 from core.hierarchy_resolver import HierarchyResolver
 
+# PASSAGGIO A: Importazione del nuovo modulo isolato
+import modulo_rinnovi
+
 logging.basicConfig(level=logging.WARNING)
 
 # Impostazione pagina: layout wide e sidebar espansa
