@@ -1,3 +1,4 @@
+# modulo_rinnovi.py
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -5,43 +6,6 @@ from decimal import Decimal
 from datetime import date
 from config import DB_FILE
 
-# ==========================================
-# 1. DATABASE ISOLATO
-# ==========================================
-def init_modulo_rinnovi():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS ext_gerarchia_prodotti (
-        ean TEXT PRIMARY KEY,
-        macro_categoria TEXT,
-        categoria TEXT,
-        sub_categoria TEXT,
-        net_net_floor REAL DEFAULT 0.0
-    )""")
-    
-    cursor.execute("SELECT COUNT(*) FROM ext_gerarchia_prodotti")
-    if cursor.fetchone()[0] == 0:
-        seed_data = [
-            ("8002210127425", "Olio di Oliva", "Extravergine", "Extravergini Italiani", 6.50),
-            ("8002210111110", "Olio di Oliva", "Extravergine", "Extravergini Comunitari", 4.80),
-            ("8002210001305", "Olio di Oliva", "Olio di Oliva", "Oli di Oliva Raffinati", 4.00),
-            ("8002210000551", "Oli di Semi", "Arachide", "Semi di Arachide", 2.50),
-            ("8002210111486", "Oli di Semi", "Mais", "Semi di Mais", 1.80),
-            ("8002210111905", "Oli di Semi", "Girasole", "Semi di Girasole", 1.50),
-            ("8002210111295", "Oli di Semi", "Frittura", "Oli per Frittura Specifici", 1.90)
-        ]
-        cursor.executemany("""
-        INSERT INTO ext_gerarchia_prodotti (ean, macro_categoria, categoria, sub_categoria, net_net_floor)
-        VALUES (?, ?, ?, ?, ?)
-        """, seed_data)
-        conn.commit()
-    conn.close()
-
-# ==========================================
-# 2. MOTORE DI CALCOLO DIFFERENZIALE
-# ==========================================
 class RenewalEngine:
     @staticmethod
     def calc_net_net(listino, sconto_in_fattura, pfa):
@@ -98,18 +62,12 @@ class RenewalEngine:
         
         return df, df_subcat, totali
 
-# ==========================================
-# 3. INTERFACCIA UTENTE (UI)
-# ==========================================
 def render_simulazione_rinnovi():
-    init_modulo_rinnovi()
-    
     st.title("🔄 Simulazione Rinnovi Contrattuali (N vs N+1)")
     st.markdown("Analisi differenziale dei margini, calcolo dello Spazio Promo e Roll-up per Sub-Categorie.")
     
     anno_corrente = date.today().year
     
-    # --- SETUP INIZIALE ---
     with st.container(border=True):
         col_s1, col_s2 = st.columns([1, 3])
         with col_s1:
@@ -119,35 +77,41 @@ def render_simulazione_rinnovi():
 
     conn = sqlite3.connect(DB_FILE)
     query = """
-        SELECT a.ean, a.descrizione_commerciale, 
-               COALESCE(e.sub_categoria, 'Non Assegnato') as sub_categoria,
-               COALESCE(e.net_net_floor, 0.0) as net_net_floor
+        SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0) as min_net_net_g
         FROM anagrafica_master a
-        LEFT JOIN ext_gerarchia_prodotti e ON a.ean = e.ean
-        WHERE e.sub_categoria IS NOT NULL
+        LEFT JOIN guardrail_aziendali g ON a.ean = g.ean
     """
     df_base = pd.read_sql_query(query, conn)
     conn.close()
     
-    if df_base.empty:
-        st.warning("Nessun prodotto mappato nella gerarchia. Controllare il database.")
-        return
-
-    # Preparazione Colonne DataFrame
-    df_base = df_base.rename(columns={
-        'sub_categoria': 'Sub-Categoria',
-        'descrizione_commerciale': 'Prodotto',
-        'net_net_floor': 'Floor Minimo €'
-    })
+    # Classificazione Dinamica delle 59 Referenze
+    def get_subcat(row):
+        desc = str(row['descrizione_commerciale']).upper()
+        tipo = str(row['tipo_olio']).upper()
+        if tipo == 'EXTRAVERGINE':
+            if '100% ITA' in desc or '100%I' in desc or 'TOSC' in desc: return 'Extravergini Italiani'
+            if 'BIO' in desc: return 'Extravergini Biologici'
+            return 'Extravergini Comunitari'
+        elif tipo == 'OLIVA': return 'Oli di Oliva Raffinati'
+        elif tipo == 'SEMI':
+            if 'ARACHIDE' in desc: return 'Semi di Arachide'
+            if 'MAIS' in desc: return 'Semi di Mais'
+            if 'GIRAS' in desc: return 'Semi di Girasole'
+            if 'FRITT' in desc or 'FRIMX' in desc: return 'Oli per Frittura Specifici'
+            if 'VINACC' in desc: return 'Semi di Vinacciolo'
+            return 'Altri Oli di Semi'
+        elif tipo == 'ACETO': return 'Aceto Balsamico'
+        return 'Altro'
+        
+    df_base['Sub-Categoria'] = df_base.apply(get_subcat, axis=1)
+    df_base = df_base.rename(columns={'descrizione_commerciale': 'Prodotto', 'min_net_net_g': 'Floor Minimo €'})
     
-    # Colonne Storico
     storico_cols = []
     for i in range(anni_storico, 0, -1):
         col_name = f"[N-{i}] Net-Net €"
         df_base[col_name] = 0.0
         storico_cols.append(col_name)
         
-    # Colonne Anno N e N+1
     operative_cols = [
         '[N] Volumi', '[N] Listino €', '[N] Sc. Fattura %', '[N] PFA %',
         '[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] PFA %'
@@ -155,14 +119,12 @@ def render_simulazione_rinnovi():
     for col in operative_cols:
         df_base[col] = 0.0 if '€' in col or '%' in col else 0
 
-    # --- TABS DI NAVIGAZIONE ---
     tab_storico, tab_simulazione, tab_risultati = st.tabs([
         "📅 1. Dati Storici", 
         "⚙️ 2. Simulazione N vs N+1", 
         "📊 3. Analisi & Spazio Promo"
     ])
     
-    # TAB 1: STORICO
     with tab_storico:
         st.markdown("#### Inserimento Net-Net Storici (Opzionale)")
         st.markdown("Inserisci i valori net-net degli anni passati per avere un riferimento durante la trattativa.")
@@ -175,18 +137,15 @@ def render_simulazione_rinnovi():
                 use_container_width=True,
                 key="editor_storico"
             )
-            # Aggiorniamo il df_base con i dati storici inseriti
             for col in storico_cols:
                 df_base[col] = df_storico_edited[col]
         else:
             st.info("Hai scelto di non visualizzare lo storico. Vai alla scheda Simulazione.")
 
-    # TAB 2: SIMULAZIONE
     with tab_simulazione:
         st.markdown("#### Griglia di Simulazione Contrattuale")
         st.markdown("Inserisci i dati per l'anno in corso [N] e per il rinnovo [N+1]. **Verranno analizzate solo le referenze con Volumi [N+1] > 0.**")
         
-        # Configurazione colonne per l'editor
         col_config = {
             "Sub-Categoria": st.column_config.TextColumn(disabled=True),
             "Prodotto": st.column_config.TextColumn(disabled=True),
@@ -208,45 +167,67 @@ def render_simulazione_rinnovi():
             column_config=col_config,
             hide_index=True,
             use_container_width=True,
-            height=500,
+            height=600,
             key="editor_simulazione"
         )
 
-    # TAB 3: RISULTATI E ROLL-UP
     with tab_risultati:
-        # Filtriamo solo le referenze attive (Volumi N+1 > 0)
         df_active = df_sim_edited[df_sim_edited['[N+1] Volumi'] > 0].copy()
         
         if df_active.empty:
             st.warning("Nessuna referenza attiva. Inserisci dei volumi nella colonna '[N+1] Volumi' nella scheda precedente.")
         else:
-            # Calcolo Motore
-            df_res_sku, df_res_subcat, totali = RenewalEngine.calculate_rollups(df_active)
+            # Motore di Calcolo Differenziale
+            df_active['Net_Net_N'] = df_active['[N] Listino €'] * (1 - (df_active['[N] Sc. Fattura %'] / 100)) * (1 - (df_active['[N] PFA %'] / 100))
+            df_active['Fatturato_N'] = df_active['Net_Net_N'] * df_active['[N] Volumi']
             
-            # --- KPI GLOBALI ---
+            df_active['Net_Net_N1'] = df_active['[N+1] Listino €'] * (1 - (df_active['[N+1] Sc. Fattura %'] / 100)) * (1 - (df_active['[N+1] PFA %'] / 100))
+            df_active['Fatturato_N1'] = df_active['Net_Net_N1'] * df_active['[N+1] Volumi']
+            
+            df_active['Delta_Net_Net_€'] = df_active['Net_Net_N1'] - df_active['Net_Net_N']
+            df_active['Spazio_Promo_€'] = df_active['Net_Net_N1'] - df_active['Floor Minimo €']
+            df_active['Allarme_SKU'] = df_active['Net_Net_N1'] < df_active['Floor Minimo €']
+            df_active['Valore_Floor_Totale_N1'] = df_active['Floor Minimo €'] * df_active['[N+1] Volumi']
+            
+            df_subcat = df_active.groupby('Sub-Categoria').agg(
+                Volumi_N=('[N] Volumi', 'sum'),
+                Fatturato_N=('Fatturato_N', 'sum'),
+                Volumi_N1=('[N+1] Volumi', 'sum'),
+                Fatturato_N1=('Fatturato_N1', 'sum'),
+                Valore_Floor_Totale_N1=('Valore_Floor_Totale_N1', 'sum')
+            ).reset_index()
+            
+            df_subcat['Net_Net_Pond_N'] = df_subcat.apply(lambda x: x['Fatturato_N'] / x['Volumi_N'] if x['Volumi_N'] > 0 else 0, axis=1)
+            df_subcat['Net_Net_Pond_N1'] = df_subcat.apply(lambda x: x['Fatturato_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
+            df_subcat['Floor_Pond_N1'] = df_subcat.apply(lambda x: x['Valore_Floor_Totale_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
+            
+            df_subcat['Delta_Pond_€'] = df_subcat['Net_Net_Pond_N1'] - df_subcat['Net_Net_Pond_N']
+            df_subcat['Spazio_Promo_Pond_€'] = df_subcat['Net_Net_Pond_N1'] - df_subcat['Floor_Pond_N1']
+            df_subcat['Allarme_SubCat'] = df_subcat['Net_Net_Pond_N1'] < df_subcat['Floor_Pond_N1']
+            
+            tot_vol_n1 = df_active['[N+1] Volumi'].sum()
+            tot_net_n = df_active['Fatturato_N'].sum() / df_active['[N] Volumi'].sum() if df_active['[N] Volumi'].sum() > 0 else 0
+            tot_net_n1 = df_active['Fatturato_N1'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
+            tot_floor_n1 = df_active['Valore_Floor_Totale_N1'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
+            
             st.markdown("#### KPI Totali Cliente (Media Ponderata)")
             col_k1, col_k2, col_k3, col_k4 = st.columns(4)
-            col_k1.metric("Volumi Totali [N+1]", f"{totali['Volumi_N1']:,.0f} Pz")
-            col_k2.metric("Net-Net Pond. [N]", f"€ {totali['Net_Net_Pond_N']:.3f}")
-            
-            delta_tot = totali['Net_Net_Pond_N1'] - totali['Net_Net_Pond_N']
-            col_k3.metric("Net-Net Pond. [N+1]", f"€ {totali['Net_Net_Pond_N1']:.3f}", f"{delta_tot:+.3f} € vs [N]")
-            
-            spazio_tot = totali['Net_Net_Pond_N1'] - totali['Floor_Pond_N1']
-            col_k4.metric("Spazio Promo Globale", f"€ {spazio_tot:+.3f}", "Margine residuo medio")
+            col_k1.metric("Volumi Totali [N+1]", f"{tot_vol_n1:,.0f} Pz")
+            col_k2.metric("Net-Net Pond. [N]", f"€ {tot_net_n:.3f}")
+            col_k3.metric("Net-Net Pond. [N+1]", f"€ {tot_net_n1:.3f}", f"{tot_net_n1 - tot_net_n:+.3f} € vs [N]")
+            col_k4.metric("Spazio Promo Globale", f"€ {tot_net_n1 - tot_floor_n1:+.3f}", "Margine residuo medio")
             
             st.divider()
             
-            # --- ROLL-UP SUB-CATEGORIE ---
             st.markdown("#### 1. Analisi Aggregata per Sub-Categoria")
             st.markdown("Verifica se i cluster premium stanno perdendo margine rispetto all'anno precedente o rispetto al Floor.")
             
             def highlight_subcat(row):
                 if row['Allarme_SubCat']: return ['background-color: #FEF2F2; color: #991B1B; font-weight: bold'] * len(row)
-                if row['Delta_Pond_€'] < 0: return ['color: #D97706'] * len(row) # Arancione se perdo vs N ma sono sopra floor
+                if row['Delta_Pond_€'] < 0: return ['color: #D97706'] * len(row)
                 return [''] * len(row)
 
-            df_subcat_disp = df_res_subcat[['Sub-Categoria', 'Volumi_N1', 'Net_Net_Pond_N', 'Net_Net_Pond_N1', 'Delta_Pond_€', 'Floor_Pond_N1', 'Spazio_Promo_Pond_€', 'Allarme_SubCat']]
+            df_subcat_disp = df_subcat[['Sub-Categoria', 'Volumi_N1', 'Net_Net_Pond_N', 'Net_Net_Pond_N1', 'Delta_Pond_€', 'Floor_Pond_N1', 'Spazio_Promo_Pond_€', 'Allarme_SubCat']]
             
             st.dataframe(
                 df_subcat_disp.style.apply(highlight_subcat, axis=1).format({
@@ -259,7 +240,6 @@ def render_simulazione_rinnovi():
             
             st.divider()
             
-            # --- DETTAGLIO REFERENZE (SKU) ---
             st.markdown("#### 2. Dettaglio Referenze (SKU) e Spazio Promo")
             st.markdown("Esplosione del Net-Net per singola referenza. La colonna **Spazio Promo (€)** indica quanto margine unitario hai a disposizione per finanziare volantini o tagli prezzo prima di andare in perdita.")
             
@@ -270,7 +250,7 @@ def render_simulazione_rinnovi():
             cols_sku_disp = ['Sub-Categoria', 'Prodotto', 'Net_Net_N', 'Net_Net_N1', 'Delta_Net_Net_€', 'Floor Minimo €', 'Spazio_Promo_€', 'Allarme_SKU']
             
             st.dataframe(
-                df_res_sku[cols_sku_disp].style.apply(highlight_sku, axis=1).format({
+                df_active[cols_sku_disp].style.apply(highlight_sku, axis=1).format({
                     'Net_Net_N': '€ {:.3f}', 'Net_Net_N1': '€ {:.3f}', 
                     'Delta_Net_Net_€': '€ {:+.3f}', 'Floor Minimo €': '€ {:.3f}', 'Spazio_Promo_€': '€ {:+.3f}'
                 }),
