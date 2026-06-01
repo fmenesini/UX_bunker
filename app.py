@@ -335,6 +335,7 @@ st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Pyth
 st.sidebar.markdown("## Menu Principale")
 menu = st.sidebar.radio("", [
     "Simulatore Offerte", 
+    "Simulazione Rinnovi (Sub-Categorie)",
     "Storico Promozioni", 
     "Dati Anagrafici (Logistica)", 
     "Back-Office (Contratti)", 
