@@ -1817,6 +1817,10 @@ elif menu == "Report Sintetico":
     # ==========================================
     # SCHEDA 5: GUIDA OPERATIVA (VERSIONE BLINDATA)
     # ==========================================
+else:
+    st.title("Manuale d'Istruzione")
+    st.markdown("### Guida per la Gestione della Marginalità Salov")
+    st.markdown("---")
     with tab5:
         st.header("📖 Manuale d'Addestramento e Guida Operativa Commerciale")
         st.markdown("""
