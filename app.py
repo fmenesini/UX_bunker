@@ -672,8 +672,8 @@ if menu == "Simulatore Offerte":
 # ==========================================
 # NUOVA SCHEDA: SIMULAZIONE RINNOVI (N vs N+1)
 # ==========================================
-elif menu == "Simulazione Rinnovi (N vs N+1)":
-    st.title("Simulazione Rinnovi Contrattuali (N vs N+1)")
+elif menu == "Master Grid Rinnovi (N vs N+1)":
+    st.title("Master Grid Rinnovi (N vs N+1)")
     st.markdown("Analisi differenziale dei margini, calcolo dello Spazio Promo e Roll-up per Sub-Categorie.")
     
     anno_corrente = date.today().year
