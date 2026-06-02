@@ -1815,7 +1815,7 @@ elif menu == "Report Sintetico":
     conn.close()
 
     # ==========================================
-    # SCHEDA 5: GUIDA OPERATIVA (VERSIONE ESTESA)
+    # SCHEDA 5: GUIDA OPERATIVA (VERSIONE BLINDATA)
     # ==========================================
     with tab5:
         st.header("📖 Manuale d'Addestramento e Guida Operativa Commerciale")
@@ -1828,23 +1828,23 @@ elif menu == "Report Sintetico":
         # --- SEZIONE 1: GLOSSARIO ---
         st.subheader("🗂️ 1. Glossario Terminologico Completo (Mappa delle Etichette)")
         st.markdown("""
-        Prima di muovere qualsiasi leva sul cruscotto, è fondamentale padroneggiare il significato esatto di ogni voce di dato presente a schermo:
+        Prima di muovere qualsiasi leva sul cruscotto, è fondamentale padroneggiare il significato esatto di ogni voce:
         
-        * **Listino R (Prezzo Lordo):** È il punto di partenza ufficiale. Rappresenta il prezzo di listino industriale lordo della singola referenza prima di qualsiasi tipo di svalutazione commerciale o promozionale.
+        * **Listino R (Prezzo Lordo):** È il punto di partenza ufficiale. Rappresenta il prezzo di listino industriale lordo della singola referenza prima di qualsiasi tipo di svalutazione commerciale.
         * **Sconti in Condizionata (da Sconto 1 a Sconto 7):** Sconti commerciali strutturali concessi al cliente in virtù degli accordi quadro. Vengono applicati direttamente in fattura.
-        * **Sconto Y (Continuativo):** Un ulteriore livello di sconto percentuale standard applicato in cassa/fattura, solitamente legato a condizioni di linea o accordi storici che non variano durante l'anno.
+        * **Sconto Y (Continuativo):** Ulteriore livello di sconto percentuale standard applicato in cassa/fattura, legato a condizioni di linea che non variano durante l'anno.
         * **Sconto Z (Promozionale):** La percentuale di sconto spot concessa esclusivamente per una determinata operazione di marketing o campagna promozionale (es. inserimento in volantino GDO).
-        * **Sconto AA (Unitario in fattura):** Uno sconto espresso direttamente in valore monetario assoluto (€ per singolo pezzo) e non in percentuale. Viene sottratto direttamente in fattura (es. taglio prezzo di 50 centesimi).
-        * **Sconto Carico (Logistica):** Trattenuta percentuale applicata in fattura legata agli oneri di trasporto, consegna o gestione logistica della merce presso i Ce.Di. del cliente.
-        * **Sconto Pagamento (Finanziario):** Abbuono percentuale concesso in fattura e legato al rispetto dei termini di pagamento pattuiti (es. pagamento a 30 giorni vista fattura).
-        * **Voci PFA (Premi Fine Anno - da Voce I a Voce V):** Sconti commerciali differiti, liquidati al cliente fuori fattura solo a fine anno, solitamente calcolati sul raggiungimento di determinati scaglioni di fatturato.
-        * **Net Net (Prezzo Netto Netto Unitario):** Il ricavo monetario reale ed effettivo che entra nelle casse aziendali per la vendita di una singola unità di prodotto, dopo aver sottratto *tutti* gli sconti possibili (sia in fattura che fuori fattura).
-        * **Floor Minimo € (Guardrail Industriale):** La linea rossa invalicabile. Rappresenta il costo minimo industriale di produzione e distribuzione sotto il quale l'azienda va in perdita tecnica su quella specifica referenza.
-        * **Spazio Promo (€):** Il margine di manovra economico residuo prima di toccare il fondo. Si calcola come differenza tra il Prezzo Net Net simulato e il Floor Minimo. Se è positivo hai margine, se è negativo sei in perdita.
-        * **Volumi (N o N+1):** Il quantitativo di pezzi (o cartoni/litri a seconda dell'unità di misura impostata) venduti nell'anno corrente [N] o previsti in vendita per l'anno futuro [N+1].
-        * **Fatturato Totale (€):** Il controvalore economico complessivo generato dalle vendite, calcolato moltiplicando il Prezzo Net Net per i Volumi complessivi.
-        * **Net Net Ponderato (Media Ponderata):** Il prezzo netto medio di una categoria che non si limita a fare la media matematica dei prezzi, ma tiene conto di quanto vende ogni singolo prodotto. Un prodotto che vende un milione di pezzi peserà sulla media molto più di uno che ne vende cento.
-        * **Floor Ponderato:** Il costo minimo medio di una sub-categoria di prodotti, calcolato pesando i singoli costi industriali sui rispettivi volumi di vendita previsti.
+        * **Sconto AA (Unitario in fattura):** Uno sconto espresso direttamente in valore monetario assoluto (Euro per singolo pezzo) e non in percentuale. Viene sottratto in fattura (es. taglio prezzo di 50 centesimi).
+        * **Sconto Carico (Logistica):** Trattenuta percentuale applicata in fattura legata agli oneri di trasporto o gestione logistica della merce presso i Ce.Di. del cliente.
+        * **Sconto Pagamento (Finanziario):** Abbuono percentuale concesso in fattura e legato al rispetto dei termini di pagamento pattuiti (es. pagamento a 30 giorni).
+        * **Voci PFA (Premi Fine Anno - da Voce I a Voce V):** Sconti commerciali differiti, liquidati al cliente fuori fattura solo a fine anno (es. premi di fine anno su scaglioni di fatturato).
+        * **Net Net (Prezzo Netto Netto Unitario):** Il ricavo monetario reale ed effettivo che entra nelle casse aziendali per la singola unità, dopo aver sottratto *tutti* gli sconti possibili (in fattura e fuori).
+        * **Floor Minimo Euro (Guardrail Industriale):** La linea rossa invalicabile. È il costo minimo industriale sotto il quale l'azienda va in perdita tecnica su quella referenza.
+        * **Spazio Promo (Euro):** Il margine di manovra economico residuo prima di toccare il fondo (Prezzo Net Net meno Floor Minimo). Se è positivo hai margine, se è negativo sei in perdita.
+        * **Volumi (N o N+1):** Il quantitativo di pezzi venduti nell'anno corrente [N] o previsti in vendita per l'anno futuro [N+1].
+        * **Fatturato Totale (Euro):** Il controvalore economico calcolato moltiplicando il Prezzo Net Net per i Volumi.
+        * **Net Net Ponderato (Media Ponderata):** Il prezzo netto medio di una categoria pesato sui volumi (un prodotto che vende 100.000 pezzi sposterà la media molto di più di uno che ne vende 100).
+        * **Floor Ponderato:** Il costo minimo medio di una sub-categoria, calcolato pesando i singoli costi industriali sui rispettivi volumi di vendita previsti.
         * **Delta (%):** Lo scostamento percentuale che evidenzia il guadagno o la perdita di marginalità nel passaggio tra le condizioni dell'anno in corso [N] e quelle nuove proposte [N+1].
         """)
         
@@ -1853,53 +1853,44 @@ elif menu == "Report Sintetico":
         st.info("💡 REGOLA D'ORO DEL BUNKER: Gli sconti percentuali in fattura non si sommano mai matematicamente tra loro, ma si applicano in sequenza geometrica a cascata.")
         
         st.markdown("""
-        Se un cliente ha il 10% di Sconto 1 e il 5% di Sconto 2, **NON ha il 15% di sconto totale**. Il 5% viene calcolato sul valore già decurtato dal primo 10%.
+        Se un cliente ha il 10% di Sconto 1 e il 5% di Sconto 2, **NON ha il 15% di sconto totale**. Il 5% viene calcolato sul valore residuo (già decurtato del primo 10%).
         
-        #### La Formula Matematica Sequenziale del Motore di Pricing:
+        **Ordine Sequenziale di Applicazione (Motore di Pricing):**
         1. **Prezzo Base** = `Listino R`
-        2. **Applicazione Sconti di Linea (1-7 e Y):** Ciascuno riduce la base precedente.
-           * *Prezzo_1* = Base * (1 - Sconto_1 / 100)
-           * *Prezzo_2* = Prezzo_1 * (1 - Sconto_2 / 100) ... e così via fino allo Sconto Y.
-        3. **Applicazione Sconto Z (Promo):** * *Prezzo_Post_Z* = Prezzo_Y * (1 - Sconto_Z / 100)
-4. **Applicazione Sconto AA (Valore Assoluto):**
-           * *Netto_Fattura_1* = Prezzo_Post_Z - Sconto_AA
-        5. **Applicazione Oneri Logistici e Finanziari:**
-           * *Netto_Fattura_2* = Netto_Fattura_1 * (1 - Sconto_Carico / 100) * (1 - Sconto_Pagamento / 100)
-        6. **Abbattimento PFA (Fuori Fattura):** Tutte le voci PFA (I, II, III, IV, V) vengono prima **sommate linearmente** tra loro per creare un'aliquota PFA Totale, e poi applicate sul Netto Fattura 2.
-           * *PFA_Totale %* = Voce_I + Voce_II + Voce_III + Voce_IV + Voce_V
-           * **Prezzo Net Net Finale** = Netto_Fattura_2 * (1 - PFA_Totale % / 100)
+        2. **Sconti di Linea (1-7 e Y):** Ciascuno riduce la base precedente a cascata.
+        3. **Sconto Z (Promo):** Si applica sull'ultimo valore ottenuto dagli sconti di linea.
+        4. **Sconto AA (Valore Assoluto):** Si sottrae in Euro dal risultato precedente, generando il *Netto in Fattura 1*.
+        5. **Oneri Logistici e Finanziari:** Si applicano in percentuale sul Netto in Fattura 1, generando il *Netto in Fattura 2*.
+        6. **Abbattimento PFA (Fuori Fattura):** Tutte le voci PFA si *sommano linearmente* in un'unica aliquota, per poi essere sottratte dal Netto in Fattura 2. Il risultato è il **Prezzo Net Net Finale**.
         """)
         
         with st.container(border=True):
             st.markdown("### 📝 Esempio Numerico Passo-Passo (Simulazione Completa)")
             st.markdown("""
-            Ipotizziamo di simulare una referenza con i seguenti dati inseriti a sistema:
-            * **Listino R:** 10,00 €
+            Ipotizziamo una simulazione con i seguenti dati:
+            * **Listino R:** 10,00 Euro
             * **Sconto 1:** 10,00 %
             * **Sconto 2:** 5,00 %
             * **Sconto Z (Promo):** 10,00 %
-            * **Sconto AA:** 0,50 €
-            * **Sconto Carico (Logistica):** 2,00 %
-            * **Sconto Pagamento (Finanziario):** 1,00 %
-            * **Voce I (PFA):** 3,00 % | **Voce II (PFA):** 2,00 % (Altre voci PFA a zero)
-            * **Floor Minimo € (Costo Interno):** 5,50 €
+            * **Sconto AA:** 0,50 Euro
+            * **Sconto Carico:** 2,00 %
+            * **Sconto Pagamento:** 1,00 %
+            * **Voce I (PFA):** 3,00 % | **Voce II (PFA):** 2,00 %
+            * **Floor Minimo:** 5,50 Euro
             
-            **Sviluppo dei calcoli effettuati in tempo reale dall'algoritmo:**
-            1. **Partenza:** 10,00 €
-            2. **Sconto 1 (10%):** 10,00 € - 1,00 € = **9,00 €**
-            3. **Sconto 2 (5%):** 5% di 9,00 € = 0,45 € $\rightarrow$ 9,00 € - 0,45 € = **8,55 €**
-            4. **Sconto Z Promo (10%):** 10% di 8,55 € = 0,855 € $\rightarrow$ 8,55 € - 0,855 € = **7,695 €**
-            5. **Sconto AA (Valore):** 7,695 € - 0,50 € = **7,195 €** *(Questo è il Netto Fattura 1)*
-            6. **Sconto Carico (2%):** 2% di 7,195 € = 0,1439 € $\rightarrow$ 7,195 € - 0,1439 € = **7,0511 €**
-            7. **Sconto Pagamento (1%):** 1% di 7,0511 € = 0,0705 € $\rightarrow$ 7,0511 € - 0,0705 € = **6,9806 €** *(Questo è il Netto Fattura 2)*
-            8. **Consolidamento PFA:** Voce I (3%) + Voce II (2%) = **5,00% Totale fuori fattura**.
-            9. **Calcolo Net Net Finale:** 5% di 6,9806 € = 0,3490 € $\rightarrow$ 6,9806 € - 0,3490 € = **6,632 €** (arrotondato al millesimo).
+            **Sviluppo dei calcoli (Algoritmo Reale):**
+            * *Partenza:* 10,00 Euro
+            * *Sconto 1 (10%):* scende a **9,00 Euro**
+            * *Sconto 2 (5%):* il 5% di 9,00 è 0,45 -> scende a **8,55 Euro**
+            * *Sconto Z Promo (10%):* il 10% di 8,55 è 0,855 -> scende a **7,695 Euro**
+            * *Sconto AA (0,50 Euro fissi):* 7,695 - 0,50 -> **7,195 Euro** (Netto Fattura 1)
+            * *Sconto Carico (2%):* scende a **7,051 Euro**
+            * *Sconto Pagamento (1%):* scende a **6,980 Euro** (Netto Fattura 2)
+            * *Consolidamento PFA (3% + 2% = 5%):* il 5% di 6,980 è 0,349 -> **6,631 Euro (NET NET FINALE)**
             
-            **Verifica di Sicurezza (Guardrail):**
-            * Il nostro **Net Net Finale** è **6,632 €**.
-            * Il **Floor Minimo** aziendale è **5,50 €**.
-            * **Spazio Promo (€):** 6,632 € - 5,50 € = **+1,132 €**. 
-            * *Esito:* L'operazione è sicura e profittevole. Il sistema mostra semaforo **VERDE**. Se il Net Net fosse uscito a 5,40 €, lo Spazio Promo sarebbe stato di -0,10 € e il sistema avrebbe bloccato l'approvazione con allarme **ROSSO**.
+            **Verifica di Sicurezza:**
+            Net Net (6,631 Euro) - Floor Minimo (5,50 Euro) = **Spazio Promo di +1,131 Euro**. 
+            L'operazione è sicura (Semaforo Verde). Se il margine fosse sceso sotto lo zero, si sarebbe attivato l'allarme Rosso.
             """)
 
         # --- SEZIONE 3: MAPPA DELLE SCHEDE ---
@@ -1907,61 +1898,36 @@ elif menu == "Report Sintetico":
         
         with st.expander("🎯 SCHEDA 1: SIMULATORE SINGOLO (Gestione Tattica & Reverse Target)"):
             st.markdown("""
-            **A cosa serve:** È il cuore pulsante delle trattative giornaliere. Serve a simulare l'impatto economico di una singola referenza per un determinato cliente o a calcolare lo sconto esatto da concedere se il buyer impone un prezzo d'arrivo.
+            **A cosa serve:** È il cuore pulsante delle trattative. Serve a simulare l'impatto economico di una singola referenza o a calcolare lo sconto esatto da concedere se il buyer impone un prezzo d'arrivo.
             
             **Come si usa:**
-            1. Seleziona il Cliente e la Referenza dai menu a tendina. Il sistema carica in automatico i dati contrattuali protetti recuperandoli dalla gerarchia.
-            2. Puoi sovrascrivere manualmente i valori per testare sconti aggiuntivi.
-            3. **La Funzione 'Reverse Engineering' (Ricerca Target):** Se il Buyer ti dice *"Voglio comprare questo prodotto a un Net Net finale di 4,50 €"*, tu selezioni il flag *Reverse Target*, imposti come campo obiettivo 'Sconto Z' e digiti `4,50` nel Target Net Net.
-            
-            **Esempio Numerico di Reverse:**
-            * Prezzo di partenza calcolato con sconti base: 5,20 €.
-            * Target imposto dal cliente: 4,80 €.
-            * Premendo il tasto di calcolo inverso, il motore calcola l'equazione algebrica istantaneamente e imposta lo **Sconto Z al 7,69%**, segnalandoti se quella mossa tocca o meno il Floor di sicurezza.
+            1. Seleziona Cliente e Referenza dai menu (il sistema carica in automatico i dati dalla gerarchia centrale).
+            2. Sovrascrivi i valori per testare manovre tattiche.
+            3. **La Funzione 'Reverse Target':** Se il Buyer chiede *"Voglio un Net Net finale di 4,50 Euro"*, tu selezioni il flag *Reverse Target*, imposti 'Sconto Z' come variabile e scrivi `4,50` nel Target. Il motore algebrico calcolerà istantaneamente lo Sconto Z esatto da inserire a sistema per centrare il bersaglio, segnalandoti eventuali allarmi sul Floor.
             """)
 
         with st.expander("🛡️ SCHEDA 2: GESTIONE ACCORDI (La Cassaforte della Gerarchia)"):
             st.markdown("""
-            **A cosa serve:** Serve a mappare e blindare le condizioni commerciali evitando di dover inserire i dati per ogni singolo punto vendita o sotto-insegna. Sfrutta il principio di ereditarietà dei dati.
+            **A cosa serve:** Evita di dover inserire a mano i dati per ogni singolo punto vendita. Mappa le condizioni tramite "ereditarietà Top-Down".
             
-            **La Gerarchia Logica applicata (Dall'alto verso il basso):**
-            1. **Nazionale** *(Base valida per tutti)*
-            2. **Gruppo** *(Macro-Holding, es. Conad Nazionale)*
-            3. **Sottogruppo** *(Ce.Di locale, es. Conad Nord Ovest)*
-            4. **Insegna/Categoria** *(Es. solo i punti vendita Spazio Conad per la categoria Olio d'Oliva)*
-            5. **Referenza (SKU)** *(L'accordo specifico su quel singolo codice a barre. Vince su tutto).*
-            
-            **Come si usa in operatività:**
-            Se inserisci un premio PFA del 4% a livello *Nazionale*, non serve inserirlo per ogni cliente. Se interroghi il simulatore per un cliente qualsiasi, vedrai che erediterà il 4%. Se per un cliente specifico carichi invece un PFA del 6% a livello *Gruppo*, la macchina taglia fuori il dato Nazionale per quel gruppo e applica il 6%.
+            **Come si usa:**
+            I livelli (dal generale allo specifico) sono: **Nazionale -> Gruppo -> Sottogruppo -> Categoria -> Referenza (SKU)**.
+            Se carichi uno Sconto Pagamento a livello *Nazionale*, tutti i clienti lo erediteranno automaticamente. Se poi, per uno specifico *Gruppo*, inserisci uno Sconto Pagamento diverso, quest'ultimo "schiaccia e vince" sul dato Nazionale.
             """)
 
         with st.expander("📈 SCHEDA 3: MODULO RINNOVI (Accordi di Fine Anno N vs N+1)"):
             st.markdown("""
-            **A cosa serve:** È lo strumento strategico per i rinnovi contrattuali di fine anno. Mette a confronto le condizioni commerciali dell'anno in corso **[N]** con le nuove proposte commerciali per l'anno futuro **[N+1]**, calcolando l'impatto monetario totale basato sui volumi previsti.
+            **A cosa serve:** Strumento strategico per valutare il passaggio tra le condizioni dell'anno in corso [N] e quelle del nuovo anno [N+1].
             
-            **Come leggere i cruscotti di Sintesi (L'importanza della Ponderazione):**
-            Non puoi fare una media matematica semplice se una referenza vende 50.000 litri e un'altra ne vende 500. Il sistema applica le formule di ponderazione sui volumi.
-            
-            **Esempio Numerico Ponderato:**
-            * *Prodotto A:* Net Net = 6,00 €, Volumi = 10.000 pz. (Fatturato = 60.000 €)
-            * *Prodotto B:* Net Net = 4,00 €, Volumi = 1.000 pz. (Fatturato = 4.000 €)
-            * **Media Matematica Semplice:** (6,00 + 4,00) / 2 = **5,00 €**
-            * **Media Ponderata Reale del Sistema:** Fatturato Totale (64.000 €) / Volumi Totali (11.000 pz) = **5,818 €**
-            
-            La scheda Rinnovi calcola il **Delta %** globale e lo **Spazio Promo Ponderato** per l'intera sotto-categoria, mostrandoti immediatamente se la nuova struttura provocherà una perdita di marginalità complessiva sui volumi attesi.
+            **L'importanza della Ponderazione:**
+            Il cruscotto ti mostra le Medie Ponderate. Se il Prodotto A (net net 6 Euro) vende 10.000 pezzi, e il Prodotto B (net net 4 Euro) vende 1.000 pezzi, il sistema non fa una semplice media a 5 Euro, ma dà più "peso" al prodotto A (la media ponderata reale sarà 5,81 Euro). 
+            Questo ti permette di vedere subito (colonna **Delta %**) se l'intera manovra di rinnovo distruggerà o creerà valore sulle masse spostate.
             """)
 
-        with st.expander("📊 SCHEDA 4: REPORT SINTETICO ED ESPORTAZIONE (Output Direzionale)"):
+        with st.expander("📊 SCHEDA 4: REPORT SINTETICO ED ESPORTAZIONE"):
             st.markdown("""
-            **A cosa serve:** Consolida l'intera situazione dei clienti in un'unica griglia orizzontale e permette di scaricare i dati all'esterno per i meeting di direzione.
+            **A cosa serve:** Consolida l'intera situazione in un'unica griglia, pronta per essere condivisa con la Direzione Generale o il Controlling.
             
             **Come si usa:**
-            1. Controlla la tabella riassuntiva dove i semafori evidenziano le situazioni anomale (i fuori-quota o i sotto-floor).
-            2. Clicca sul pulsante **Genera ed Estrai Excel**. Il sistema compila nativamente un file strutturato con stili professionali, formattazione numerica italiana (separatore dei decimali con virgola) e codifica colori automatica. Il file generato è pronto per essere inviato via mail al Controlling o alla Direzione Generale come allegato ufficiale alla proposta di rinnovo.
-            """)
-            
-        with st.expander("🛠️ NOTE PER L'AMMINISTRATORE (Hard Reset e Baseline)"):
-            st.markdown("""
-            * **Integrità dei Dati:** Le tabelle di anagrafica e i listini base sono protetti da database relazionale SQL.
-            * **Funzione di Reset:** Nel pannello di amministrazione è presente un comando per effettuare l'**Hard-Reset**. Questa funzione cancella tutte le modifiche temporanee e le simulazioni sporche caricate dagli utenti commerciali, ripristinando la baseline pulita dei contratti quadro nazionali. Da usare con massima cautela.
+            Verifica la tabella e i semafori (Rosso = Sotto Floor). Cliccando sul pulsante **Genera ed Estrai Excel**, il sistema ti consegna un file aziendale già pre-formattato, con la corretta punteggiatura italiana (virgola per i decimali) e con le celle a rischio evidenziate in rosso.
             """)
