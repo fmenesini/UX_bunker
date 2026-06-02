@@ -1817,12 +1817,7 @@ elif menu == "Report Sintetico":
 # ==========================================
 # SCHEDA 5: GUIDA OPERATIVA (VERSIONE BLINDATA)
 # ==========================================
-else:
-    st.title("Manuale d'Istruzione")
-    st.markdown("### Guida per la Gestione della Marginalità Salov")
-    st.markdown("---")
-    
-    with tab5:
+with tab5:
         st.header("📖 Manuale d'Addestramento e Guida Operativa Commerciale")
         st.markdown("""
         Questa guida rappresenta il protocollo ufficiale per l'utilizzo dell'applicativo. 
@@ -1864,7 +1859,7 @@ else:
         1. **Prezzo Base** = `Listino R`
         2. **Sconti di Linea (1-7 e Y):** Ciascuno riduce la base precedente a cascata.
         3. **Sconto Z (Promo):** Si applica sull'ultimo valore ottenuto dagli sconti di linea.
-        4. **Sconto AA (Valore Assoluto):** Si sottrae in Euro dal risultato precedente, generando il *Netto in Fattura 1*.
+        4. **Sconto AA (Valore Assoluto):** Si sottrae in Euro dal risultato precedente, generating il *Netto in Fattura 1*.
         5. **Oneri Logistici e Finanziari:** Si applicano in percentuale sul Netto in Fattura 1, generando il *Netto in Fattura 2*.
         6. **Abbattimento PFA (Fuori Fattura):** Tutte le voci PFA si *sommano linearmente* in un'unica aliquota, per poi essere sottratte dal Netto in Fattura 2. Il risultato è il **Prezzo Net Net Finale**.
         """)
