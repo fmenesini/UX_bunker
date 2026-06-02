@@ -1893,41 +1893,77 @@ with st.container(border=True):
     L'operazione è sicura (Semaforo Verde). Se il margine fosse sceso sotto lo zero, si sarebbe attivato l'allarme Rosso.
     """)
 
-# --- SEZIONE 3: MAPPA DELLE SCHEDE ---
-st.subheader("💻 3. Guida all'Utilizzo delle Sezioni dell'Applicazione")
+# --- SEZIONE 3: MAPPA DELLE SCHEDE PASSO-PASSO ---
+st.subheader("💻 3. Guida Passo-Passo all'Utilizzo delle Sezioni dell'Applicazione")
+st.markdown("""
+Questa sezione prende per mano il nuovo operatore e lo guida nell'esecuzione fisica delle simulazioni sul cruscotto, indicando cosa cliccare, cosa inserire e come interpretare i risultati a schermo.
+""")
 
-with st.expander("🎯 SCHEDA 1: SIMULATORE SINGOLO (Gestione Tattica & Reverse Target)"):
+with st.expander("🎯 SCHEDA 1: SIMULATORE SINGOLO (Operatività Quotidiana & Calcolo Inverso)"):
     st.markdown("""
-    **A cosa serve:** È il cuore pulsante delle trattative. Serve a simulare l'impatto economico di una singola referenza o a calcolare lo sconto esatto da concedere se il buyer impone un prezzo d'arrivo.
+    **A cosa serve:** È la trincea quotidiana. Si usa quando il Buyer di un'insegna chiama per negoziare il prezzo di una specifica referenza o per l'inserimento di una promozione a volantino.
     
-    **Come si usa:**
-    1. Seleziona Cliente e Referenza dai menu (il sistema carica in automatico i dati dalla gerarchia centrale).
-    2. Sovrascrivi i valori per testare manovre tattiche.
-    3. **La Funzione 'Reverse Target':** Se il Buyer chiede *"Voglio un Net Net finale di 4,50 Euro"*, tu selezioni il flag *Reverse Target*, imposti 'Sconto Z' come variabile e scrivi `4,50` nel Target. Il motore algebrico calcolerà istantaneamente lo Sconto Z esatto da inserire a sistema per centrare il bersaglio, segnalandoti eventuali allarmi sul Floor.
+    **Istruzioni operative Passo-Passo:**
+    1. **Filtro Cliente:** Clicca sul menu a tendina 'Seleziona Cliente'. Scegli il cliente oggetto della trattativa (es. *Esselunga*). 
+    2. **Filtro Prodotto:** Clicca sul menu a tendina 'Seleziona Prodotto'. Scegli l'EAN della referenza (es. *Olio Extravergine Sagra 1L*).
+    3. **Lettura dei Dati Ereditati:** Appena selezioni il prodotto, i campi del listino e degli sconti si popoleranno da soli. Il sistema sta leggendo la cassaforte degli accordi (Gerarchia) e ti mostra le condizioni correnti.
+    4. **Simulazione Manuale (Manovra Diretta):** Vuoi testare uno sconto promozionale aggiuntivo? Vai sul campo **Sconto Z (Promo)** e digita il valore (es. `15.00`). Vuoi inserire un taglio prezzo fisso? Vai sul campo **Sconto AA** e digita l'importo in Euro (es. `0.20`).
+    5. **Pressione del Grilletto:** Clicca sul bottone **'Calcola Pricing'**. Il motore a cascata elabora i dati e ti mostra il verdetto nel box di destra.
+    
+    **Come usare il Calcolo Inverso (Reverse Target):**
+    * *Scenario:* Il Buyer ti blocca e dice: *"Non mi interessano i tuoi sconti, io voglio comprare questo Extravergine a un Net Net finale di 4,80 Euro, altrimenti il volantino salta"*.
+    * *Azione:* 1. Attiva la spunta sulla casella **'Abilita Reverse Engineering / Ricerca Target'**.
+       2. Nel menu a tendina 'Variabile Obiettivo', seleziona **Sconto Z (Promo)** (indica alla macchina che vuoi agire sullo sconto promozionale lasciando invariati gli sconti base).
+       3. Nel campo numerico 'Target Net Net €', digita esattamente `4.80`.
+       4. Clicca su **'Esegui Calcolo Inverso'**.
+    * *Risultato a schermo:* La macchina azzera i tentativi manuali e scrive nel campo Sconto Z la percentuale esatta (es. `12.345%`) necessaria per spaccare il centesimo e toccare i 4,80 Euro. 
+    * *Guardrail di Sicurezza:* Guarda il widget del margine. Se i 4,80 Euro richiesti sono superiori al costo minimo aziendale (es. Floor a 4,50 Euro), vedrai il widget colorarsi di **Verde** con la scritta *'Approvato: +0,30 Euro'*. Se il Buyer avesse chiesto 4,30 Euro (sotto il Floor), il widget sarebbe diventato **Rosso Fuoco** segnalando il blocco della trattativa.
     """)
 
-with st.expander("🛡️ SCHEDA 2: GESTIONE ACCORDI (La Cassaforte della Gerarchia)"):
+with st.expander("🛡️ SCHEDA 2: GESTIONE ACCORDI (Caricamento e Manutenzione Contrattuale)"):
     st.markdown("""
-    **A cosa serve:** Evita di dover inserire a mano i dati per ogni singolo punto vendita. Mappa le condizioni tramite "ereditarietà Top-Down".
+    **A cosa serve:** Serve a inserire le "regole del gioco" valide per tutto l'anno. Non si usa durante la telefonata con il cliente, ma a monte, durante la stesura dei contratti quadro.
     
-    **Come si usa:**
-    I livelli (dal generale allo specifico) sono: **Nazionale -> Gruppo -> Sottogruppo -> Categoria -> Referenza (SKU)**.
-    Se carichi uno Sconto Pagamento a livello *Nazionale*, tutti i clienti lo erediteranno automaticamente. Se poi, per uno specifico *Gruppo*, inserisci uno Sconto Pagamento diverso, quest'ultimo "schiaccia e vince" sul dato Nazionale.
+    **Istruzioni operative Passo-Passo:**
+    1. **Selezione del Livello Gerarchico:** Prima di scrivere un numero, devi decidere il raggio d'azione del tuo accordo tramite il selettore di livello:
+       * Se selezioni *'Nazionale'*, lo sconto varrà per tutta Italia, nessuno escluso.
+       * Se selezioni *'Gruppo'*, ti apparirà una tendina per scegliere la Holding (es. *Conad Nazionale*).
+       * Se selezioni *'Sottogruppo'*, sceglierai il Ce.Di specifico (es. *Conad Nord Ovest*).
+       * Se selezioni *'Referenza'*, potrai legare lo sconto al singolo codice prodotto per quel singolo cliente.
+    2. **Inserimento Sconti:** Inserisci le percentuali nei rispettivi campi: dagli sconti strutturali in fattura (Sconto 1, Sconto 2, Sconto Y) fino ai premi di fine anno fuori fattura (Voci PFA da I a V).
+    3. **Consolidamento nel Database:** Clicca sul bottone **'Salva e Blinda Accordo'**. 
+    
+    **Esempio di Errore Operativo Evitato dalla Guida:**
+    Un junior inserisce a livello *Nazionale* uno Sconto Pagamento dell'1%. Poi si accorge che il gruppo *Coop* ha ottenuto il 2%. 
+    *Non deve cancellare il dato Nazionale!* Gli basterà selezionare il livello *'Gruppo'*, scegliere *'Coop'* e inserire `2.00` nel campo Sconto Pagamento. 
+    Quando il simulatore calcolerà i prezzi per Coop, vedrà il 2% (livello specifico) e ignorerà l'1% Nazionale, mentre per tutti gli altri clienti continuerà ad applicare l'1% di base. La gerarchia vince sempre sul caos.
     """)
 
-with st.expander("📈 SCHEDA 3: MODULO RINNOVI (Accordi di Fine Anno N vs N+1)"):
+with st.expander("📈 SCHEDA 3: MODULO RINNOVI (Analisi Strategica e Ponderazione Masse)"):
     st.markdown("""
-    **A cosa serve:** Strumento strategico per valutare il passaggio tra le condizioni dell'anno in corso [N] e quelle del nuovo anno [N+1].
+    **A cosa serve:** È lo strumento di intelligence utilizzato dal Direttore Commerciale o dai Key Account per preparare i contratti dell'anno nuovo **[N+1]** confrontandoli con lo storico dell'anno vecchio **[N]**.
     
-    **L'importanza della Ponderazione:**
-    Il cruscotto ti mostra le Medie Ponderate. Se il Prodotto A (net net 6 Euro) vende 10.000 pezzi, e il Prodotto B (net net 4 Euro) vende 1.000 pezzi, il sistema non fa una semplice media a 5 Euro, ma dà più "peso" al prodotto A (la media ponderata reale sarà 5,81 Euro). 
-    Questo ti permette di vedere subito (colonna **Delta %**) se l'intera manovra di rinnovo distruggerà o creerà valore sulle masse spostate.
+    **Istruzioni operative Passo-Passo:**
+    1. **Filtro Macro:** Seleziona il Gruppo Commerciale in alto (es. *Carrefour*).
+    2. **Caricamento della Matrice:** Il sistema genera automaticamente una tabella orizzontale macroeconomica che mette a specchio i listini dell'anno in corso contro le proposte future.
+    3. **Inserimento Input Anno Nuovo [N+1]:** Nelle colonne editabili della tabella, inserisci i volumi di vendita previsti (es. `50.000` pezzi) e i nuovi sconti richiesti dal cliente per l'anno venturo.
+    4. **Analisi delle Tre Tabelle di Controllo:**
+       * **Tabella 1 (Sintesi Totale):** Ti mostra il Fatturato Totale Simulato. Se vedi un **Delta % del -2.5%**, significa che la nuova proposta sta distruggendo il 2,5% di marginalità rispetto all'anno precedente su quel cliente.
+       * **Tabella 2 (Sintesi per Sub-Categoria):** Monitora le medie ponderate sui volumi. Se l'Olio di Oliva Classico vende 80.000 pezzi e l'Olio della linea Premium ne vende 2.000, le modifiche sui prezzi del Classico avranno un peso enorme sulla redditività complessiva, evidenziato dal *Floor Ponderato*.
+       * **Tabella 3 (Dettaglio SKU e Spazio Promo):** Questa è la colonna balistica più importante. Lo **Spazio Promo (€)** ti dice quanti centesimi di Euro ti rimangono come polmone finanziario prima che la singola referenza vada sotto i costi industriali. 
+    
+    **Esempio Numerico Visivo:**
+    Se per il prodotto *Sagra 1L* la riga mostra: *Net Net N1 = 5,10 Euro* | *Floor Minimo = 4,90 Euro* | *Spazio Promo = +0,20 Euro*. 
+    Il junior sa che durante l'anno potrà concedere al massimo altri 20 centesimi di sconto promozionale per fare i volantini. Se scende a 4,85 Euro, la tabella accende la cella **'Allarme: Sotto Floor'** e colora la riga di rosso.
     """)
 
-with st.expander("📊 SCHEDA 4: REPORT SINTETICO ED ESPORTAZIONE"):
+with st.expander("📊 SCHEDA 4: REPORT SINTETICO ED ESPORTAZIONE (Output per il Board)"):
     st.markdown("""
-    **A cosa serve:** Consolida l'intera situazione in un'unica griglia, pronta per essere condivisa con la Direzione Generale o il Controlling.
+    **A cosa serve:** Serve a raccogliere l'esito di tutte le negoziazioni in corso e a produrre la documentazione ufficiale da presentare al Controlling o alla Direzione Generale per l'approvazione finale.
     
-    **Come si usa:**
-    Verifica la tabella e i semafori (Rosso = Sotto Floor). Cliccando sul pulsante **Genera ed Estrai Excel**, il sistema ti consegna un file aziendale già pre-formattato, con la corretta punteggiatura italiana (virgola per i decimali) e con le celle a rischio evidenziate in rosso.
+    **Istruzioni operative Passo-Passo:**
+    1. **Ispezione Visiva dei Semafori:** Entra nella scheda e osserva l'elenco consolidato di tutti i clienti GDO italiani. Cerca le righe che presentano l'indicatore **Rosso**. Quelle sono le falle nello scafo (clienti in cui le richieste del buyer ci stanno mandando in perdita). Le righe **Verdi** indicano trattative in linea con i target aziendali.
+    2. **Generazione del Report Esterno:** Clicca sul grande pulsante centrale **'Genera ed Esporta Report Consolidato'**.
+    3. **Download del File:** Il sistema elabora l'intera base dati in cache, applica gli algoritmi di stile e fa apparire il tasto di download. Clicca su **'Scarica Excel'**.
+    4. **Caratteristiche del File scaricato:** Il file Excel generato è formattato secondo gli standard finanziari (numeri allineati a destra, decimali separati da virgola, intestazioni scure e stili di cella condizionali automatici). È pronto per essere allegato alla mail per la Direzione, senza bisogno di alcuna formattazione manuale.
     """)
