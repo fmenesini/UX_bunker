@@ -1814,7 +1814,7 @@ elif menu == "Report Sintetico":
 
     conn.close()
 
-# ==========================================
+    # ==========================================
     # SCHEDA 5: GUIDA OPERATIVA (VERSIONE ESTESA)
     # ==========================================
     with tab5:
