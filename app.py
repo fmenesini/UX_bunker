@@ -1038,6 +1038,8 @@ elif menu == "Simulazione Rinnovi (N vs N+1)":
                 if col in df_exp_edited.columns:
                     st.session_state.rinnovi_df.update(df_exp_edited[col])
 
+    conn.close()
+
 # ==========================================
 # SCHEDA: STORICO PROMOZIONI
 # ==========================================
