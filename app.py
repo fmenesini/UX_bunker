@@ -1818,84 +1818,82 @@ elif menu == "Report Sintetico":
 # SCHEDA 5: GUIDA OPERATIVA
 # ==========================================
 else:
-    st.title("Manuale d'Istruzione")
-    st.markdown("### Guida per la Gestione della Marginalità Salov")
+    st.title("📚 Manuale d'Istruzione e Formazione")
+    st.markdown("### Guida Completa all'uso di 'Bunker Commerciale - Salov'")
     
-    with st.expander("1. Cos'è il Net-Net? (La Cascata degli Sconti)", expanded=True):
+    with st.expander("1. L'ABC DEL PRICING: Cos'è il Net-Net e come funziona il Sell-Out", expanded=True):
         st.markdown("""
-        Il **Net-Net** è il valore reale che rimane in tasca all'azienda dopo aver pagato tutti gli sconti e i contributi alla GDO. 
-        Il simulatore non fa mai la somma banale degli sconti (es. 10% + 5% non fa 15%), ma calcola una **cascata geometrica**.
+        L'applicazione non fa mai la banale somma algebrica degli sconti (10% + 5% ≠ 15%). Calcola sempre una **cascata geometrica sequenziale**.
         
-        **Esempio Pratico di Trattativa:**
+        **Esempio Numerico di Fatturazione:**
         Stai vendendo 1 cartone di *Sagra Extra Vergine Classico 1L*.
         *   **LISTINO BASE (R):** Partiamo da **10,00 €**
-        *   **Sconto 1 (10,00%):** Il prezzo scende a **9,00 €** *(Calcolo: 10,00 - 10%)*
-        *   **Sconto 2 (5,00%):** Il prezzo scende a **8,55 €** *(Calcolo: 9,00 - 5%)*
-        *   **Sconto Continuativo Y (2,00%):** Scende a **8,379 €** *(Calcolo: 8,55 - 2%)*
-        *   **Sconto Promozionale Z (10,00%):** Scende a **7,541 €** *(Calcolo: 8,379 - 10%)*
-        *   **Sconto Taglio Prezzo Secco [AA] (0,10 €/Pz):** Togliamo 10 centesimi netti ➔ **7,441 €**
-        *   **Oneri Logistica / Pagamento (es. 2,5% totale):** Scende a **7,255 €**. 
+        *   **Sconto 1 (10%):** Il prezzo scende a **9,00 €** *(10,00 - 10%)*
+        *   **Sconto 2 (5%):** Il prezzo scende a **8,55 €** *(9,00 - 5%)*
+        *   **Sconto Continuativo Y (2%):** Scende a **8,379 €**
+        *   **Sconto Promozionale Z (10%):** Scende a **7,541 €**
+        *   **Sconto Unitario (Euro secco) [AA] (0,10 €/Pz):** Togliamo 10 centesimi netti ➔ **7,441 €**
+        *   **Oneri Logistica / Pagamento (es. 2,5% totale):** Scende a **7,255 €**. Questo è il tuo *Netto In Fattura 2*. 
         
-        Questo **7,255 €** è quello che vedrai scritto sulla fattura (Netto in Fattura 2). Ma non è finita.
+        **La Fase Fuori Fattura (Premi Fine Anno - PFA)**
+        I premi concordati si sottraggono dal Netto In Fattura. Se il totale PFA è del **5%**:
+        *   *Calcolo PFA:* $7,255 \\times (1 - 0,05)$ = **6,892 € (PREZZO NET-NET FINALE / AM)**.
         
-        **I Premi Fine Anno (Fuori Fattura)**
-        A fine anno, la Centrale GDO ti chiederà indietro i Premi (PFA). Se il totale dei PFA è del **5,00%**, il sistema calcola la trattenuta finale:
-        *   *Calcolo:* $7,255 \\times (1 - 0,05) = 6,892 €$
-        *   **PREZZO NET NET FINALE (AM):** **6,89 €**
+        > 🚨 **IL MINIMO NET-NET (G):** L'azienda fissa un "Floor" invalicabile. Se per questo prodotto il minimo aziendale è 7,00 € e tu proponi 6,89 €, il sistema ti avviserà in **ROSSO** e bloccherà l'approvazione commerciale.
         
-        > **La Regola d'Oro:** Nel Back-Office, l'azienda ha impostato un "Minimo Net Net" (Floor) per ogni prodotto. Se il tuo 6,89 € scende anche solo di un centesimo sotto quel limite, il semaforo diventa **ROSSO** e la trattativa è bloccata.
+        **Impatto Contributi Volantino (Sell-Out Extra):**
+        Oltre al Net-Net, la GDO può chiedere soldi extra (es. Testata Gondola o taglio in cassa).
+        *Se il tuo Net-Net è 6,89 € e prometti 10.000 bottiglie dando 500 € fissi di testata + 0,10 €/bottiglia in cassa:*
+        *   Costo pezzo da importo fisso = 500 € / 10.000 pz = **0,05 €**
+        *   Costo taglio a pezzo = **0,10 €**
+        *   **NET-NET POST-VOLANTINO:** $6,89 € - 0,05 € - 0,10 €$ = **6,74 € a bottiglia veri incassati**. L'applicazione registra sia la spesa totale che il nuovo margine residuo.
         """)
         
-    with st.expander("2. La Gerarchia dei Contratti (Chi comanda su chi?)", expanded=False):
+    with st.expander("2. LA GERARCHIA E L'EREDITARIETÀ (Chi vince sui Contratti?)", expanded=False):
         st.markdown("""
-        Il sistema usa un motore a 5 livelli. Vige la regola del **Blocco dall'Alto (Top-Down)**: se il capo decide una regola, il negozio locale non può cambiarla.
+        Il software rispetta una logica militare detta **"Top-Down Lock"** (Blocco dall'alto verso il basso) basata su 5 livelli gerarchici.
+        Se un capoarea fissa un accordo "alto", un livello inferiore non può cancellarlo.
         
-        **I 5 Livelli (dal più forte al più debole):**
-        1. **GRUPPO MACRO** (es. *COOP ITALIA*) ➔ È l'Accordo Quadro Nazionale. Se qui c'è uno sconto del 10%, è blindato per tutti.
-        2. **SOTTOGRUPPO** (es. *COOP NORD OVEST*) ➔ Può aggiungere sconti *solo* negli spazi lasciati vuoti dal Gruppo Macro.
-        3. **CATEGORIA** (es. *EXTRAVERGINE*) ➔ Regole valide solo per un tipo di olio.
-        4. **ASSOCIATO / INSEGNA** (es. *IPERCOOP*) ➔ Regole del singolo negozio locale.
-        5. **REFERENZA (EAN)** ➔ Il singolo prodotto (es. *Sagra 1L*). Qui si inserisce il Listino Base.
+        **Livelli in ordine di Potere (dal forte al debole):**
+        1. **GRUPPO MACRO** (es. *COOP ITALIA*) ➔ Accordo Quadro. Detta le leggi assolute.
+        2. **SOTTOGRUPPO** (es. *COOP NORD OVEST*) ➔ Gestisce l'Interregionale.
+        3. **CATEGORIA** (es. *EXTRAVERGINE*) ➔ Sconti associati all'insegna solo su cluster di olio specifici.
+        4. **ASSOCIATO / INSEGNA** (es. *IPERCOOP LOCALE*) ➔ Dettagli o premi solo a livello punto vendita/insegna associata.
+        5. **REFERENZA (EAN)** ➔ È l'anello finale. Serve a depositare il **Listino (R)** base del singolo prodotto. 
         
-        **Esempi di vita reale:**
-        *   **Il Blocco della Centrale:** Se COOP ITALIA fissa lo Sconto 1 al 10%, e tu per sbaglio inserisci 15% sulla singola Referenza, il sistema ignorerà il tuo 15% e manterrà il 10%. Il livello superiore vince sempre.
-        *   **La Cella Vuota:** Se COOP ITALIA lascia lo Sconto 6 vuoto, l'Insegna locale è libera di inserire un suo sconto.
-        *   **Il Fuori Assortimento:** Se manca il Listino Base sulla Referenza, il prodotto non si può vendere a quel cliente.
-        """)
-
-    with st.expander("3. Il Simulatore Singolo (Trattativa su un prodotto)", expanded=False):
-        st.markdown("""
-        Usa la scheda "Simulatore Offerte" quando sei al telefono con il buyer e state discutendo di un singolo prodotto.
-        
-        Hai due modi per usarlo:
-        
-        **Modalità A: Partenza da Prezzo Target (La più usata)**
-        Il buyer ti dice: *"Voglio mettere la bottiglia a volantino a 4,99€, quindi a te la pago 3,50€ netti"*.
-        1. Seleziona la modalità **A**.
-        2. Inserisci **3,50** nel campo "Prezzo Target".
-        3. Il sistema fa i calcoli all'incontrario e ti dice istantaneamente quale **Sconto Promozionale Z (%)** devi inserire a sistema per fargli pagare esattamente 3,50€.
-        4. Se 3,50€ è sotto il tuo limite aziendale, il sistema te lo calcola lo stesso, ma ti avvisa in ROSSO che stai perdendo soldi.
-        
-        **Modalità B: Tentativi Manuali**
-        La usi per fare prove. Inserisci tu a mano lo Sconto Z (%) o lo Sconto AA (€) e vedi dove atterra il prezzo finale. Il sistema ti aiuta mostrandoti sempre lo "Sconto MAX Consentito" prima di andare in rosso.
+        *Nota:* Per escludere (azzerare) uno sconto dall'ereditarietà in fase di compilazione database (es. no Sconto 2 su referenze Premium), bisogna esplicitamente imputare il valore `0.0` nel file Excel, e non lasciarlo semplicemente vuoto (che attiverebbe l'eredità automatica dai gruppi superiori).
         """)
 
-    with st.expander("4. La Master Grid (Simulazione Rinnovi N vs N+1)", expanded=False):
+    with st.expander("3. COME USARE IL 'SIMULATORE SINGOLO'", expanded=False):
         st.markdown("""
-        Questa è l'arma segreta per i rinnovi contrattuali di fine anno. Ti permette di vedere tutto il cliente in una sola schermata.
+        È il tuo compagno per le **telefonate con il buyer**. Tratta una sola referenza (SKU) alla volta.
         
-        **Come funziona:**
-        1. Seleziona il Gruppo e il Sottogruppo.
-        2. Clicca su **"Carica Condizioni Attuali da DB"**. Il sistema riempirà le colonne dell'Anno N con i listini e gli sconti che il cliente ha oggi.
-        3. Inserisci i **Volumi** previsti per l'anno prossimo nella colonna `[N+1] Volumi`. *Attenzione: il sistema calcola i risultati solo per i prodotti dove inserisci almeno 1 pezzo di volume.*
-        4. Modifica il Listino o gli Sconti per l'Anno N+1. *(Nota: per l'inserimento dei decimali, utilizza il PUNTO (.) come richiesto dallo standard del browser).*
-        5. **Premi il pulsante "Calcola Simulazione"** per aggiornare i risultati.
+        *   **Modalità A (La Magia Inversa):** Il Buyer ti ordina: *"Pago massimo 4,20€"*. Selezioni A, inserisci 4,20€ nel "Prezzo Target". Clicchi fuori dal box, e la macchina ti dà subito il valore corretto della colonna `% Sconto Promozionale [Z]` che il sistema di fatturazione si aspetta per uscire esattamente a quel numero in fondo alla riga PFA.
+        *   **Leva Promozionale Euro (AA):** Se vuoi togliere "-0.50 cent" dritti fuori percentuale (dalla Modalità A), riempi l'apposito campo e il motore compensa il calcolo da solo per rispettare il tuo Target.
+        *   Una volta calcolata, se tutto è "Verde", **Salvala in DB (Storico)** premendo in basso o Scarica la Proposta Commerciale in PDF/Excel (comprensiva di schema pallet logistico) per l'invio immediato al buyer.
+        """)
+
+    with st.expander("4. COME USARE LA 'MASTER GRID' (I RINNOVI MANSIONALI)", expanded=False):
+        st.markdown("""
+        Questa griglia sostituisce ore ed ore passate a fondere mille fogli Excel per simulare i Contratti di fine anno (N vs N+1) calcolando al centesimo cosa guadagna la divisione aziendale sul cliente globale, evitando l'effetto "*Pollo di Trilussa*" (che distrugge la marginalità mischiando categorie alto spendenti e sottomarche di puro giro).
         
-        **Come leggere i risultati (Il Pollo di Trilussa):**
-        Nella scheda "Analisi Ponderata", vedrai i risultati raggruppati per Categoria (es. *Extravergine*).
-        Perché è importante? Perché se vendi 10.000 bottiglie di Olio di Semi guadagnando tanto, e 1.000 bottiglie di Extravergine perdendo soldi, il totale del cliente sembrerà positivo (Verde). 
-        Ma la Master Grid se ne accorgerà e colorerà di **ROSSO** la riga degli Extravergini, avvisandoti che quel cluster specifico sta distruggendo valore.
+        1. **Pre-Compila la Macchina:** Cerca l'insegna. Inserisci (facoltativo) "Anni di Storico" a slider, per vederti N-1, N-2 caricati accanto e gestire la richiesta (es. *"Crai da te l'anno scorso prendeva 10K, ma 2 anni fa erano 14k..."*). E premi **Carica Condizioni DB**. Ti genererà lo scheletro contrattuale istantaneamente in "1. Master Grid (Input)".
         
-        **Cos'è lo Sc. Promo MAX [N+1] %?**
-        È la colonna più importante della griglia. Ti dice esattamente quanti punti percentuali di sconto puoi ancora concedere al buyer su quel prodotto prima di toccare il limite minimo aziendale.
+        2. **TIPS ESSENZIALE per INPUT NUMERI:** Sul tablet / PC digita per lo standard internet i **DECIMALI CON IL PUNTO** (Es. digita `12.50` anziché 12,50). Il calcolo te li tramuterà sempre su schede in forma stampata a "Virgole Italiane" `12,50 €`. Clicca semrpre `🔄 Calcola Simulazione`.
+
+        3. **Come sfruttare le KPI Medie (Analisi e Ponderazione)**: Guarda i colori Rossi nella pagina Risultati e controlla lo "Spazio Promo GLOBALE € o Spazio Promo MAX [N+1]". Questa voce quantifica esattamente i centesimi / percentuali mancanti fra i prezzi finali accordati (n1) e l'effettivo "prezzo alla canna del gas aziendale" in bilancio logistico su cui le agenzie regionali verranno bacchettate. Fila di margini rossi solo nella subcat EXTRAV., margine verde globale? Torna a batterti per una rettifica: perdi nel tuo segmento "gold".
+
+        4. **Fase Operativa Dettagliata (L'Esplosione)**: Tu discuti l'"Effetto N+1 = voglio il 33.3% sulla bolla totale Sconto FATT e Sconto OFF (PFAs)". La terza scheda "Esplosione Sconti" usa i 33.3 imposti nel primo modulo (Tab1), rimescola come check point di chiusura dove imputare specifici "Y continuativi al 2%" / "SC5 Sconta" così avrai diff == `0.00 %`. Questo conferma zero rotture prima di iniettare accordi al BackOffice aziendale reale su ERP.
+        """)
+
+    with st.expander("5. CRM 'STORICO PROMOZIONI' E LE AZIONI BACK-OFFICE MASSIVE", expanded=False):
+        st.markdown("""
+        *   **Lo Storico (Memoria d'Acciaio):** Vai su **Storico Promozioni** per recuperare le battaglie già affrontate ("Proposte vs Confermate"). Questo tab si raccorda ai save del Tab 1 "Simulatore Singolo". Vuoi stornare test sbagliati di un account junior? Tasto Eliminazione su fondo schermo col box esplicativo del DB Master per riga singola d'operazione via menu tendina univoco a stringa "ID". Usa scarico Excel per dare sintesi totali all'IT e in Board/Meeting revisioni venditori mensili.
+
+        *   **La Scacchiera Finale, 'Genera Export Consolidato':** Nella Scheda  **Report Sintetico**, non serve neanche filtrare prima se fai **ESTRAI EXCEL**, hai direttamente scaricabile dal DB remoto in cache tutte l'allineamento orizzontale GDO delle Asimmetrie Listini, vedi esattamemte al netto di tutto cosa Coop rispetto a Dimar ti richiede con semafori approvativi "ROSSE/VERDI" al fianco già preparati da girare per analisi ad AD/Direttore Gen e Controlling!
+
+        *   **BackOffice / Import di Caricamento (Gestionali Interni Base Excel)**
+        Nessuno deve sbattere 1 EAN manualmente in Admin. "Template SAP" / "Guardrails (il Tuo Floor)" e "Condiz. Quadro GDO Accordi (Foglio a +22Colonne)" scaricano format grezzo base già predisposti da App nativamente, inserite Ean o i Nuovi Ingressi e spari l'aggiornamento massivo.
+
+        **(H) Reset**: *Se è abilitata da DEV/DevOps*, in tutte tabelle fondo schermata 'Digita RESET e azzererai l'integrità protetta ricostituendo l'intero seed baseline standard "dummy" app pre predefinito da test se sei inciampato grave su test.*
         """)
