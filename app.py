@@ -822,7 +822,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
 
     with tab_simulazione:
         st.markdown("#### Griglia di Simulazione Contrattuale")
-        st.markdown("Modifica i dati direttamente nella tabella. Premi 'Calcola Simulazione' per aggiornare i risultati.")
+        st.markdown("Modifica i dati e premi **Calcola Simulazione** per aggiornare i risultati. *(Nota: usa il PUNTO per i decimali in fase di inserimento)*")
         
         col_up3, col_up4 = st.columns(2)
         with col_up3:
@@ -888,8 +888,10 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             submit_sim = st.form_submit_button("🔄 Calcola Simulazione", type="primary")
             
         if submit_sim:
-            for col in ['[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']:
-                st.session_state.rinnovi_df[col] = df_sim_edited[col]
+            # Salvataggio sicuro tramite indice
+            for i, idx in enumerate(df_display.index):
+                for col in ['[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']:
+                    st.session_state.rinnovi_df.at[idx, col] = df_sim_edited.iloc[i][col]
             st.rerun()
 
     with tab_risultati:
@@ -981,7 +983,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
 
     with tab_esplosione:
         st.markdown("#### Esplosione Sconti (Dettaglio)")
-        st.markdown("Una volta definiti i target aggregati nel Tab 1, usa questa griglia per spacchettare gli sconti nelle singole voci contrattuali. Il sistema verificherà che la somma geometrica (Fattura) e algebrica (PFA) corrisponda al target.")
+        st.markdown("Una volta definiti i target aggregati nel Tab 1, usa questa griglia per spacchettare gli sconti nelle singole voci contrattuali. Modifica i dati e premi **Calcola e Verifica Sconti**.")
         
         df_explode = st.session_state.rinnovi_df[st.session_state.rinnovi_df['[N+1] Volumi'] > 0].copy()
         
@@ -1027,12 +1029,13 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                     height=600,
                     key="editor_esplosione"
                 )
-                submit_exp = st.form_submit_button("💾 Salva Dettaglio Sconti", type="primary")
+                submit_exp = st.form_submit_button("🔄 Calcola e Verifica Sconti", type="primary")
                 
             if submit_exp:
-                for col in dettaglio_cols:
-                    if col in df_exp_edited.columns:
-                        st.session_state.rinnovi_df.update(df_exp_edited[col])
+                # Salvataggio sicuro tramite indice
+                for i, idx in enumerate(df_explode.index):
+                    for col in dettaglio_cols:
+                        st.session_state.rinnovi_df.at[idx, col] = df_exp_edited.iloc[i][col]
                 st.rerun()
 
 # ==========================================
@@ -1885,7 +1888,7 @@ else:
         1. Seleziona il Gruppo e il Sottogruppo.
         2. Clicca su **"Carica Condizioni Attuali da DB"**. Il sistema riempirà le colonne dell'Anno N con i listini e gli sconti che il cliente ha oggi.
         3. Inserisci i **Volumi** previsti per l'anno prossimo nella colonna `[N+1] Volumi`. *Attenzione: il sistema calcola i risultati solo per i prodotti dove inserisci almeno 1 pezzo di volume.*
-        4. Modifica il Listino o gli Sconti per l'Anno N+1.
+        4. Modifica il Listino o gli Sconti per l'Anno N+1. *(Nota: per l'inserimento dei decimali, utilizza il PUNTO (.) come richiesto dallo standard del browser).*
         5. **Premi il pulsante "Calcola Simulazione"** per aggiornare i risultati.
         
         **Come leggere i risultati (Il Pollo di Trilussa):**
