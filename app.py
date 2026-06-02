@@ -3,13 +3,11 @@ import sqlite3
 import pandas as pd
 import io
 import openpyxl
+import random
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date
 import logging
-
-# Importazione della nuova libreria per la Master Grid
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode, ColumnsAutoSizeMode
 
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
@@ -17,7 +15,7 @@ from core.hierarchy_resolver import HierarchyResolver
 
 logging.basicConfig(level=logging.WARNING)
 
-# Impostazione pagina
+# Impostazione pagina: layout wide e sidebar espansa
 st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide", initial_sidebar_state="expanded")
 
 # ==========================================
@@ -173,10 +171,31 @@ def seed_baseline_data(conn):
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210131620', 66.00, None, None, None, None, None, None, 12.0, 5.0, None, None, None, None, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210111110', 60.80, None, None, None, None, None, None, 15.0, 0.0, None, None, None, None, None, None, None),
         ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', 'ALLEANZA 3.0', 'REFERENZA', '8002210001305', 43.20, None, None, None, None, None, None, 12.0, 0.0, None, None, None, None, None, None, None),
+
         ('ESSELUNGA GRUPPO', '', '', 'GRUPPO', '', None, 35.0, 15.0, None, None, None, None, None, None, 1.2, 1.0, 12.0, 5.0, None, None, None),
         ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', 'ESSELUNGA', 'REFERENZA', '8002210131620', 40.00, None, None, None, None, None, None, 10.0, 7.0, None, None, None, None, None, None, None),
         ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', 'ESSELUNGA', 'REFERENZA', '8002210111110', 38.00, None, None, None, None, None, None, 11.0, 0.0, None, None, None, None, None, None, None),
-        ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', 'ESSELUNGA', 'REFERENZA', '8002210001305', 24.00, None, None, None, None, None, None, 13.0, 0.0, None, None, None, None, None, None, None)
+        ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', 'ESSELUNGA', 'REFERENZA', '8002210001305', 24.00, None, None, None, None, None, None, 13.0, 0.0, None, None, None, None, None, None, None),
+
+        ('CONAD', '', '', 'GRUPPO', '', None, 17.0, 18.0, None, None, None, None, None, None, 1.5, 1.0, 9.0, 11.0, None, None, None),
+        ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'REFERENZA', '8002210131620', 50.00, None, None, None, None, None, None, 12.0, 9.0, None, None, None, None, None, None, None),
+        ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'REFERENZA', '8002210111110', 44.00, None, None, None, None, None, None, 11.0, 4.0, None, None, None, None, None, None, None),
+        ('CONAD', 'CONAD SOTTOGRUPPO', 'CONAD ADRIATICO', 'REFERENZA', '8002210001305', 30.00, None, None, None, None, None, None, 10.0, 4.0, None, None, None, None, None, None, None),
+
+        ('SELEX GRUPPO', '', '', 'GRUPPO', '', None, 17.0, 18.0, None, None, None, None, None, None, 1.5, 1.0, 9.0, 11.0, None, None, None),
+        ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', 'SELEX ', 'REFERENZA', '8002210131620', 50.00, None, None, None, None, None, None, 12.0, 9.0, None, None, None, None, None, None, None),
+        ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', 'SELEX ', 'REFERENZA', '8002210111110', 44.00, None, None, None, None, None, None, 11.0, 4.0, None, None, None, None, None, None, None),
+        ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', 'SELEX ', 'REFERENZA', '8002210001305', 30.00, None, None, None, None, None, None, 10.0, 4.0, None, None, None, None, None, None, None),
+        
+        ('PAM GRUPPO', '', '', 'GRUPPO', '', None, 15.0, 20.0, None, None, None, None, None, None, 1.4, 1.0, 11.0, 6.0, None, None, None),
+        ('PAM GRUPPO', 'PAM SOTTOGRUPPO', 'PAM', 'REFERENZA', '8002210131620', 52.00, None, None, None, None, None, None, 14.0, 6.0, None, None, None, None, None, None, None),
+        ('PAM GRUPPO', 'PAM SOTTOGRUPPO', 'PAM', 'REFERENZA', '8002210111110', 48.00, None, None, None, None, None, None, 13.0, 3.0, None, None, None, None, None, None, None),
+        ('PAM GRUPPO', 'PAM SOTTOGRUPPO', 'PAM', 'REFERENZA', '8002210001305', 32.00, None, None, None, None, None, None, 9.0, 3.0, None, None, None, None, None, None, None),
+
+        ('CRAI GRUPPO', '', '', 'GRUPPO', '', None, 12.0, 25.0, None, None, None, None, None, None, 2.0, 1.0, 7.0, 12.0, None, None, None),
+        ('CRAI GRUPPO', 'CRAI SOTTOGRUPPO', 'CRAI TIRRENO', 'REFERENZA', '8002210131620', 56.00, None, None, None, None, None, None, 15.0, 8.0, None, None, None, None, None, None, None),
+        ('CRAI GRUPPO', 'CRAI SOTTOGRUPPO', 'CRAI TIRRENO', 'REFERENZA', '8002210111110', 50.00, None, None, None, None, None, None, 12.0, 5.0, None, None, None, None, None, None, None),
+        ('CRAI GRUPPO', 'CRAI SOTTOGRUPPO', 'CRAI TIRRENO', 'REFERENZA', '8002210001305', 35.00, None, None, None, None, None, None, 11.0, 5.0, None, None, None, None, None, None, None)
     ]
     
     cursor.executemany("""
@@ -217,7 +236,7 @@ if menu == "Simulatore Offerte":
     gruppi = [r[0] for r in cursor.fetchall()]
     
     if not gruppi:
-        st.warning("ATTENZIONE: Nessun cliente caricato. Sblocca il sistema caricando i dati dal Back-Office.")
+        st.warning("Nessun cliente caricato. Sblocca il sistema caricando i dati dal Back-Office.")
         st.stop()
 
     with st.container(border=True):
@@ -252,7 +271,7 @@ if menu == "Simulatore Offerte":
     contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, ean, tipo_olio)
 
     if contract.listino_r is None:
-        st.error("ATTENZIONE: PRODOTTO FUORI ASSORTIMENTO PER QUESTO CLIENTE")
+        st.error("PRODOTTO FUORI ASSORTIMENTO PER QUESTO CLIENTE")
         st.stop()
 
     col_m1, col_m2, col_m3 = st.columns(3)
@@ -679,18 +698,18 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             if '100% ITA' in desc or '100%I' in desc or 'TOSC' in desc: return 'Extravergini Italiani'
             if 'BIO' in desc: return 'Extravergini Biologici'
             return 'Extravergini Comunitari'
-        elif tipo == 'OLIVA': return 'Oli di Oliva Raffinati'
+        elif tipo == 'OLIVA': return 'Olio Raffinato'
         elif tipo == 'SEMI':
             if 'ARACHIDE' in desc: return 'Semi di Arachide'
             if 'MAIS' in desc: return 'Semi di Mais'
             if 'GIRAS' in desc: return 'Semi di Girasole'
             if 'FRITT' in desc or 'FRIMX' in desc: return 'Oli per Frittura Specifici'
             if 'VINACC' in desc: return 'Semi di Vinacciolo'
-            return 'Altri Oli di Semi'
+            return 'Oli di Semi'
         elif tipo == 'ACETO': return 'Aceto Balsamico'
         return 'Altro'
         
-    df_base['Sub-Categoria'] = df_base.apply(get_subcat, axis=1)
+    df_base['Categoria'] = df_base.apply(get_subcat, axis=1)
     df_base = df_base.rename(columns={'descrizione_commerciale': 'Prodotto', 'min_net_net_g': 'Minimo Net Net €'})
     
     operative_cols = [
@@ -727,19 +746,18 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
 
     with col_btn2:
         if st.button("Popola con Dati di Test (Mock Data)", use_container_width=True):
-            import random
             df_mock = st.session_state.rinnovi_df.copy()
             for idx, row in df_mock.iterrows():
                 floor = row['Minimo Net Net €'] if row['Minimo Net Net €'] > 0 else 3.0
-                vol = random.randint(5, 50) * 100
+                vol = random.randint(10, 100) * 100
                 df_mock.at[idx, '[N] Volumi'] = vol
-                df_mock.at[idx, '[N] Listino €'] = float(round(floor * 1.6, 2))
-                df_mock.at[idx, '[N] Sc. Fattura %'] = 15.0
+                df_mock.at[idx, '[N] Listino €'] = float(round(floor * 1.5, 2))
+                df_mock.at[idx, '[N] Sc. Fattura %'] = 10.0
                 df_mock.at[idx, '[N] PFA %'] = 5.0
                 df_mock.at[idx, '[N+1] Volumi'] = int(vol * 1.05)
-                df_mock.at[idx, '[N+1] Listino €'] = float(round(floor * 1.7, 2))
-                df_mock.at[idx, '[N+1] Sc. Fattura %'] = 16.0
-                df_mock.at[idx, '[N+1] PFA %'] = 5.5
+                df_mock.at[idx, '[N+1] Listino €'] = float(round(floor * 1.6, 2))
+                df_mock.at[idx, '[N+1] Sc. Fattura %'] = 12.0
+                df_mock.at[idx, '[N+1] PFA %'] = 5.0
             st.session_state.rinnovi_df = df_mock
             st.rerun()
 
@@ -762,51 +780,43 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         
     df_display['Sc. Promo MAX [N+1] %'] = df_display.apply(calc_max_promo, axis=1)
 
-    # Configurazione AgGrid
-    from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode, ColumnsAutoSizeMode
+    col_config = {
+        "ean": st.column_config.TextColumn("EAN", disabled=True),
+        "Categoria": st.column_config.TextColumn("Categoria", width="medium", disabled=True),
+        "Prodotto": st.column_config.TextColumn("Prodotto", width="large", disabled=True),
+        "Minimo Net Net €": st.column_config.NumberColumn("Min Net Net €", format="€ %.2f", width="small", disabled=True),
+        "[N] Volumi": st.column_config.NumberColumn(step=100, width="small"),
+        "[N] Listino €": st.column_config.NumberColumn(format="€ %.2f", step=0.1, width="small"),
+        "[N] Sc. Fattura %": st.column_config.NumberColumn(format="%.2f %%", step=0.5, width="small"),
+        "[N] PFA %": st.column_config.NumberColumn(format="%.2f %%", step=0.5, width="small"),
+        "[N+1] Volumi": st.column_config.NumberColumn(step=100, width="small"),
+        "[N+1] Listino €": st.column_config.NumberColumn(format="€ %.2f", step=0.1, width="small"),
+        "[N+1] Sc. Fattura %": st.column_config.NumberColumn(format="%.2f %%", step=0.5, width="small"),
+        "[N+1] PFA %": st.column_config.NumberColumn(format="%.2f %%", step=0.5, width="small"),
+        "Net Net [N] €": st.column_config.NumberColumn(format="€ %.3f", disabled=True, width="small"),
+        "Net Net [N+1] €": st.column_config.NumberColumn(format="€ %.3f", disabled=True, width="small"),
+        "Delta Assoluto €": st.column_config.NumberColumn(format="€ %+.3f", disabled=True, width="small"),
+        "Sc. Promo MAX [N+1] %": st.column_config.NumberColumn(format="%.2f %%", disabled=True, width="small"),
+    }
     
-    gb = GridOptionsBuilder.from_dataframe(df_display[['ean', 'Sub-Categoria', 'Prodotto', 'Minimo Net Net €'] + operative_cols + ['Net Net [N] €', 'Net Net [N+1] €', 'Delta Assoluto €', 'Sc. Promo MAX [N+1] %']])
+    cols_to_edit = ['Categoria', 'Prodotto', 'Minimo Net Net €'] + operative_cols + ['Net Net [N] €', 'Net Net [N+1] €', 'Delta Assoluto €', 'Sc. Promo MAX [N+1] %']
     
-    # Raggruppamento per Sub-Categoria
-    gb.configure_column("Sub-Categoria", rowGroup=True, hide=True)
-    gb.configure_column("Prodotto", pinned='left', width=250)
-    gb.configure_column("ean", hide=True)
-    
-    # Formattazione Colonne
-    euro_cols = ['Minimo Net Net €', '[N] Listino €', '[N+1] Listino €', 'Net Net [N] €', 'Net Net [N+1] €', 'Delta Assoluto €']
-    perc_cols = ['[N] Sc. Fattura %', '[N] PFA %', '[N+1] Sc. Fattura %', '[N+1] PFA %', 'Sc. Promo MAX [N+1] %']
-    
-    for col in euro_cols:
-        gb.configure_column(col, type=["numericColumn", "numberColumnFilter", "customNumericFormat"], valueFormatter="data.value ? '€ ' + data.value.toFixed(2) : '€ 0.00'")
-    for col in perc_cols:
-        gb.configure_column(col, type=["numericColumn", "numberColumnFilter", "customNumericFormat"], valueFormatter="data.value ? data.value.toFixed(2) + ' %' : '0.00 %'")
-        
-    # Colonne Editabili
-    for col in operative_cols:
-        gb.configure_column(col, editable=True, cellStyle={'backgroundColor': '#F0FDF4'})
-
-    gridOptions = gb.build()
-    
-    grid_response = AgGrid(
-        df_display,
-        gridOptions=gridOptions,
-        data_return_mode=DataReturnMode.AS_INPUT,
-        update_mode=GridUpdateMode.VALUE_CHANGED,
-        fit_columns_on_grid_load=False,
-        columns_auto_size_mode=ColumnsAutoSizeMode.FIT_CONTENTS,
-        theme='alpine',
-        height=500
+    df_sim_edited = st.data_editor(
+        df_display[cols_to_edit],
+        column_config=col_config,
+        hide_index=True,
+        use_container_width=False, # Permette lo scroll orizzontale
+        height=600,
+        key="editor_simulazione"
     )
     
-    # Aggiornamento Session State se ci sono modifiche
-    if grid_response['data'] is not None:
-        df_returned = pd.DataFrame(grid_response['data'])
-        for col in operative_cols:
-            st.session_state.rinnovi_df[col] = df_returned[col]
+    # Salviamo solo le colonne editabili nel session state
+    for col in operative_cols:
+        st.session_state.rinnovi_df[col] = df_sim_edited[col]
 
     st.divider()
 
-    st.markdown("#### 3. Analisi & Spazio Promo")
+    st.markdown("#### 3. Sub-Totali per Categoria (Media Ponderata)")
     df_active = df_display[df_display['[N+1] Volumi'] > 0].copy()
     
     if df_active.empty:
@@ -815,10 +825,9 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         df_active['Fatturato_N'] = df_active['Net Net [N] €'] * df_active['[N] Volumi']
         df_active['Fatturato_N1'] = df_active['Net Net [N+1] €'] * df_active['[N+1] Volumi']
         df_active['Valore_Floor_Totale_N1'] = df_active['Minimo Net Net €'] * df_active['[N+1] Volumi']
-        df_active['Allarme_SKU'] = df_active['Net Net [N+1] €'] < df_active['Minimo Net Net €']
-        df_active['Delta_Net_Net_%'] = df_active.apply(lambda x: ((x['Net Net [N+1] €'] - x['Net Net [N] €']) / x['Net Net [N] €'] * 100) if x['Net Net [N] €'] > 0 else 0, axis=1)
         
-        df_subcat = df_active.groupby('Sub-Categoria').agg(
+        # Raggruppamento per Categoria
+        df_cat = df_active.groupby('Categoria').agg(
             Volumi_N=('[N] Volumi', 'sum'),
             Fatturato_N=('Fatturato_N', 'sum'),
             Volumi_N1=('[N+1] Volumi', 'sum'),
@@ -826,43 +835,26 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             Valore_Floor_Totale_N1=('Valore_Floor_Totale_N1', 'sum')
         ).reset_index()
         
-        df_subcat['Net_Net_Pond_N'] = df_subcat.apply(lambda x: x['Fatturato_N'] / x['Volumi_N'] if x['Volumi_N'] > 0 else 0, axis=1)
-        df_subcat['Net_Net_Pond_N1'] = df_subcat.apply(lambda x: x['Fatturato_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
-        df_subcat['Floor_Pond_N1'] = df_subcat.apply(lambda x: x['Valore_Floor_Totale_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
+        df_cat['Net Net Pond. [N] €'] = df_cat.apply(lambda x: x['Fatturato_N'] / x['Volumi_N'] if x['Volumi_N'] > 0 else 0, axis=1)
+        df_cat['Net Net Pond. [N+1] €'] = df_cat.apply(lambda x: x['Fatturato_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
+        df_cat['Floor Pond. €'] = df_cat.apply(lambda x: x['Valore_Floor_Totale_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
         
-        df_subcat['Delta_Pond_%'] = df_subcat.apply(lambda x: ((x['Net_Net_Pond_N1'] - x['Net_Net_Pond_N']) / x['Net_Net_Pond_N'] * 100) if x['Net_Net_Pond_N'] > 0 else 0, axis=1)
-        df_subcat['Allarme_SubCat'] = df_subcat['Net_Net_Pond_N1'] < df_subcat['Floor_Pond_N1']
+        df_cat['Delta %'] = df_cat.apply(lambda x: ((x['Net Net Pond. [N+1] €'] - x['Net Net Pond. [N] €']) / x['Net Net Pond. [N] €'] * 100) if x['Net Net Pond. [N] €'] > 0 else 0, axis=1)
+        df_cat['Allarme'] = df_cat['Net Net Pond. [N+1] €'] < df_cat['Floor Pond. €']
         
-        tot_vol_n1 = df_active['[N+1] Volumi'].sum()
-        tot_net_n = df_active['Fatturato_N'].sum() / df_active['[N] Volumi'].sum() if df_active['[N] Volumi'].sum() > 0 else 0
-        tot_net_n1 = df_active['Fatturato_N1'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
-        tot_floor_n1 = df_active['Valore_Floor_Totale_N1'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
-        tot_delta_perc = ((tot_net_n1 - tot_net_n) / tot_net_n * 100) if tot_net_n > 0 else 0
-        
-        st.markdown("#### KPI Totali Cliente (Media Ponderata)")
-        col_k1, col_k2, col_k3, col_k4 = st.columns(4)
-        col_k1.metric("Volumi Totali [N+1]", f"{tot_vol_n1:,.0f} Pz")
-        col_k2.metric("Net-Net Pond. [N]", f"€ {tot_net_n:.3f}")
-        col_k3.metric("Net-Net Pond. [N+1]", f"€ {tot_net_n1:.3f}", f"{tot_net_n1 - tot_net_n:+.3f} € vs [N]")
-        col_k4.metric("Variazione Totale (%)", f"{tot_delta_perc:+.2f} %", "Delta % vs Anno N")
-        
-        st.divider()
-        
-        st.markdown("#### Analisi Aggregata per Sub-Categoria")
-        
-        def highlight_subcat(row):
-            if row['Allarme_SubCat']: return ['background-color: #FEF2F2; color: #991B1B; font-weight: bold'] * len(row)
-            if row['Delta_Pond_%'] < 0: return ['color: #D97706'] * len(row)
+        def highlight_cat(row):
+            if row['Allarme']: return ['background-color: #FEF2F2; color: #991B1B; font-weight: bold'] * len(row)
+            if row['Delta %'] < 0: return ['color: #D97706'] * len(row)
             return [''] * len(row)
 
-        df_subcat_disp = df_subcat[['Sub-Categoria', 'Volumi_N1', 'Net_Net_Pond_N', 'Net_Net_Pond_N1', 'Delta_Pond_%', 'Floor_Pond_N1', 'Allarme_SubCat']]
+        df_cat_disp = df_cat[['Categoria', 'Volumi_N1', 'Net Net Pond. [N] €', 'Net Net Pond. [N+1] €', 'Delta %', 'Floor Pond. €', 'Allarme']]
         
         st.dataframe(
-            df_subcat_disp.style.apply(highlight_subcat, axis=1).format({
-                'Net_Net_Pond_N': '€ {:.3f}', 'Net_Net_Pond_N1': '€ {:.3f}', 
-                'Delta_Pond_%': '{:+.2f} %', 'Floor_Pond_N1': '€ {:.3f}'
+            df_cat_disp.style.apply(highlight_cat, axis=1).format({
+                'Net Net Pond. [N] €': '€ {:.3f}', 'Net Net Pond. [N+1] €': '€ {:.3f}', 
+                'Delta %': '{:+.2f} %', 'Floor Pond. €': '€ {:.3f}'
             }),
-            column_config={"Allarme_SubCat": "Sotto Floor!"},
+            column_config={"Allarme": "Sotto Floor!"},
             hide_index=True, use_container_width=True
         )
 
@@ -1719,7 +1711,7 @@ else:
         4. Modifica il Listino o gli Sconti per l'Anno N+1.
         
         **Come leggere i risultati (Il Pollo di Trilussa):**
-        Nella scheda "Analisi & Spazio Promo", vedrai i risultati raggruppati per Sub-Categoria (es. *Extravergini Italiani*).
+        Nella scheda "Analisi & Spazio Promo", vedrai i risultati raggruppati per Categoria (es. *Extravergine*).
         Perché è importante? Perché se vendi 10.000 bottiglie di Olio di Semi guadagnando tanto, e 1.000 bottiglie di Extravergine perdendo soldi, il totale del cliente sembrerà positivo (Verde). 
         Ma la Master Grid se ne accorgerà e colorerà di **ROSSO** la riga degli Extravergini, avvisandoti che quel cluster specifico sta distruggendo valore.
         
