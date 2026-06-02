@@ -9,8 +9,6 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date
 import logging
 
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode, GridUpdateMode, DataReturnMode, ColumnsAutoSizeMode
-
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
 from core.hierarchy_resolver import HierarchyResolver
@@ -670,10 +668,10 @@ if menu == "Simulatore Offerte":
     conn.close()
 
 # ==========================================
-# NUOVA SCHEDA: SIMULAZIONE RINNOVI (N vs N+1)
+# NUOVA SCHEDA: MASTER GRID RINNOVI (N vs N+1)
 # ==========================================
 elif menu == "Master Grid Rinnovi (N vs N+1)":
-    st.title("Master Grid Rinnovi (N vs N+1)")
+    st.title("Master Grid Rinnovi Contrattuali (N vs N+1)")
     st.markdown("Analisi differenziale dei margini, calcolo dello Spazio Promo e Roll-up per Sub-Categorie.")
     
     anno_corrente = date.today().year
@@ -697,7 +695,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         with col_ctx2:
             sottogruppo_sel = st.selectbox("Sottogruppo GDO", [""] + sottogruppi if gruppo_sel != "Nessuno" else [""])
             
-        associato_sel = "" # Fermo al sottogruppo
+        associato_sel = "" 
 
     query = """
         SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0) as min_net_net_g
@@ -733,7 +731,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         '[N+1] Sc. Fattura %', '[N+1] Contratto %'
     ]
     
-    # Colonne per l'esplosione sconti (Tab 3)
     dettaglio_cols = [
         'S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %', 'S6 %', 'S7 %', 'Y %', 'Carico %', 'Pagamento %',
         'PFA I %', 'PFA II %', 'PFA III %', 'PFA IV %', 'PFA V %'
@@ -775,7 +772,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                         df_temp.at[idx, '[N] Contratto %'] = pfa_tot
                         df_temp.at[idx, '[N+1] Contratto %'] = pfa_tot
                         
-                        # Pre-compila anche il dettaglio per il Tab 3
                         df_temp.at[idx, 'S1 %'] = float(contract.sconto_1)
                         df_temp.at[idx, 'S2 %'] = float(contract.sconto_2)
                         df_temp.at[idx, 'S6 %'] = float(contract.sconto_6)
@@ -809,9 +805,8 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 df_mock.at[idx, '[N+1] Sc. Fattura %'] = 12.0
                 df_mock.at[idx, '[N+1] Contratto %'] = 5.0
                 
-                # Mock data per esplosione
                 df_mock.at[idx, 'S1 %'] = 10.0
-                df_mock.at[idx, 'S2 %'] = 2.22 # Per arrivare a ~12% geometrico
+                df_mock.at[idx, 'S2 %'] = 2.22 
                 df_mock.at[idx, 'PFA I %'] = 5.0
                 
             st.session_state.rinnovi_df = df_mock
@@ -827,7 +822,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
 
     with tab_simulazione:
         st.markdown("#### Griglia di Simulazione Contrattuale")
-        st.markdown("Modifica i dati direttamente nella tabella. I calcoli si aggiornano in tempo reale ad ogni invio.")
+        st.markdown("Modifica i dati direttamente nella tabella. Premi 'Calcola Simulazione' per aggiornare i risultati.")
         
         col_up3, col_up4 = st.columns(2)
         with col_up3:
@@ -851,7 +846,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                     st.session_state.rinnovi_df = df_temp
                     st.rerun()
 
-        # Calcoli Live per la griglia nativa
         df_display = st.session_state.rinnovi_df.copy()
         df_display['Net Net [N] €'] = df_display['[N] Listino €'] * (1 - df_display['[N] Sc. Fattura %']/100) * (1 - df_display['[N] Contratto %']/100)
         df_display['Net Net [N+1] €'] = df_display['[N+1] Listino €'] * (1 - df_display['[N+1] Sc. Fattura %']/100) * (1 - df_display['[N+1] Contratto %']/100)
@@ -866,50 +860,51 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             
         df_display['Sc. Promo MAX [N+1] %'] = df_display.apply(calc_max_promo, axis=1)
 
-        # Configurazione Colonne LARGHE per st.data_editor
         col_config = {
-            "Prodotto": st.column_config.TextColumn("Prodotto", width="large", disabled=True),
-            "[N] Listino €": st.column_config.NumberColumn("[N] Listino €", format="€ %.2f", width="medium", disabled=True),
-            "[N+1] Volumi": st.column_config.NumberColumn("[N+1] Volumi", step=100, width="medium"),
-            "[N+1] Listino €": st.column_config.NumberColumn("[N+1] Listino €", format="€ %.2f", step=0.1, width="medium"),
-            "[N+1] Sc. Fattura %": st.column_config.NumberColumn("[N+1] Sc. Fattura %", format="%.2f %%", step=0.5, width="medium"),
-            "[N+1] Contratto %": st.column_config.NumberColumn("[N+1] Contratto %", format="%.2f %%", step=0.5, width="medium"),
-            "Net Net [N] €": st.column_config.NumberColumn("Net Net [N] €", format="€ %.3f", disabled=True, width="medium"),
-            "Net Net [N+1] €": st.column_config.NumberColumn("Net Net [N+1] €", format="€ %.3f", disabled=True, width="medium"),
-            "Minimo Net Net €": st.column_config.NumberColumn("Minimo Net Net €", format="€ %.2f", step=0.05, width="medium"),
-            "Sc. Promo MAX [N+1] %": st.column_config.NumberColumn("Sc. Promo MAX [N+1] %", format="%.2f %%", disabled=True, width="medium"),
-            "Delta Assoluto €": st.column_config.NumberColumn("Delta Assoluto €", format="€ %+.3f", disabled=True, width="medium"),
+            "Prodotto": st.column_config.TextColumn("Prodotto", disabled=True),
+            "[N] Listino €": st.column_config.NumberColumn("[N] Listino €", format="€ %.2f", disabled=True),
+            "[N+1] Volumi": st.column_config.NumberColumn("[N+1] Volumi", step=100),
+            "[N+1] Listino €": st.column_config.NumberColumn("[N+1] Listino €", format="€ %.2f", step=0.1),
+            "[N+1] Sc. Fattura %": st.column_config.NumberColumn("[N+1] Sc. Fattura %", format="%.2f %%", step=0.5),
+            "[N+1] Contratto %": st.column_config.NumberColumn("[N+1] Contratto %", format="%.2f %%", step=0.5),
+            "Net Net [N] €": st.column_config.NumberColumn("Net Net [N] €", format="€ %.3f", disabled=True),
+            "Net Net [N+1] €": st.column_config.NumberColumn("Net Net [N+1] €", format="€ %.3f", disabled=True),
+            "Minimo Net Net €": st.column_config.NumberColumn("Minimo Net Net €", format="€ %.2f", step=0.05),
+            "Sc. Promo MAX [N+1] %": st.column_config.NumberColumn("Sc. Promo MAX [N+1] %", format="%.2f %%", disabled=True),
+            "Delta Assoluto €": st.column_config.NumberColumn("Delta Assoluto €", format="€ %+.3f", disabled=True),
         }
         
         cols_to_edit = ['Prodotto', '[N] Listino €', '[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Net Net [N] €', 'Net Net [N+1] €', 'Minimo Net Net €', 'Sc. Promo MAX [N+1] %', 'Delta Assoluto €']
         
-        df_sim_edited = st.data_editor(
-            df_display[cols_to_edit],
-            column_config=col_config,
-            hide_index=True,
-            use_container_width=False, # Falso per forzare lo scroll orizzontale e mantenere le larghezze
-            height=600,
-            key="editor_simulazione_nativa"
-        )
-        
-        # Salvataggio modifiche nel Session State
-        for col in ['[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']:
-            st.session_state.rinnovi_df[col] = df_sim_edited[col]
+        with st.form("form_simulazione"):
+            df_sim_edited = st.data_editor(
+                df_display[cols_to_edit],
+                column_config=col_config,
+                hide_index=True,
+                use_container_width=False, 
+                height=600,
+                key="editor_simulazione_nativa"
+            )
+            submit_sim = st.form_submit_button("🔄 Calcola Simulazione", type="primary")
+            
+        if submit_sim:
+            for col in ['[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']:
+                st.session_state.rinnovi_df[col] = df_sim_edited[col]
+            st.rerun()
 
     with tab_risultati:
         df_active = st.session_state.rinnovi_df[st.session_state.rinnovi_df['[N+1] Volumi'] > 0].copy()
         
         if df_active.empty:
-            st.warning("Nessuna referenza attiva. Inserisci dei volumi nella colonna '[N+1] Volumi' nella Master Grid.")
+            st.warning("Nessuna referenza attiva. Inserisci dei volumi nella Master Grid.")
         else:
             df_active['Net Net [N] €'] = df_active['[N] Listino €'] * (1 - df_active['[N] Sc. Fattura %']/100) * (1 - df_active['[N] Contratto %']/100)
             df_active['Net Net [N+1] €'] = df_active['[N+1] Listino €'] * (1 - df_active['[N+1] Sc. Fattura %']/100) * (1 - df_active['[N+1] Contratto %']/100)
             
-            df_active['Fatturato_N'] = df_active['Net Net [N] €'] * df_active['[N+1] Volumi'] # Usiamo volumi N+1 per comparazione a parità di perimetro
+            df_active['Fatturato_N'] = df_active['Net Net [N] €'] * df_active['[N+1] Volumi'] 
             df_active['Fatturato_N1'] = df_active['Net Net [N+1] €'] * df_active['[N+1] Volumi']
             df_active['Valore_Floor_Totale_N1'] = df_active['Minimo Net Net €'] * df_active['[N+1] Volumi']
             
-            # Raggruppamento per Categoria
             df_cat = df_active.groupby('Categoria').agg(
                 Volumi_N1=('[N+1] Volumi', 'sum'),
                 Fatturato_N=('Fatturato_N', 'sum'),
@@ -993,7 +988,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         if df_explode.empty:
             st.warning("Nessuna referenza attiva.")
         else:
-            # Calcolo Live dei check
             def check_fattura(row):
                 p = 1.0
                 for s in ['S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %', 'S6 %', 'S7 %', 'Y %', 'Carico %', 'Pagamento %']:
@@ -1010,35 +1004,36 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             df_explode['Delta PFA'] = df_explode['[N+1] Contratto %'] - df_explode['Check PFA %']
 
             col_config_exp = {
-                "Prodotto": st.column_config.TextColumn("Prodotto", width="medium", disabled=True),
-                "[N+1] Sc. Fattura %": st.column_config.NumberColumn("Target Fattura %", format="%.2f %%", disabled=True, width="small"),
-                "Check Sc. Fattura %": st.column_config.NumberColumn("Somma Geom. %", format="%.2f %%", disabled=True, width="small"),
-                "Delta Fattura": st.column_config.NumberColumn("Diff. Fattura", format="%+.2f", disabled=True, width="small"),
-                "[N+1] Contratto %": st.column_config.NumberColumn("Target PFA %", format="%.2f %%", disabled=True, width="small"),
-                "Check PFA %": st.column_config.NumberColumn("Somma Algeb. %", format="%.2f %%", disabled=True, width="small"),
-                "Delta PFA": st.column_config.NumberColumn("Diff. PFA", format="%+.2f", disabled=True, width="small"),
+                "Prodotto": st.column_config.TextColumn("Prodotto", disabled=True),
+                "[N+1] Sc. Fattura %": st.column_config.NumberColumn("Target Fattura %", format="%.2f %%", disabled=True),
+                "Check Sc. Fattura %": st.column_config.NumberColumn("Somma Geom. %", format="%.2f %%", disabled=True),
+                "Delta Fattura": st.column_config.NumberColumn("Diff. Fattura", format="%+.2f", disabled=True),
+                "[N+1] Contratto %": st.column_config.NumberColumn("Target PFA %", format="%.2f %%", disabled=True),
+                "Check PFA %": st.column_config.NumberColumn("Somma Algeb. %", format="%.2f %%", disabled=True),
+                "Delta PFA": st.column_config.NumberColumn("Diff. PFA", format="%+.2f", disabled=True),
             }
             
             for col in dettaglio_cols:
-                col_config_exp[col] = st.column_config.NumberColumn(col, format="%.2f %%", step=0.5, width="small")
+                col_config_exp[col] = st.column_config.NumberColumn(col, format="%.2f %%", step=0.5)
 
             cols_to_edit_exp = ['Prodotto', '[N+1] Sc. Fattura %', 'Check Sc. Fattura %', 'Delta Fattura'] + ['S1 %', 'S2 %', 'S6 %', 'Y %', 'Carico %', 'Pagamento %'] + ['[N+1] Contratto %', 'Check PFA %', 'Delta PFA'] + ['PFA I %', 'PFA II %']
             
-            df_exp_edited = st.data_editor(
-                df_explode[cols_to_edit_exp],
-                column_config=col_config_exp,
-                hide_index=True,
-                use_container_width=False,
-                height=600,
-                key="editor_esplosione"
-            )
-            
-            # Salvataggio
-            for col in dettaglio_cols:
-                if col in df_exp_edited.columns:
-                    st.session_state.rinnovi_df.update(df_exp_edited[col])
-
-    conn.close()
+            with st.form("form_esplosione"):
+                df_exp_edited = st.data_editor(
+                    df_explode[cols_to_edit_exp],
+                    column_config=col_config_exp,
+                    hide_index=True,
+                    use_container_width=False,
+                    height=600,
+                    key="editor_esplosione"
+                )
+                submit_exp = st.form_submit_button("💾 Salva Dettaglio Sconti", type="primary")
+                
+            if submit_exp:
+                for col in dettaglio_cols:
+                    if col in df_exp_edited.columns:
+                        st.session_state.rinnovi_df.update(df_exp_edited[col])
+                st.rerun()
 
 # ==========================================
 # SCHEDA: STORICO PROMOZIONI
@@ -1889,8 +1884,9 @@ else:
         **Come funziona:**
         1. Seleziona il Gruppo e il Sottogruppo.
         2. Clicca su **"Carica Condizioni Attuali da DB"**. Il sistema riempirà le colonne dell'Anno N con i listini e gli sconti che il cliente ha oggi.
-        3. Inserisci i **Volumi** previsti per l'anno prossimo nella colonna `Volumi`. *Attenzione: il sistema calcola i risultati solo per i prodotti dove inserisci almeno 1 pezzo di volume.*
-        4. Modifica il Listino o gli Sconti per l'Anno N+1. La griglia calcolerà all'istante il nuovo Net-Net.
+        3. Inserisci i **Volumi** previsti per l'anno prossimo nella colonna `[N+1] Volumi`. *Attenzione: il sistema calcola i risultati solo per i prodotti dove inserisci almeno 1 pezzo di volume.*
+        4. Modifica il Listino o gli Sconti per l'Anno N+1.
+        5. **Premi il pulsante "Calcola Simulazione"** per aggiornare i risultati.
         
         **Come leggere i risultati (Il Pollo di Trilussa):**
         Nella scheda "Analisi Ponderata", vedrai i risultati raggruppati per Categoria (es. *Extravergine*).
