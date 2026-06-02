@@ -12,6 +12,8 @@ import logging
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
 from core.hierarchy_resolver import HierarchyResolver
+# ECCO IL TUO NUOVO IMPORT
+from modulo_rinnovi import render_simulazione_rinnovi 
 
 logging.basicConfig(level=logging.WARNING)
 
