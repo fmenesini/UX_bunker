@@ -670,10 +670,10 @@ if menu == "Simulatore Offerte":
     conn.close()
 
 # ==========================================
-# NUOVA SCHEDA: MASTER GRID RINNOVI (N vs N+1)
+# NUOVA SCHEDA: SIMULAZIONE RINNOVI (N vs N+1)
 # ==========================================
-elif menu == "Master Grid Rinnovi (N vs N+1)":
-    st.title("Master Grid Rinnovi Contrattuali (N vs N+1)")
+elif menu == "Simulazione Rinnovi (N vs N+1)":
+    st.title("Simulazione Rinnovi Contrattuali (N vs N+1)")
     st.markdown("Analisi differenziale dei margini, calcolo dello Spazio Promo e Roll-up per Sub-Categorie.")
     
     anno_corrente = date.today().year
@@ -728,18 +728,22 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
     df_base['Categoria'] = df_base['tipo_olio']
     df_base = df_base.rename(columns={'descrizione_commerciale': 'Prodotto', 'min_net_net_g': 'Minimo Net Net €'})
     
-    # Colonne operative ridotte come richiesto
     operative_cols = [
-        'Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %'
+        '[N+1] Volumi', '[N] Listino €', '[N+1] Listino €', 
+        '[N+1] Sc. Fattura %', '[N+1] Contratto %'
     ]
-    for col in operative_cols:
+    
+    # Colonne per l'esplosione sconti (Tab 3)
+    dettaglio_cols = [
+        'S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %', 'S6 %', 'S7 %', 'Y %', 'Carico %', 'Pagamento %',
+        'PFA I %', 'PFA II %', 'PFA III %', 'PFA IV %', 'PFA V %'
+    ]
+    
+    for col in operative_cols + dettaglio_cols:
         df_base[col] = 0.0 if '€' in col or '%' in col else 0
         
-    # Colonne nascoste per il calcolo dell'Anno N
-    df_base['[N] Listino €'] = 0.0
     df_base['[N] Sc. Fattura %'] = 0.0
     df_base['[N] Contratto %'] = 0.0
-    df_base['Net Net [N] €'] = 0.0
 
     if 'rinnovi_df' not in st.session_state:
         st.session_state.rinnovi_df = df_base.copy()
@@ -771,8 +775,14 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                         df_temp.at[idx, '[N] Contratto %'] = pfa_tot
                         df_temp.at[idx, '[N+1] Contratto %'] = pfa_tot
                         
-                        # Calcolo Net Net N
-                        df_temp.at[idx, 'Net Net [N] €'] = listino_n * (1 - sc_fatt_eq/100) * (1 - pfa_tot/100)
+                        # Pre-compila anche il dettaglio per il Tab 3
+                        df_temp.at[idx, 'S1 %'] = float(contract.sconto_1)
+                        df_temp.at[idx, 'S2 %'] = float(contract.sconto_2)
+                        df_temp.at[idx, 'S6 %'] = float(contract.sconto_6)
+                        df_temp.at[idx, 'Y %'] = float(contract.sconto_y)
+                        df_temp.at[idx, 'Carico %'] = float(contract.sconto_carico)
+                        df_temp.at[idx, 'Pagamento %'] = float(contract.sconto_pagamento)
+                        df_temp.at[idx, 'PFA I %'] = float(contract.voce_i)
                         
                 st.session_state.rinnovi_df = df_temp
                 st.rerun()
@@ -793,12 +803,17 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 df_mock.at[idx, '[N] Listino €'] = listino_n
                 df_mock.at[idx, '[N] Sc. Fattura %'] = sc_fatt_n
                 df_mock.at[idx, '[N] Contratto %'] = pfa_n
-                df_mock.at[idx, 'Net Net [N] €'] = listino_n * (1 - sc_fatt_n/100) * (1 - pfa_n/100)
                 
-                df_mock.at[idx, 'Volumi'] = int(vol * 1.05)
+                df_mock.at[idx, '[N+1] Volumi'] = int(vol * 1.05)
                 df_mock.at[idx, '[N+1] Listino €'] = float(round(floor * 1.6, 2))
                 df_mock.at[idx, '[N+1] Sc. Fattura %'] = 12.0
                 df_mock.at[idx, '[N+1] Contratto %'] = 5.0
+                
+                # Mock data per esplosione
+                df_mock.at[idx, 'S1 %'] = 10.0
+                df_mock.at[idx, 'S2 %'] = 2.22 # Per arrivare a ~12% geometrico
+                df_mock.at[idx, 'PFA I %'] = 5.0
+                
             st.session_state.rinnovi_df = df_mock
             st.rerun()
 
@@ -812,7 +827,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
 
     with tab_simulazione:
         st.markdown("#### Griglia di Simulazione Contrattuale")
-        st.markdown("Modifica i dati direttamente nella tabella. I calcoli si aggiornano in tempo reale.")
+        st.markdown("Modifica i dati direttamente nella tabella. I calcoli si aggiornano in tempo reale ad ogni invio.")
         
         col_up3, col_up4 = st.columns(2)
         with col_up3:
@@ -836,94 +851,67 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                     st.session_state.rinnovi_df = df_temp
                     st.rerun()
 
-        df_for_grid = st.session_state.rinnovi_df[['ean', 'Categoria', 'Sub-Categoria', 'Prodotto', 'Net Net [N] €', 'Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']]
+        # Calcoli Live per la griglia nativa
+        df_display = st.session_state.rinnovi_df.copy()
+        df_display['Net Net [N] €'] = df_display['[N] Listino €'] * (1 - df_display['[N] Sc. Fattura %']/100) * (1 - df_display['[N] Contratto %']/100)
+        df_display['Net Net [N+1] €'] = df_display['[N+1] Listino €'] * (1 - df_display['[N+1] Sc. Fattura %']/100) * (1 - df_display['[N+1] Contratto %']/100)
+        df_display['Delta Assoluto €'] = df_display['Net Net [N+1] €'] - df_display['Net Net [N] €']
         
-        gb = GridOptionsBuilder.from_dataframe(df_for_grid)
+        def calc_max_promo(row):
+            nn_base = row['Net Net [N+1] €']
+            floor = row['Minimo Net Net €']
+            if nn_base > 0 and nn_base > floor:
+                return (1 - (floor / nn_base)) * 100
+            return 0.0
+            
+        df_display['Sc. Promo MAX [N+1] %'] = df_display.apply(calc_max_promo, axis=1)
+
+        # Configurazione Colonne LARGHE per st.data_editor
+        col_config = {
+            "Prodotto": st.column_config.TextColumn("Prodotto", width="large", disabled=True),
+            "[N] Listino €": st.column_config.NumberColumn("[N] Listino €", format="€ %.2f", width="medium", disabled=True),
+            "[N+1] Volumi": st.column_config.NumberColumn("[N+1] Volumi", step=100, width="medium"),
+            "[N+1] Listino €": st.column_config.NumberColumn("[N+1] Listino €", format="€ %.2f", step=0.1, width="medium"),
+            "[N+1] Sc. Fattura %": st.column_config.NumberColumn("[N+1] Sc. Fattura %", format="%.2f %%", step=0.5, width="medium"),
+            "[N+1] Contratto %": st.column_config.NumberColumn("[N+1] Contratto %", format="%.2f %%", step=0.5, width="medium"),
+            "Net Net [N] €": st.column_config.NumberColumn("Net Net [N] €", format="€ %.3f", disabled=True, width="medium"),
+            "Net Net [N+1] €": st.column_config.NumberColumn("Net Net [N+1] €", format="€ %.3f", disabled=True, width="medium"),
+            "Minimo Net Net €": st.column_config.NumberColumn("Minimo Net Net €", format="€ %.2f", step=0.05, width="medium"),
+            "Sc. Promo MAX [N+1] %": st.column_config.NumberColumn("Sc. Promo MAX [N+1] %", format="%.2f %%", disabled=True, width="medium"),
+            "Delta Assoluto €": st.column_config.NumberColumn("Delta Assoluto €", format="€ %+.3f", disabled=True, width="medium"),
+        }
         
-        gb.configure_column("Prodotto", pinned='left', width=250)
-        gb.configure_column("ean", hide=True)
-        gb.configure_column("Categoria", hide=True)
-        gb.configure_column("Sub-Categoria", hide=True)
+        cols_to_edit = ['Prodotto', '[N] Listino €', '[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Net Net [N] €', 'Net Net [N+1] €', 'Minimo Net Net €', 'Sc. Promo MAX [N+1] %', 'Delta Assoluto €']
         
-        # Formattazione Italiana per AgGrid
-        fmt_eur2 = JsCode("function(params) { return params.value == null ? '' : '€ ' + params.value.toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }")
-        fmt_eur3 = JsCode("function(params) { return params.value == null ? '' : '€ ' + params.value.toLocaleString('it-IT', {minimumFractionDigits: 3, maximumFractionDigits: 3}); }")
-        fmt_pct = JsCode("function(params) { return params.value == null ? '' : params.value.toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' %'; }")
-        fmt_vol = JsCode("function(params) { return params.value == null ? '' : params.value.toLocaleString('it-IT', {maximumFractionDigits: 0}); }")
-
-        gb.configure_column("Net Net [N] €", valueFormatter=fmt_eur3, width=120)
-        gb.configure_column("Minimo Net Net €", editable=True, valueFormatter=fmt_eur2, width=120, cellStyle={'backgroundColor': '#FFFBEB'})
-        
-        gb.configure_column("Volumi", editable=True, valueFormatter=fmt_vol, width=100, cellStyle={'backgroundColor': '#F0FDF4'})
-        gb.configure_column("[N+1] Listino €", editable=True, valueFormatter=fmt_eur2, width=110, cellStyle={'backgroundColor': '#F0FDF4'})
-        gb.configure_column("[N+1] Sc. Fattura %", editable=True, valueFormatter=fmt_pct, width=130, cellStyle={'backgroundColor': '#F0FDF4'})
-        gb.configure_column("[N+1] Contratto %", editable=True, valueFormatter=fmt_pct, width=130, cellStyle={'backgroundColor': '#F0FDF4'})
-
-        # JS per Calcoli Live
-        js_nn_n1 = JsCode("""function(params) {
-            let d = params.data; if (!d) return 0;
-            return (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] Contratto %']||0)/100);
-        }""")
-        
-        js_delta = JsCode("""function(params) {
-            let d = params.data; if (!d) return 0;
-            let nn_n = d['Net Net [N] €'] || 0;
-            if (nn_n === 0) return 0;
-            let nn_n1 = (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] Contratto %']||0)/100);
-            return ((nn_n1 - nn_n) / nn_n) * 100;
-        }""")
-        
-        js_max_promo = JsCode("""function(params) {
-            let d = params.data; if (!d) return 0;
-            let nn_n1 = (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] Contratto %']||0)/100);
-            let floor = d['Minimo Net Net €'] || 0;
-            if (nn_n1 > 0 && nn_n1 > floor) { return (1 - (floor / nn_n1)) * 100; }
-            return 0;
-        }""")
-
-        gb.configure_column("Net Net [N+1] €", valueGetter=js_nn_n1, valueFormatter=fmt_eur3, width=120)
-        gb.configure_column("Delta % Net Net", valueGetter=js_delta, valueFormatter=fmt_pct, width=120)
-        gb.configure_column("Sc. Promo MAX [N+1] %", valueGetter=js_max_promo, valueFormatter=fmt_pct, width=150)
-
-        gb.configure_grid_options(
-            enableRangeSelection=True,
-            suppressAggFuncInHeader=True,
-            domLayout='normal'
-        )
-
-        gridOptions = gb.build()
-
-        grid_response = AgGrid(
-            df_for_grid,
-            gridOptions=gridOptions,
-            update_mode=GridUpdateMode.VALUE_CHANGED,
-            data_return_mode=DataReturnMode.AS_INPUT,
-            allow_unsafe_jscode=True,
-            theme='alpine',
+        df_sim_edited = st.data_editor(
+            df_display[cols_to_edit],
+            column_config=col_config,
+            hide_index=True,
+            use_container_width=False, # Falso per forzare lo scroll orizzontale e mantenere le larghezze
             height=600,
-            fit_columns_on_grid_load=False
+            key="editor_simulazione_nativa"
         )
         
-        if grid_response['data'] is not None:
-            df_returned = pd.DataFrame(grid_response['data'])
-            for col in operative_cols + ['Minimo Net Net €']:
-                st.session_state.rinnovi_df[col] = df_returned[col]
+        # Salvataggio modifiche nel Session State
+        for col in ['[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']:
+            st.session_state.rinnovi_df[col] = df_sim_edited[col]
 
     with tab_risultati:
-        df_active = st.session_state.rinnovi_df[st.session_state.rinnovi_df['Volumi'] > 0].copy()
+        df_active = st.session_state.rinnovi_df[st.session_state.rinnovi_df['[N+1] Volumi'] > 0].copy()
         
         if df_active.empty:
-            st.warning("Nessuna referenza attiva. Inserisci dei volumi nella Master Grid.")
+            st.warning("Nessuna referenza attiva. Inserisci dei volumi nella colonna '[N+1] Volumi' nella Master Grid.")
         else:
+            df_active['Net Net [N] €'] = df_active['[N] Listino €'] * (1 - df_active['[N] Sc. Fattura %']/100) * (1 - df_active['[N] Contratto %']/100)
             df_active['Net Net [N+1] €'] = df_active['[N+1] Listino €'] * (1 - df_active['[N+1] Sc. Fattura %']/100) * (1 - df_active['[N+1] Contratto %']/100)
             
-            df_active['Fatturato_N'] = df_active['Net Net [N] €'] * df_active['Volumi']
-            df_active['Fatturato_N1'] = df_active['Net Net [N+1] €'] * df_active['Volumi']
-            df_active['Valore_Floor_Totale_N1'] = df_active['Minimo Net Net €'] * df_active['Volumi']
+            df_active['Fatturato_N'] = df_active['Net Net [N] €'] * df_active['[N+1] Volumi'] # Usiamo volumi N+1 per comparazione a parità di perimetro
+            df_active['Fatturato_N1'] = df_active['Net Net [N+1] €'] * df_active['[N+1] Volumi']
+            df_active['Valore_Floor_Totale_N1'] = df_active['Minimo Net Net €'] * df_active['[N+1] Volumi']
             
             # Raggruppamento per Categoria
             df_cat = df_active.groupby('Categoria').agg(
-                Volumi_N1=('Volumi', 'sum'),
+                Volumi_N1=('[N+1] Volumi', 'sum'),
                 Fatturato_N=('Fatturato_N', 'sum'),
                 Fatturato_N1=('Fatturato_N1', 'sum'),
                 Valore_Floor_Totale_N1=('Valore_Floor_Totale_N1', 'sum')
@@ -936,7 +924,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             df_cat['Delta %'] = df_cat.apply(lambda x: ((x['Net Net Pond. [N+1] €'] - x['Net Net Pond. [N] €']) / x['Net Net Pond. [N] €'] * 100) if x['Net Net Pond. [N] €'] > 0 else 0, axis=1)
             df_cat['Allarme'] = df_cat['Net Net Pond. [N+1] €'] < df_cat['Floor Pond. €']
             
-            tot_vol_n1 = df_active['Volumi'].sum()
+            tot_vol_n1 = df_active['[N+1] Volumi'].sum()
             tot_net_n = df_active['Fatturato_N'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
             tot_net_n1 = df_active['Fatturato_N1'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
             tot_floor_n1 = df_active['Valore_Floor_Totale_N1'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
@@ -998,7 +986,57 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
 
     with tab_esplosione:
         st.markdown("#### Esplosione Sconti (Dettaglio)")
-        st.info("Questa sezione è predisposta per la fase successiva. Qui potrai esplodere i valori aggregati di 'Sc. Fattura %' e 'Contratto %' nelle singole voci contrattuali (S1, S2, PFA I, PFA II, ecc.) una volta chiusa la trattativa.")
+        st.markdown("Una volta definiti i target aggregati nel Tab 1, usa questa griglia per spacchettare gli sconti nelle singole voci contrattuali. Il sistema verificherà che la somma geometrica (Fattura) e algebrica (PFA) corrisponda al target.")
+        
+        df_explode = st.session_state.rinnovi_df[st.session_state.rinnovi_df['[N+1] Volumi'] > 0].copy()
+        
+        if df_explode.empty:
+            st.warning("Nessuna referenza attiva.")
+        else:
+            # Calcolo Live dei check
+            def check_fattura(row):
+                p = 1.0
+                for s in ['S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %', 'S6 %', 'S7 %', 'Y %', 'Carico %', 'Pagamento %']:
+                    p *= (1 - (row[s] / 100))
+                return (1 - p) * 100
+                
+            def check_pfa(row):
+                return row['PFA I %'] + row['PFA II %'] + row['PFA III %'] + row['PFA IV %'] + row['PFA V %']
+
+            df_explode['Check Sc. Fattura %'] = df_explode.apply(check_fattura, axis=1)
+            df_explode['Check PFA %'] = df_explode.apply(check_pfa, axis=1)
+            
+            df_explode['Delta Fattura'] = df_explode['[N+1] Sc. Fattura %'] - df_explode['Check Sc. Fattura %']
+            df_explode['Delta PFA'] = df_explode['[N+1] Contratto %'] - df_explode['Check PFA %']
+
+            col_config_exp = {
+                "Prodotto": st.column_config.TextColumn("Prodotto", width="medium", disabled=True),
+                "[N+1] Sc. Fattura %": st.column_config.NumberColumn("Target Fattura %", format="%.2f %%", disabled=True, width="small"),
+                "Check Sc. Fattura %": st.column_config.NumberColumn("Somma Geom. %", format="%.2f %%", disabled=True, width="small"),
+                "Delta Fattura": st.column_config.NumberColumn("Diff. Fattura", format="%+.2f", disabled=True, width="small"),
+                "[N+1] Contratto %": st.column_config.NumberColumn("Target PFA %", format="%.2f %%", disabled=True, width="small"),
+                "Check PFA %": st.column_config.NumberColumn("Somma Algeb. %", format="%.2f %%", disabled=True, width="small"),
+                "Delta PFA": st.column_config.NumberColumn("Diff. PFA", format="%+.2f", disabled=True, width="small"),
+            }
+            
+            for col in dettaglio_cols:
+                col_config_exp[col] = st.column_config.NumberColumn(col, format="%.2f %%", step=0.5, width="small")
+
+            cols_to_edit_exp = ['Prodotto', '[N+1] Sc. Fattura %', 'Check Sc. Fattura %', 'Delta Fattura'] + ['S1 %', 'S2 %', 'S6 %', 'Y %', 'Carico %', 'Pagamento %'] + ['[N+1] Contratto %', 'Check PFA %', 'Delta PFA'] + ['PFA I %', 'PFA II %']
+            
+            df_exp_edited = st.data_editor(
+                df_explode[cols_to_edit_exp],
+                column_config=col_config_exp,
+                hide_index=True,
+                use_container_width=False,
+                height=600,
+                key="editor_esplosione"
+            )
+            
+            # Salvataggio
+            for col in dettaglio_cols:
+                if col in df_exp_edited.columns:
+                    st.session_state.rinnovi_df.update(df_exp_edited[col])
 
 # ==========================================
 # SCHEDA: STORICO PROMOZIONI
