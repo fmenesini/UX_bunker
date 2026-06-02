@@ -9,19 +9,34 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date
 import logging
 
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode, GridUpdateMode, DataReturnMode, ColumnsAutoSizeMode
+
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
 from core.hierarchy_resolver import HierarchyResolver
-# ECCO IL TUO NUOVO IMPORT
-from modulo_rinnovi import render_simulazione_rinnovi 
 
 logging.basicConfig(level=logging.WARNING)
 
-# Impostazione pagina: layout wide e sidebar espansa
+# Impostazione pagina
 st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide", initial_sidebar_state="expanded")
 
 # ==========================================
-# CSS AVANZATO PER UI/UX ENTERPRISE
+# FUNZIONE FORMATTAZIONE ITALIANA (1.234,56)
+# ==========================================
+def fmt_it(val, decimals=2, is_euro=False, is_pct=False, sign=False):
+    if pd.isna(val): return ""
+    if sign:
+        s = f"{val:+,.{decimals}f}"
+    else:
+        s = f"{val:,.{decimals}f}"
+    # Inversione punto/virgola per standard italiano
+    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+    if is_euro: return f"€ {s}"
+    if is_pct: return f"{s} %"
+    return s
+
+# ==========================================
+# CSS AVANZATO
 # ==========================================
 st.markdown("""
 <style>
@@ -226,6 +241,20 @@ menu = st.sidebar.radio("", [
 ])
 
 # ==========================================
+# HELPER FORMATTAZIONE ITALIANA
+# ==========================================
+def fmt_it(val, decimals=2, is_euro=False, is_pct=False, sign=False):
+    if pd.isna(val): return ""
+    if sign:
+        s = f"{val:+,.{decimals}f}"
+    else:
+        s = f"{val:,.{decimals}f}"
+    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+    if is_euro: return f"€ {s}"
+    if is_pct: return f"{s} %"
+    return s
+
+# ==========================================
 # SCHEDA 1: SIMULATORE OFFERTE (Singola SKU)
 # ==========================================
 if menu == "Simulatore Offerte":
@@ -273,12 +302,12 @@ if menu == "Simulatore Offerte":
     contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, ean, tipo_olio)
 
     if contract.listino_r is None:
-        st.error("PRODOTTO FUORI ASSORTIMENTO PER QUESTO CLIENTE")
+        st.error("ATTENZIONE: PRODOTTO FUORI ASSORTIMENTO PER QUESTO CLIENTE")
         st.stop()
 
     col_m1, col_m2, col_m3 = st.columns(3)
-    col_m1.metric("Listino Base (R)", f"€ {contract.listino_r:.2f}")
-    col_m2.metric("Soglia Minima Net Net (G)", f"€ {min_net_net_g:.2f}")
+    col_m1.metric("Listino Base (R)", fmt_it(float(contract.listino_r), is_euro=True))
+    col_m2.metric("Soglia Minima Net Net (G)", fmt_it(float(min_net_net_g), is_euro=True))
     col_m3.metric("Livello Ereditarietà", contract.livello_risolto)
 
     st.divider()
@@ -314,7 +343,7 @@ if menu == "Simulatore Offerte":
         with st.container(border=True):
             sconto_y = st.number_input("Sconto Continuativo Y (%)", min_value=0.0, max_value=100.0, value=float(contract.sconto_y), step=0.5)
             if contract.sconto_y > 0:
-                st.markdown(f"<div class='alert-box alert-warning'>ATTENZIONE - UNO SCONTO CONTINUATIVO PUO' DERIVARE DA UN ACCORDO LOCALE - valore attuale: {contract.sconto_y:.2f}%</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='alert-box alert-warning'>ATTENZIONE - UNO SCONTO CONTINUATIVO PUO' DERIVARE DA UN ACCORDO LOCALE - valore attuale: {fmt_it(float(contract.sconto_y), is_pct=True)}</div>", unsafe_allow_html=True)
             
             if "A. Partenza" in metodo_lavoro:
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
@@ -396,12 +425,12 @@ if menu == "Simulatore Offerte":
     
     with res_col1:
         with st.expander("Verifica Margine e Stato (Contrattuale)", expanded=True):
-            st.metric("PREZZO NET NET RISULTANTE (AM)", f"{result.net_net_finale:.2f} Euro")
-            st.metric("SOGLIA MINIMA NET NET (G)", f"{min_net_net_g:.2f} Euro")
+            st.metric("PREZZO NET NET RISULTANTE (AM)", fmt_it(float(result.net_net_finale), 3, is_euro=True))
+            st.metric("SOGLIA MINIMA NET NET (G)", fmt_it(float(min_net_net_g), 3, is_euro=True))
             if result.guardrail_ok:
-                st.success(f"APPROVATO - Margine sicuro. Delta: +{result.delta_vs_min:.2f} Euro")
+                st.success(f"APPROVATO - Margine sicuro. Delta: +{fmt_it(float(result.delta_vs_min), 3, is_euro=True)}")
             else:
-                st.error(f"BLOCCATO! SI PERDE SOLDI !!! - Sotto soglia di {abs(result.delta_vs_min):.2f} Euro")
+                st.error(f"BLOCCATO! SI PERDE SOLDI !!! - Sotto soglia di {fmt_it(float(abs(result.delta_vs_min)), 3, is_euro=True)}")
             
     with res_col2:
         with st.expander("Finestra Temporale Promo", expanded=True):
@@ -439,16 +468,16 @@ if menu == "Simulatore Offerte":
             
             net_net_post_promo = result.net_net_finale - impatto_unitario_extra
             
-            st.markdown(f"<div class='alert-box alert-warning'><strong>Costo Extra Totale:</strong> € {costo_totale_extra:.2f} | <strong>Impatto Unitario:</strong> -€ {impatto_unitario_extra:.3f}/Pz ➔ <strong>NET NET POST-VOLANTINO: € {net_net_post_promo:.3f}</strong></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='alert-box alert-warning'><strong>Costo Extra Totale:</strong> {fmt_it(float(costo_totale_extra), is_euro=True)} | <strong>Impatto Unitario:</strong> -{fmt_it(float(impatto_unitario_extra), 3, is_euro=True)}/Pz ➔ <strong>NET NET POST-VOLANTINO: {fmt_it(float(net_net_post_promo), 3, is_euro=True)}</strong></div>", unsafe_allow_html=True)
         elif costo_totale_extra > 0:
-            st.markdown(f"<div class='alert-box alert-info'><strong>Costo Extra Totale:</strong> € {costo_totale_extra:.2f} (Volumi non inseriti, impatto unitario non calcolabile)</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='alert-box alert-info'><strong>Costo Extra Totale:</strong> {fmt_it(float(costo_totale_extra), is_euro=True)} (Volumi non inseriti, impatto unitario non calcolabile)</div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
     st.markdown("#### Struttura di Costo (Waterfall)")
-    waterfall_data = [{"Fase Pricing": step.fase, "Valore Unitario": step.valore, "Dettaglio Operazione": step.descrizione} for step in result.steps]
+    waterfall_data = [{"Fase Pricing": step.fase, "Valore Unitario": fmt_it(float(step.valore), 3, is_euro=True), "Dettaglio Operazione": step.descrizione} for step in result.steps]
     if mostra_impatto:
-        waterfall_data.append({"Fase Pricing": "Impatto Extra (Sell-Out)", "Valore Unitario": net_net_post_promo.quantize(Decimal("0.001")), "Dettaglio Operazione": f"-{impatto_unitario_extra.quantize(Decimal('0.001'))} €/Pz"})
+        waterfall_data.append({"Fase Pricing": "Impatto Extra (Sell-Out)", "Valore Unitario": fmt_it(float(net_net_post_promo), 3, is_euro=True), "Dettaglio Operazione": f"-{fmt_it(float(impatto_unitario_extra), 3, is_euro=True)}/Pz"})
         
     st.dataframe(pd.DataFrame(waterfall_data), use_container_width=True, hide_index=True)
 
@@ -656,11 +685,312 @@ if menu == "Simulatore Offerte":
     conn.close()
 
 # ==========================================
-# NUOVA SCHEDA: MASTER GRID RINNOVI (N vs N+1) - AGGIORNATA V2
+# NUOVA SCHEDA: MASTER GRID RINNOVI (N vs N+1)
 # ==========================================
 elif menu == "Master Grid Rinnovi (N vs N+1)":
-    # Chiamata diretta al motore interattivo AG Grid che abbiamo blindato
-    render_simulazione_rinnovi()
+    st.title("Master Grid Rinnovi Contrattuali (N vs N+1)")
+    st.markdown("Analisi differenziale dei margini, calcolo dello Spazio Promo e Roll-up per Sub-Categorie.")
+    
+    anno_corrente = date.today().year
+    conn = sqlite3.connect(DB_FILE)
+    
+    st.markdown("#### 1. Contesto di Riferimento (Pre-compilazione Anno N)")
+    
+    with st.container(border=True):
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT gruppo_macro FROM clienti WHERE attivo=1 ORDER BY gruppo_macro")
+        gruppi = [r[0] for r in cursor.fetchall()]
+        
+        col_ctx1, col_ctx2 = st.columns(2)
+        with col_ctx1:
+            gruppo_sel = st.selectbox("Gruppo GDO", ["Nessuno"] + gruppi)
+        
+        sottogruppi = []
+        if gruppo_sel != "Nessuno":
+            cursor.execute("SELECT DISTINCT sottogruppo FROM clienti WHERE gruppo_macro=? AND attivo=1 ORDER BY sottogruppo", (gruppo_sel,))
+            sottogruppi = [r[0] for r in cursor.fetchall()]
+        with col_ctx2:
+            sottogruppo_sel = st.selectbox("Sottogruppo GDO", [""] + sottogruppi if gruppo_sel != "Nessuno" else [""])
+            
+        associato_sel = "" # Fermo al sottogruppo
+
+    query = """
+        SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0) as min_net_net_g
+        FROM anagrafica_master a
+        LEFT JOIN guardrail_aziendali g ON a.ean = g.ean
+    """
+    df_base = pd.read_sql_query(query, conn)
+    
+    def get_subcat(row):
+        desc = str(row['descrizione_commerciale']).upper()
+        tipo = str(row['tipo_olio']).upper()
+        if tipo == 'EXTRAVERGINE':
+            if '100% ITA' in desc or '100%I' in desc or 'TOSC' in desc: return 'Extravergini Italiani'
+            if 'BIO' in desc: return 'Extravergini Biologici'
+            return 'Extravergini Comunitari'
+        elif tipo == 'OLIVA': return 'Olio Raffinato'
+        elif tipo == 'SEMI':
+            if 'ARACHIDE' in desc: return 'Semi di Arachide'
+            if 'MAIS' in desc: return 'Semi di Mais'
+            if 'GIRAS' in desc: return 'Semi di Girasole'
+            if 'FRITT' in desc or 'FRIMX' in desc: return 'Oli per Frittura Specifici'
+            if 'VINACC' in desc: return 'Semi di Vinacciolo'
+            return 'Oli di Semi'
+        elif tipo == 'ACETO': return 'Aceto Balsamico'
+        return 'Altro'
+        
+    df_base['Sub-Categoria'] = df_base.apply(get_subcat, axis=1)
+    df_base['Categoria'] = df_base['tipo_olio']
+    df_base = df_base.rename(columns={'descrizione_commerciale': 'Prodotto', 'min_net_net_g': 'Minimo Net Net €'})
+    
+    operative_cols = [
+        '[N] Volumi', '[N] Listino €', '[N] Sc. Fattura %', '[N] PFA %',
+        '[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] PFA %'
+    ]
+    for col in operative_cols:
+        df_base[col] = 0.0 if '€' in col or '%' in col else 0
+
+    if 'rinnovi_df' not in st.session_state:
+        st.session_state.rinnovi_df = df_base.copy()
+
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("Carica Condizioni Attuali da DB", type="primary", use_container_width=True):
+            if gruppo_sel != "Nessuno":
+                df_temp = st.session_state.rinnovi_df.copy()
+                for idx, row in df_temp.iterrows():
+                    contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
+                    if contract.listino_r is not None:
+                        df_temp.at[idx, '[N] Listino €'] = float(contract.listino_r)
+                        p = contract.listino_r
+                        for s in [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5, contract.sconto_6, contract.sconto_7, contract.sconto_y, contract.sconto_carico, contract.sconto_pagamento]:
+                            p = p * (Decimal('1') - (s / Decimal('100')))
+                        if contract.listino_r > 0:
+                            sc_fatt_eq = (Decimal('1') - (p / contract.listino_r)) * Decimal('100')
+                            df_temp.at[idx, '[N] Sc. Fattura %'] = float(sc_fatt_eq.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                        pfa_tot = contract.voce_i + contract.voce_ii + contract.voce_iii + contract.voce_iv + contract.voce_v
+                        df_temp.at[idx, '[N] PFA %'] = float(pfa_tot)
+                st.session_state.rinnovi_df = df_temp
+                st.rerun()
+            else:
+                st.warning("Seleziona un Gruppo GDO prima di caricare i dati.")
+
+    with col_btn2:
+        if st.button("Popola con Dati di Test (Mock Data)", use_container_width=True):
+            df_mock = st.session_state.rinnovi_df.copy()
+            for idx, row in df_mock.iterrows():
+                floor = row['Minimo Net Net €'] if row['Minimo Net Net €'] > 0 else 3.0
+                vol = random.randint(10, 100) * 100
+                df_mock.at[idx, '[N] Volumi'] = vol
+                df_mock.at[idx, '[N] Listino €'] = float(round(floor * 1.5, 2))
+                df_mock.at[idx, '[N] Sc. Fattura %'] = 10.0
+                df_mock.at[idx, '[N] PFA %'] = 5.0
+                df_mock.at[idx, '[N+1] Volumi'] = int(vol * 1.05)
+                df_mock.at[idx, '[N+1] Listino €'] = float(round(floor * 1.6, 2))
+                df_mock.at[idx, '[N+1] Sc. Fattura %'] = 12.0
+                df_mock.at[idx, '[N+1] PFA %'] = 5.0
+            st.session_state.rinnovi_df = df_mock
+            st.rerun()
+
+    conn.close()
+
+    tab_simulazione, tab_risultati = st.tabs([
+        "1. Master Grid (Input Dati)", 
+        "2. Analisi Ponderata & Spazio Promo"
+    ])
+
+    with tab_simulazione:
+        st.markdown("#### Griglia di Simulazione Contrattuale")
+        st.markdown("Modifica i dati direttamente nella tabella. I calcoli si aggiornano in tempo reale.")
+        
+        col_up3, col_up4 = st.columns(2)
+        with col_up3:
+            with st.container(border=True):
+                st.markdown("**Esporta Template Simulazione**")
+                buf_sim = io.BytesIO()
+                st.session_state.rinnovi_df[['ean', 'Categoria', 'Sub-Categoria', 'Prodotto', 'Minimo Net Net €'] + operative_cols].to_excel(buf_sim, index=False)
+                st.download_button("Scarica Tabella Simulazione", buf_sim.getvalue(), "Template_Simulazione.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        with col_up4:
+            with st.container(border=True):
+                st.markdown("**Importa Dati Simulazione**")
+                up_sim = st.file_uploader("Carica Excel Simulazione", type=['xlsx'], key="up_sim")
+                if up_sim:
+                    df_up_sim = pd.read_excel(up_sim, dtype={'ean': str})
+                    df_up_sim['ean'] = df_up_sim['ean'].astype(str).str.zfill(13)
+                    df_temp = st.session_state.rinnovi_df.copy()
+                    for col in operative_cols:
+                        if col in df_up_sim.columns:
+                            mapping = df_up_sim.set_index('ean')[col].to_dict()
+                            df_temp[col] = df_temp['ean'].map(mapping).fillna(df_temp[col])
+                    st.session_state.rinnovi_df = df_temp
+                    st.rerun()
+
+        df_for_grid = st.session_state.rinnovi_df[['ean', 'Categoria', 'Sub-Categoria', 'Prodotto', 'Minimo Net Net €'] + operative_cols]
+        
+        gb = GridOptionsBuilder.from_dataframe(df_for_grid)
+        
+        gb.configure_column("Prodotto", pinned='left', width=250)
+        gb.configure_column("ean", hide=True)
+        gb.configure_column("Categoria", hide=True)
+        gb.configure_column("Sub-Categoria", hide=True)
+        
+        # Formattazione Italiana per AgGrid
+        fmt_eur2 = JsCode("function(params) { return params.value == null ? '' : '€ ' + params.value.toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }")
+        fmt_eur3 = JsCode("function(params) { return params.value == null ? '' : '€ ' + params.value.toLocaleString('it-IT', {minimumFractionDigits: 3, maximumFractionDigits: 3}); }")
+        fmt_pct = JsCode("function(params) { return params.value == null ? '' : params.value.toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' %'; }")
+        fmt_vol = JsCode("function(params) { return params.value == null ? '' : params.value.toLocaleString('it-IT', {maximumFractionDigits: 0}); }")
+
+        gb.configure_column("Minimo Net Net €", valueFormatter=fmt_eur2, width=120)
+        
+        for col in operative_cols:
+            if 'Volumi' in col:
+                gb.configure_column(col, editable=True, valueFormatter=fmt_vol, width=100)
+            elif '€' in col:
+                gb.configure_column(col, editable=True, valueFormatter=fmt_eur2, width=110)
+            elif '%' in col:
+                gb.configure_column(col, editable=True, valueFormatter=fmt_pct, width=110)
+
+        # JS per Calcoli Live
+        js_nn_n = JsCode("""function(params) {
+            let d = params.data; if (!d) return 0;
+            return (d['[N] Listino €']||0) * (1 - (d['[N] Sc. Fattura %']||0)/100) * (1 - (d['[N] PFA %']||0)/100);
+        }""")
+        
+        js_nn_n1 = JsCode("""function(params) {
+            let d = params.data; if (!d) return 0;
+            return (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] PFA %']||0)/100);
+        }""")
+        
+        js_delta = JsCode("""function(params) {
+            let d = params.data; if (!d) return 0;
+            let n = (d['[N] Listino €']||0) * (1 - (d['[N] Sc. Fattura %']||0)/100) * (1 - (d['[N] PFA %']||0)/100);
+            let n1 = (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] PFA %']||0)/100);
+            return n1 - n;
+        }""")
+        
+        js_max_promo = JsCode("""function(params) {
+            let d = params.data; if (!d) return 0;
+            let n1 = (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] PFA %']||0)/100);
+            let floor = d['Minimo Net Net €'] || 0;
+            if (n1 > 0 && n1 > floor) { return (1 - (floor / n1)) * 100; }
+            return 0;
+        }""")
+
+        gb.configure_column("Net Net [N] €", valueGetter=js_nn_n, valueFormatter=fmt_eur3, width=120)
+        gb.configure_column("Net Net [N+1] €", valueGetter=js_nn_n1, valueFormatter=fmt_eur3, width=120)
+        gb.configure_column("Delta Assoluto €", valueGetter=js_delta, valueFormatter=fmt_eur3, width=120)
+        gb.configure_column("Sc. Promo MAX [N+1] %", valueGetter=js_max_promo, valueFormatter=fmt_pct, width=150)
+
+        gb.configure_grid_options(
+            enableRangeSelection=True,
+            suppressAggFuncInHeader=True,
+            domLayout='normal'
+        )
+
+        gridOptions = gb.build()
+
+        grid_response = AgGrid(
+            df_for_grid,
+            gridOptions=gridOptions,
+            update_mode=GridUpdateMode.VALUE_CHANGED,
+            data_return_mode=DataReturnMode.AS_INPUT,
+            allow_unsafe_jscode=True,
+            theme='alpine',
+            height=600,
+            fit_columns_on_grid_load=False
+        )
+        
+        if grid_response['data'] is not None:
+            df_returned = pd.DataFrame(grid_response['data'])
+            for col in operative_cols:
+                st.session_state.rinnovi_df[col] = df_returned[col]
+
+    with tab_risultati:
+        df_active = st.session_state.rinnovi_df[st.session_state.rinnovi_df['[N+1] Volumi'] > 0].copy()
+        
+        if df_active.empty:
+            st.warning("Nessuna referenza attiva. Inserisci dei volumi nella colonna '[N+1] Volumi' nella Master Grid.")
+        else:
+            df_active['Net Net [N] €'] = df_active['[N] Listino €'] * (1 - df_active['[N] Sc. Fattura %']/100) * (1 - df_active['[N] PFA %']/100)
+            df_active['Net Net [N+1] €'] = df_active['[N+1] Listino €'] * (1 - df_active['[N+1] Sc. Fattura %']/100) * (1 - df_active['[N+1] PFA %']/100)
+            
+            df_active['Fatturato_N'] = df_active['Net Net [N] €'] * df_active['[N] Volumi']
+            df_active['Fatturato_N1'] = df_active['Net Net [N+1] €'] * df_active['[N+1] Volumi']
+            df_active['Valore_Floor_Totale_N1'] = df_active['Minimo Net Net €'] * df_active['[N+1] Volumi']
+            
+            # Raggruppamento per Categoria
+            df_cat = df_active.groupby('Categoria').agg(
+                Volumi_N=('[N] Volumi', 'sum'),
+                Fatturato_N=('Fatturato_N', 'sum'),
+                Volumi_N1=('[N+1] Volumi', 'sum'),
+                Fatturato_N1=('Fatturato_N1', 'sum'),
+                Valore_Floor_Totale_N1=('Valore_Floor_Totale_N1', 'sum')
+            ).reset_index()
+            
+            df_cat['Net Net Pond. [N] €'] = df_cat.apply(lambda x: x['Fatturato_N'] / x['Volumi_N'] if x['Volumi_N'] > 0 else 0, axis=1)
+            df_cat['Net Net Pond. [N+1] €'] = df_cat.apply(lambda x: x['Fatturato_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
+            df_cat['Floor Pond. €'] = df_cat.apply(lambda x: x['Valore_Floor_Totale_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
+            df_cat['Delta %'] = df_cat.apply(lambda x: ((x['Net Net Pond. [N+1] €'] - x['Net Net Pond. [N] €']) / x['Net Net Pond. [N] €'] * 100) if x['Net Net Pond. [N] €'] > 0 else 0, axis=1)
+            df_cat['Allarme'] = df_cat['Net Net Pond. [N+1] €'] < df_cat['Floor Pond. €']
+            
+            tot_vol_n1 = df_active['[N+1] Volumi'].sum()
+            tot_net_n = df_active['Fatturato_N'].sum() / df_active['[N] Volumi'].sum() if df_active['[N] Volumi'].sum() > 0 else 0
+            tot_net_n1 = df_active['Fatturato_N1'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
+            tot_delta_perc = ((tot_net_n1 - tot_net_n) / tot_net_n * 100) if tot_net_n > 0 else 0
+            
+            st.markdown("#### KPI Totali Cliente (Media Ponderata)")
+            col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+            col_k1.metric("Volumi Totali [N+1]", fmt_it(tot_vol_n1, 0))
+            col_k2.metric("Net-Net Pond. [N]", fmt_it(tot_net_n, 3, is_euro=True))
+            col_k3.metric("Net-Net Pond. [N+1]", fmt_it(tot_net_n1, 3, is_euro=True), fmt_it(tot_net_n1 - tot_net_n, 3, is_euro=True, sign=True))
+            col_k4.metric("Variazione Totale (%)", fmt_it(tot_delta_perc, 2, is_pct=True, sign=True))
+            
+            st.divider()
+            
+            st.markdown("#### 1. Sub-Totali per Categoria (Media Ponderata)")
+            
+            def highlight_cat(row):
+                if row['Allarme']: return ['background-color: #FEF2F2; color: #991B1B; font-weight: bold'] * len(row)
+                if row['Delta %'] < 0: return ['color: #D97706'] * len(row)
+                return [''] * len(row)
+
+            df_cat_disp = df_cat[['Categoria', 'Volumi_N1', 'Net Net Pond. [N] €', 'Net Net Pond. [N+1] €', 'Delta %', 'Floor Pond. €', 'Allarme']]
+            
+            st.dataframe(
+                df_cat_disp.style.apply(highlight_cat, axis=1).format({
+                    'Volumi_N1': lambda x: fmt_it(x, 0),
+                    'Net Net Pond. [N] €': lambda x: fmt_it(x, 3, is_euro=True), 
+                    'Net Net Pond. [N+1] €': lambda x: fmt_it(x, 3, is_euro=True), 
+                    'Delta %': lambda x: fmt_it(x, 2, is_pct=True, sign=True), 
+                    'Floor Pond. €': lambda x: fmt_it(x, 3, is_euro=True)
+                }),
+                column_config={"Allarme": "Sotto Floor!"},
+                hide_index=True, use_container_width=True
+            )
+            
+            st.divider()
+            
+            st.markdown("#### 2. Dettaglio Referenze (SKU)")
+            
+            df_active['Delta %'] = df_active.apply(lambda x: ((x['Net Net [N+1] €'] - x['Net Net [N] €']) / x['Net Net [N] €'] * 100) if x['Net Net [N] €'] > 0 else 0, axis=1)
+            df_active['Spazio Promo %'] = df_active.apply(lambda x: ((1 - (x['Minimo Net Net €'] / x['Net Net [N+1] €'])) * 100) if x['Net Net [N+1] €'] > x['Minimo Net Net €'] else 0, axis=1)
+            df_active['Spazio Promo €'] = df_active['Net Net [N+1] €'] - df_active['Minimo Net Net €']
+            df_active['Allarme'] = df_active['Net Net [N+1] €'] < df_active['Minimo Net Net €']
+            
+            cols_sku_disp = ['Sub-Categoria', 'Prodotto', 'Net Net [N] €', 'Net Net [N+1] €', 'Delta %', 'Minimo Net Net €', 'Spazio Promo €', 'Spazio Promo %', 'Allarme']
+            
+            st.dataframe(
+                df_active[cols_sku_disp].style.apply(highlight_cat, axis=1).format({
+                    'Net Net [N] €': lambda x: fmt_it(x, 3, is_euro=True), 
+                    'Net Net [N+1] €': lambda x: fmt_it(x, 3, is_euro=True), 
+                    'Delta %': lambda x: fmt_it(x, 2, is_pct=True, sign=True), 
+                    'Minimo Net Net €': lambda x: fmt_it(x, 3, is_euro=True),
+                    'Spazio Promo €': lambda x: fmt_it(x, 3, is_euro=True, sign=True),
+                    'Spazio Promo %': lambda x: fmt_it(x, 2, is_pct=True)
+                }),
+                column_config={"Allarme": "Sotto Floor!"},
+                hide_index=True, use_container_width=True
+            )
 
 # ==========================================
 # SCHEDA: STORICO PROMOZIONI
@@ -1231,7 +1561,7 @@ elif menu == "Report Sintetico":
     
     cursor.execute("SELECT AVG(listino_r) FROM accordi_commerciali WHERE listino_r IS NOT NULL AND listino_r > 0")
     avg_listino = cursor.fetchone()[0] or 0.0
-    col_k3.metric("Listino Medio R", f"€ {avg_listino:.2f}")
+    col_k3.metric("Listino Medio R", fmt_it(avg_listino, is_euro=True))
     
     cursor.execute("""
         SELECT AVG(voce_contratto_1 + COALESCE(voce_contratto_2,0) + COALESCE(voce_contratto_3,0) + 
@@ -1239,7 +1569,7 @@ elif menu == "Report Sintetico":
         FROM accordi_commerciali
     """)
     avg_pfa = cursor.fetchone()[0] or 0.0
-    col_k4.metric("PFA Medio off-invoice", f"{avg_pfa:.2f} %")
+    col_k4.metric("PFA Medio off-invoice", fmt_it(avg_pfa, is_pct=True))
     
     st.markdown("<br>", unsafe_allow_html=True)
     
