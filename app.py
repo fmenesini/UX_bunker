@@ -29,7 +29,6 @@ def fmt_it(val, decimals=2, is_euro=False, is_pct=False, sign=False):
         s = f"{val:+,.{decimals}f}"
     else:
         s = f"{val:,.{decimals}f}"
-    # Inversione punto/virgola per standard italiano
     s = s.replace(",", "X").replace(".", ",").replace("X", ".")
     if is_euro: return f"€ {s}"
     if is_pct: return f"{s} %"
@@ -239,20 +238,6 @@ menu = st.sidebar.radio("", [
     "Report Sintetico", 
     "Guida Operativa"
 ])
-
-# ==========================================
-# HELPER FORMATTAZIONE ITALIANA
-# ==========================================
-def fmt_it(val, decimals=2, is_euro=False, is_pct=False, sign=False):
-    if pd.isna(val): return ""
-    if sign:
-        s = f"{val:+,.{decimals}f}"
-    else:
-        s = f"{val:,.{decimals}f}"
-    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
-    if is_euro: return f"€ {s}"
-    if is_pct: return f"{s} %"
-    return s
 
 # ==========================================
 # SCHEDA 1: SIMULATORE OFFERTE (Singola SKU)
@@ -743,12 +728,18 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
     df_base['Categoria'] = df_base['tipo_olio']
     df_base = df_base.rename(columns={'descrizione_commerciale': 'Prodotto', 'min_net_net_g': 'Minimo Net Net €'})
     
+    # Colonne operative ridotte come richiesto
     operative_cols = [
-        '[N] Volumi', '[N] Listino €', '[N] Sc. Fattura %', '[N] PFA %',
-        '[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] PFA %'
+        'Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %'
     ]
     for col in operative_cols:
         df_base[col] = 0.0 if '€' in col or '%' in col else 0
+        
+    # Colonne nascoste per il calcolo dell'Anno N
+    df_base['[N] Listino €'] = 0.0
+    df_base['[N] Sc. Fattura %'] = 0.0
+    df_base['[N] Contratto %'] = 0.0
+    df_base['Net Net [N] €'] = 0.0
 
     if 'rinnovi_df' not in st.session_state:
         st.session_state.rinnovi_df = df_base.copy()
@@ -761,15 +752,28 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 for idx, row in df_temp.iterrows():
                     contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
                     if contract.listino_r is not None:
-                        df_temp.at[idx, '[N] Listino €'] = float(contract.listino_r)
+                        listino_n = float(contract.listino_r)
+                        df_temp.at[idx, '[N] Listino €'] = listino_n
+                        df_temp.at[idx, '[N+1] Listino €'] = listino_n
+                        
                         p = contract.listino_r
                         for s in [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5, contract.sconto_6, contract.sconto_7, contract.sconto_y, contract.sconto_carico, contract.sconto_pagamento]:
                             p = p * (Decimal('1') - (s / Decimal('100')))
+                        
+                        sc_fatt_eq = 0.0
                         if contract.listino_r > 0:
-                            sc_fatt_eq = (Decimal('1') - (p / contract.listino_r)) * Decimal('100')
-                            df_temp.at[idx, '[N] Sc. Fattura %'] = float(sc_fatt_eq.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-                        pfa_tot = contract.voce_i + contract.voce_ii + contract.voce_iii + contract.voce_iv + contract.voce_v
-                        df_temp.at[idx, '[N] PFA %'] = float(pfa_tot)
+                            sc_fatt_eq = float(((Decimal('1') - (p / contract.listino_r)) * Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                        
+                        df_temp.at[idx, '[N] Sc. Fattura %'] = sc_fatt_eq
+                        df_temp.at[idx, '[N+1] Sc. Fattura %'] = sc_fatt_eq
+                        
+                        pfa_tot = float(contract.voce_i + contract.voce_ii + contract.voce_iii + contract.voce_iv + contract.voce_v)
+                        df_temp.at[idx, '[N] Contratto %'] = pfa_tot
+                        df_temp.at[idx, '[N+1] Contratto %'] = pfa_tot
+                        
+                        # Calcolo Net Net N
+                        df_temp.at[idx, 'Net Net [N] €'] = listino_n * (1 - sc_fatt_eq/100) * (1 - pfa_tot/100)
+                        
                 st.session_state.rinnovi_df = df_temp
                 st.rerun()
             else:
@@ -781,22 +785,29 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             for idx, row in df_mock.iterrows():
                 floor = row['Minimo Net Net €'] if row['Minimo Net Net €'] > 0 else 3.0
                 vol = random.randint(10, 100) * 100
-                df_mock.at[idx, '[N] Volumi'] = vol
-                df_mock.at[idx, '[N] Listino €'] = float(round(floor * 1.5, 2))
-                df_mock.at[idx, '[N] Sc. Fattura %'] = 10.0
-                df_mock.at[idx, '[N] PFA %'] = 5.0
-                df_mock.at[idx, '[N+1] Volumi'] = int(vol * 1.05)
+                
+                listino_n = float(round(floor * 1.5, 2))
+                sc_fatt_n = 10.0
+                pfa_n = 5.0
+                
+                df_mock.at[idx, '[N] Listino €'] = listino_n
+                df_mock.at[idx, '[N] Sc. Fattura %'] = sc_fatt_n
+                df_mock.at[idx, '[N] Contratto %'] = pfa_n
+                df_mock.at[idx, 'Net Net [N] €'] = listino_n * (1 - sc_fatt_n/100) * (1 - pfa_n/100)
+                
+                df_mock.at[idx, 'Volumi'] = int(vol * 1.05)
                 df_mock.at[idx, '[N+1] Listino €'] = float(round(floor * 1.6, 2))
                 df_mock.at[idx, '[N+1] Sc. Fattura %'] = 12.0
-                df_mock.at[idx, '[N+1] PFA %'] = 5.0
+                df_mock.at[idx, '[N+1] Contratto %'] = 5.0
             st.session_state.rinnovi_df = df_mock
             st.rerun()
 
     conn.close()
 
-    tab_simulazione, tab_risultati = st.tabs([
+    tab_simulazione, tab_risultati, tab_esplosione = st.tabs([
         "1. Master Grid (Input Dati)", 
-        "2. Analisi Ponderata & Spazio Promo"
+        "2. Analisi Ponderata & Spazio Promo",
+        "3. Esplosione Sconti (Dettaglio)"
     ])
 
     with tab_simulazione:
@@ -818,14 +829,14 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                     df_up_sim = pd.read_excel(up_sim, dtype={'ean': str})
                     df_up_sim['ean'] = df_up_sim['ean'].astype(str).str.zfill(13)
                     df_temp = st.session_state.rinnovi_df.copy()
-                    for col in operative_cols:
+                    for col in operative_cols + ['Minimo Net Net €']:
                         if col in df_up_sim.columns:
                             mapping = df_up_sim.set_index('ean')[col].to_dict()
                             df_temp[col] = df_temp['ean'].map(mapping).fillna(df_temp[col])
                     st.session_state.rinnovi_df = df_temp
                     st.rerun()
 
-        df_for_grid = st.session_state.rinnovi_df[['ean', 'Categoria', 'Sub-Categoria', 'Prodotto', 'Minimo Net Net €'] + operative_cols]
+        df_for_grid = st.session_state.rinnovi_df[['ean', 'Categoria', 'Sub-Categoria', 'Prodotto', 'Net Net [N] €', 'Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']]
         
         gb = GridOptionsBuilder.from_dataframe(df_for_grid)
         
@@ -840,45 +851,38 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         fmt_pct = JsCode("function(params) { return params.value == null ? '' : params.value.toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' %'; }")
         fmt_vol = JsCode("function(params) { return params.value == null ? '' : params.value.toLocaleString('it-IT', {maximumFractionDigits: 0}); }")
 
-        gb.configure_column("Minimo Net Net €", valueFormatter=fmt_eur2, width=120)
+        gb.configure_column("Net Net [N] €", valueFormatter=fmt_eur3, width=120)
+        gb.configure_column("Minimo Net Net €", editable=True, valueFormatter=fmt_eur2, width=120, cellStyle={'backgroundColor': '#FFFBEB'})
         
-        for col in operative_cols:
-            if 'Volumi' in col:
-                gb.configure_column(col, editable=True, valueFormatter=fmt_vol, width=100)
-            elif '€' in col:
-                gb.configure_column(col, editable=True, valueFormatter=fmt_eur2, width=110)
-            elif '%' in col:
-                gb.configure_column(col, editable=True, valueFormatter=fmt_pct, width=110)
+        gb.configure_column("Volumi", editable=True, valueFormatter=fmt_vol, width=100, cellStyle={'backgroundColor': '#F0FDF4'})
+        gb.configure_column("[N+1] Listino €", editable=True, valueFormatter=fmt_eur2, width=110, cellStyle={'backgroundColor': '#F0FDF4'})
+        gb.configure_column("[N+1] Sc. Fattura %", editable=True, valueFormatter=fmt_pct, width=130, cellStyle={'backgroundColor': '#F0FDF4'})
+        gb.configure_column("[N+1] Contratto %", editable=True, valueFormatter=fmt_pct, width=130, cellStyle={'backgroundColor': '#F0FDF4'})
 
         # JS per Calcoli Live
-        js_nn_n = JsCode("""function(params) {
-            let d = params.data; if (!d) return 0;
-            return (d['[N] Listino €']||0) * (1 - (d['[N] Sc. Fattura %']||0)/100) * (1 - (d['[N] PFA %']||0)/100);
-        }""")
-        
         js_nn_n1 = JsCode("""function(params) {
             let d = params.data; if (!d) return 0;
-            return (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] PFA %']||0)/100);
+            return (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] Contratto %']||0)/100);
         }""")
         
         js_delta = JsCode("""function(params) {
             let d = params.data; if (!d) return 0;
-            let n = (d['[N] Listino €']||0) * (1 - (d['[N] Sc. Fattura %']||0)/100) * (1 - (d['[N] PFA %']||0)/100);
-            let n1 = (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] PFA %']||0)/100);
-            return n1 - n;
+            let nn_n = d['Net Net [N] €'] || 0;
+            if (nn_n === 0) return 0;
+            let nn_n1 = (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] Contratto %']||0)/100);
+            return ((nn_n1 - nn_n) / nn_n) * 100;
         }""")
         
         js_max_promo = JsCode("""function(params) {
             let d = params.data; if (!d) return 0;
-            let n1 = (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] PFA %']||0)/100);
+            let nn_n1 = (d['[N+1] Listino €']||0) * (1 - (d['[N+1] Sc. Fattura %']||0)/100) * (1 - (d['[N+1] Contratto %']||0)/100);
             let floor = d['Minimo Net Net €'] || 0;
-            if (n1 > 0 && n1 > floor) { return (1 - (floor / n1)) * 100; }
+            if (nn_n1 > 0 && nn_n1 > floor) { return (1 - (floor / nn_n1)) * 100; }
             return 0;
         }""")
 
-        gb.configure_column("Net Net [N] €", valueGetter=js_nn_n, valueFormatter=fmt_eur3, width=120)
         gb.configure_column("Net Net [N+1] €", valueGetter=js_nn_n1, valueFormatter=fmt_eur3, width=120)
-        gb.configure_column("Delta Assoluto €", valueGetter=js_delta, valueFormatter=fmt_eur3, width=120)
+        gb.configure_column("Delta % Net Net", valueGetter=js_delta, valueFormatter=fmt_pct, width=120)
         gb.configure_column("Sc. Promo MAX [N+1] %", valueGetter=js_max_promo, valueFormatter=fmt_pct, width=150)
 
         gb.configure_grid_options(
@@ -902,40 +906,40 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         
         if grid_response['data'] is not None:
             df_returned = pd.DataFrame(grid_response['data'])
-            for col in operative_cols:
+            for col in operative_cols + ['Minimo Net Net €']:
                 st.session_state.rinnovi_df[col] = df_returned[col]
 
     with tab_risultati:
-        df_active = st.session_state.rinnovi_df[st.session_state.rinnovi_df['[N+1] Volumi'] > 0].copy()
+        df_active = st.session_state.rinnovi_df[st.session_state.rinnovi_df['Volumi'] > 0].copy()
         
         if df_active.empty:
-            st.warning("Nessuna referenza attiva. Inserisci dei volumi nella colonna '[N+1] Volumi' nella Master Grid.")
+            st.warning("Nessuna referenza attiva. Inserisci dei volumi nella Master Grid.")
         else:
-            df_active['Net Net [N] €'] = df_active['[N] Listino €'] * (1 - df_active['[N] Sc. Fattura %']/100) * (1 - df_active['[N] PFA %']/100)
-            df_active['Net Net [N+1] €'] = df_active['[N+1] Listino €'] * (1 - df_active['[N+1] Sc. Fattura %']/100) * (1 - df_active['[N+1] PFA %']/100)
+            df_active['Net Net [N+1] €'] = df_active['[N+1] Listino €'] * (1 - df_active['[N+1] Sc. Fattura %']/100) * (1 - df_active['[N+1] Contratto %']/100)
             
-            df_active['Fatturato_N'] = df_active['Net Net [N] €'] * df_active['[N] Volumi']
-            df_active['Fatturato_N1'] = df_active['Net Net [N+1] €'] * df_active['[N+1] Volumi']
-            df_active['Valore_Floor_Totale_N1'] = df_active['Minimo Net Net €'] * df_active['[N+1] Volumi']
+            df_active['Fatturato_N'] = df_active['Net Net [N] €'] * df_active['Volumi']
+            df_active['Fatturato_N1'] = df_active['Net Net [N+1] €'] * df_active['Volumi']
+            df_active['Valore_Floor_Totale_N1'] = df_active['Minimo Net Net €'] * df_active['Volumi']
             
             # Raggruppamento per Categoria
             df_cat = df_active.groupby('Categoria').agg(
-                Volumi_N=('[N] Volumi', 'sum'),
+                Volumi_N1=('Volumi', 'sum'),
                 Fatturato_N=('Fatturato_N', 'sum'),
-                Volumi_N1=('[N+1] Volumi', 'sum'),
                 Fatturato_N1=('Fatturato_N1', 'sum'),
                 Valore_Floor_Totale_N1=('Valore_Floor_Totale_N1', 'sum')
             ).reset_index()
             
-            df_cat['Net Net Pond. [N] €'] = df_cat.apply(lambda x: x['Fatturato_N'] / x['Volumi_N'] if x['Volumi_N'] > 0 else 0, axis=1)
+            df_cat['Net Net Pond. [N] €'] = df_cat.apply(lambda x: x['Fatturato_N'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
             df_cat['Net Net Pond. [N+1] €'] = df_cat.apply(lambda x: x['Fatturato_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
             df_cat['Floor Pond. €'] = df_cat.apply(lambda x: x['Valore_Floor_Totale_N1'] / x['Volumi_N1'] if x['Volumi_N1'] > 0 else 0, axis=1)
+            
             df_cat['Delta %'] = df_cat.apply(lambda x: ((x['Net Net Pond. [N+1] €'] - x['Net Net Pond. [N] €']) / x['Net Net Pond. [N] €'] * 100) if x['Net Net Pond. [N] €'] > 0 else 0, axis=1)
             df_cat['Allarme'] = df_cat['Net Net Pond. [N+1] €'] < df_cat['Floor Pond. €']
             
-            tot_vol_n1 = df_active['[N+1] Volumi'].sum()
-            tot_net_n = df_active['Fatturato_N'].sum() / df_active['[N] Volumi'].sum() if df_active['[N] Volumi'].sum() > 0 else 0
+            tot_vol_n1 = df_active['Volumi'].sum()
+            tot_net_n = df_active['Fatturato_N'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
             tot_net_n1 = df_active['Fatturato_N1'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
+            tot_floor_n1 = df_active['Valore_Floor_Totale_N1'].sum() / tot_vol_n1 if tot_vol_n1 > 0 else 0
             tot_delta_perc = ((tot_net_n1 - tot_net_n) / tot_net_n * 100) if tot_net_n > 0 else 0
             
             st.markdown("#### KPI Totali Cliente (Media Ponderata)")
@@ -991,6 +995,10 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 column_config={"Allarme": "Sotto Floor!"},
                 hide_index=True, use_container_width=True
             )
+
+    with tab_esplosione:
+        st.markdown("#### Esplosione Sconti (Dettaglio)")
+        st.info("Questa sezione è predisposta per la fase successiva. Qui potrai esplodere i valori aggregati di 'Sc. Fattura %' e 'Contratto %' nelle singole voci contrattuali (S1, S2, PFA I, PFA II, ecc.) una volta chiusa la trattativa.")
 
 # ==========================================
 # SCHEDA: STORICO PROMOZIONI
@@ -1841,14 +1849,14 @@ else:
         **Come funziona:**
         1. Seleziona il Gruppo e il Sottogruppo.
         2. Clicca su **"Carica Condizioni Attuali da DB"**. Il sistema riempirà le colonne dell'Anno N con i listini e gli sconti che il cliente ha oggi.
-        3. Inserisci i **Volumi** previsti per l'anno prossimo nella colonna `[N+1] Volumi`. *Attenzione: il sistema calcola i risultati solo per i prodotti dove inserisci almeno 1 pezzo di volume.*
-        4. Modifica il Listino o gli Sconti per l'Anno N+1.
+        3. Inserisci i **Volumi** previsti per l'anno prossimo nella colonna `Volumi`. *Attenzione: il sistema calcola i risultati solo per i prodotti dove inserisci almeno 1 pezzo di volume.*
+        4. Modifica il Listino o gli Sconti per l'Anno N+1. La griglia calcolerà all'istante il nuovo Net-Net.
         
         **Come leggere i risultati (Il Pollo di Trilussa):**
-        Nella scheda "Analisi & Spazio Promo", vedrai i risultati raggruppati per Categoria (es. *Extravergine*).
+        Nella scheda "Analisi Ponderata", vedrai i risultati raggruppati per Categoria (es. *Extravergine*).
         Perché è importante? Perché se vendi 10.000 bottiglie di Olio di Semi guadagnando tanto, e 1.000 bottiglie di Extravergine perdendo soldi, il totale del cliente sembrerà positivo (Verde). 
         Ma la Master Grid se ne accorgerà e colorerà di **ROSSO** la riga degli Extravergini, avvisandoti che quel cluster specifico sta distruggendo valore.
         
-        **Cos'è lo Spazio Promo MAX?**
-        È la colonna più importante. Ti dice esattamente quanti punti percentuali di sconto puoi ancora concedere al buyer su quel prodotto prima di toccare il limite minimo aziendale.
+        **Cos'è lo Sc. Promo MAX [N+1] %?**
+        È la colonna più importante della griglia. Ti dice esattamente quanti punti percentuali di sconto puoi ancora concedere al buyer su quel prodotto prima di toccare il limite minimo aziendale.
         """)
