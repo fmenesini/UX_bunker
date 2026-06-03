@@ -1442,12 +1442,11 @@ elif menu == "Back-Office (Contratti)":
                         try:
                             df_import = pd.read_excel(uploaded_file)
                             colonne_obbligatorie = ["GRUPPO_MACRO", "SOTTOGRUPPO", "ASSOCIATO_INSEGNA", "LIVELLO", "CHIAVE_LIVELLO"]
-                            missing_cols = [c for c in colonne_obbligatorie if c not in df_import.columns]
                             
-                            if missing_cols:
-                                st.error(f"Struttura Excel non valida. Colonne mancanti: {', '.join(missing_cols)}")
-                            else:
-                                cursor = conn.cursor()
+                            # 🛡️ CAMERA DI DECONTAMINAZIONE (fa anche il check delle colonne!)
+                            df_import = DataSanitizer.sanitize_excel_import(df_import, expected_columns=colonne_obbligatorie)
+                            
+                            cursor = conn.cursor()
                                 righe_inserite = 0
                                 
                                 with conn:
