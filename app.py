@@ -1242,6 +1242,9 @@ elif menu == "Dati Anagrafici (Logistica)":
                     try:
                         df_prod_import = pd.read_excel(uploaded_prod_file)
                         
+                        # 🛡️ CAMERA DI DECONTAMINAZIONE
+                        df_prod_import = DataSanitizer.sanitize_excel_import(df_prod_import)
+                        
                         col_map = {
                             "EAN": "ean", "Codice Articolo": "codice_sap", "TIPO OLIO contenuto": "tipo_olio",
                             "Descrizione articolo in SAP": "descrizione_sap", "Descrizione Articolo": "descrizione_commerciale",
