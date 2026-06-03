@@ -1551,6 +1551,13 @@ elif menu == "Back-Office (Contratti)":
                     if st.button("Conferma Scrittura Guardrail"):
                         try:
                             df_g_import = pd.read_excel(uploaded_guardrail)
+                            
+                            # 🛡️ CAMERA DI DECONTAMINAZIONE
+                            # (Rinominiamo temporaneamente in maiuscolo per far scattare il check sull'EAN del validatore)
+                            df_g_import.rename(columns=lambda x: str(x).upper().strip(), inplace=True)
+                            df_g_import = DataSanitizer.sanitize_excel_import(df_g_import)
+                            
+                            # Riportiamo in minuscolo come si aspetta il resto del tuo codice
                             df_g_import.columns = [str(c).lower().strip() for c in df_g_import.columns]
                             
                             if "ean" not in df_g_import.columns or "min_net_net_g" not in df_g_import.columns:
