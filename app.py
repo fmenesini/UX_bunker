@@ -860,6 +860,18 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             with col_glob2:
                 st.number_input("Sconto Pagamento (%)", min_value=0.0, max_value=100.0, step=0.5, key="global_pagamento")
         
+        # --- CALCOLO KPI VARIAZIONE TOTALE PONDERATA (Per visualizzazione in alto) ---
+        df_kpi = st.session_state.rinnovi_df[st.session_state.rinnovi_df['[N+1] Volumi'] > 0].copy()
+        tot_delta_perc = 0.0
+        if not df_kpi.empty:
+            molt_glob = (1 - st.session_state.global_carico/100) * (1 - st.session_state.global_pagamento/100)
+            nn_n = df_kpi['[N] Listino €'] * (1 - df_kpi['[N] Sc. Fattura %']/100) * molt_glob * (1 - df_kpi['[N] Contratto %']/100)
+            nn_n1 = df_kpi['[N+1] Listino €'] * (1 - df_kpi['[N+1] Sc. Fattura %']/100) * molt_glob * (1 - df_kpi['[N+1] Contratto %']/100)
+            fatt_n = (nn_n * df_kpi['[N+1] Volumi']).sum()
+            fatt_n1 = (nn_n1 * df_kpi['[N+1] Volumi']).sum()
+            if fatt_n > 0:
+                tot_delta_perc = ((fatt_n1 - fatt_n) / fatt_n) * 100
+
         col_up3, col_up4 = st.columns(2)
         with col_up3:
             with st.container(border=True):
@@ -867,6 +879,10 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 buf_sim = io.BytesIO()
                 st.session_state.rinnovi_df[['ean', 'Categoria', 'Sub-Categoria', 'Prodotto', 'Minimo Net Net €'] + operative_cols].to_excel(buf_sim, index=False)
                 st.download_button("Scarica Tabella Simulazione", buf_sim.getvalue(), "Template_Simulazione.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            
+            # Mostra il KPI sotto il box di esportazione
+            st.metric("Variazione Totale Ponderata (%)", fmt_it(tot_delta_perc, 2, is_pct=True, sign=True))
+
         with col_up4:
             with st.container(border=True):
                 st.markdown("**Importa Dati Simulazione**")
@@ -917,6 +933,9 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         cols_to_edit = ['Prodotto', '[N] Listino €', '[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Net Net [N] €', 'Net Net [N+1] €', 'Minimo Net Net €', 'Sc. Promo MAX [N+1] %', 'Delta Assoluto €']
         
         with st.form("form_simulazione"):
+            # Pulsante spostato in alto per comodità
+            submit_sim = st.form_submit_button("🔄 Calcola Simulazione", type="primary")
+            
             df_sim_edited = st.data_editor(
                 df_display[cols_to_edit],
                 column_config=col_config,
@@ -925,7 +944,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 height=600,
                 key="editor_simulazione_nativa"
             )
-            submit_sim = st.form_submit_button("🔄 Calcola Simulazione", type="primary")
             
         if submit_sim:
             for i, idx in enumerate(df_display.index):
