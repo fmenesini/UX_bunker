@@ -1031,14 +1031,14 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 )
                 submit_exp = st.form_submit_button("🔄 Calcola e Verifica Sconti", type="primary")
                 
-           if submit_exp:
-                # Salvataggio sicuro tramite indice
-                for i, idx in enumerate(df_explode.index):
-                    for col in dettaglio_cols:
-                        # Controlla che la colonna sia effettivamente presente nell'editor
-                        if col in df_exp_edited.columns:
-                            st.session_state.rinnovi_df.at[idx, col] = df_exp_edited.iloc[i][col]
-                st.rerun()
+            if submit_exp:
+                 # Salvataggio sicuro tramite indice
+                 for i, idx in enumerate(df_explode.index):
+                     for col in dettaglio_cols:
+                         # Controlla che la colonna sia effettivamente presente nell'editor
+                         if col in df_exp_edited.columns:
+                             st.session_state.rinnovi_df.at[idx, col] = df_exp_edited.iloc[i][col]
+                 st.rerun()
 
 # ==========================================
 # SCHEDA: STORICO PROMOZIONI
