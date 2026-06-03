@@ -953,8 +953,29 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         cols_to_edit = ['Prodotto', '[N] Listino €', '[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Net Net [N] €', 'Net Net [N+1] €', 'Minimo Net Net €', 'Sc. Promo MAX [N+1] %', 'Delta Assoluto €']
         
         with st.form("form_simulazione"):
-            # Pulsante spostato in alto per comodità
-            submit_sim = st.form_submit_button("🔄 Calcola Simulazione", type="primary")
+            st.markdown("##### ⚡ Azioni Rapide e Aggiornamento Massivo")
+            
+            # Creiamo 5 colonne per allineare tutto su una riga
+            col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns([2, 2, 1.5, 2, 2])
+            
+            # Otteniamo le categorie uniche presenti nel dataframe
+            categorie_uniche = sorted(df_display['Categoria'].unique().tolist())
+            
+            with col_m1:
+                cat_mass = st.selectbox("1. Scegli Categoria", ["Tutte le Categorie"] + categorie_uniche)
+            with col_m2:
+                col_mass = st.selectbox("2. Scegli Parametro", ["[N+1] Sc. Fattura %", "[N+1] Contratto %"])
+            with col_m3:
+                val_mass = st.number_input("3. Valore (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.2f")
+            with col_m4:
+                # Spazio vuoto per allineare il pulsante ai menu a tendina
+                st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                btn_mass = st.form_submit_button("⚡ Applica Valore", type="secondary", use_container_width=True)
+            with col_m5:
+                st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                submit_sim = st.form_submit_button("🔄 Calcola Simulazione", type="primary", use_container_width=True)
+                
+            st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
             
             df_sim_edited = st.data_editor(
                 df_display[cols_to_edit],
@@ -965,10 +986,19 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 key="editor_simulazione_nativa"
             )
             
-        if submit_sim:
+        # Se l'utente preme "Calcola" OPPURE "Applica Valore"
+        if submit_sim or btn_mass:
+            # 1. Salviamo PRIMA le eventuali modifiche manuali fatte nella griglia
             for i, idx in enumerate(df_display.index):
                 for col in ['[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']:
                     st.session_state.rinnovi_df.at[idx, col] = df_sim_edited.iloc[i][col]
+            
+            # 2. Se è stato premuto il pulsante massivo, sovrascriviamo i valori per la categoria scelta
+            if btn_mass:
+                for idx, row in st.session_state.rinnovi_df.iterrows():
+                    if cat_mass == "Tutte le Categorie" or row['Categoria'] == cat_mass:
+                        st.session_state.rinnovi_df.at[idx, col_mass] = val_mass
+                        
             st.rerun()
 
     with tab_risultati:
