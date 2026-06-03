@@ -12,6 +12,7 @@ import logging
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
 from core.hierarchy_resolver import HierarchyResolver
+from core.validators import DataSanitizer
 
 logging.basicConfig(level=logging.WARNING)
 
