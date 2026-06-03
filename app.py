@@ -685,6 +685,12 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             df.to_excel(writer, index=False, sheet_name='Export')
         return output.getvalue()
     
+    # Inizializzazione variabili globali in session_state
+    if 'global_carico' not in st.session_state:
+        st.session_state.global_carico = 0.0
+    if 'global_pagamento' not in st.session_state:
+        st.session_state.global_pagamento = 0.0
+    
     st.markdown("#### 1. Contesto di Riferimento (Pre-compilazione Anno N)")
     
     with st.container(border=True):
@@ -739,8 +745,9 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         '[N+1] Sc. Fattura %', '[N+1] Contratto %'
     ]
     
+    # Rimosse le colonne S6, S7, Y, Carico e Pagamento dal dettaglio referenze
     dettaglio_cols = [
-        'S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %', 'S6 %', 'S7 %', 'Y %', 'Carico %', 'Pagamento %',
+        'S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %',
         'PFA I %', 'PFA II %', 'PFA III %', 'PFA IV %', 'PFA V %'
     ]
     
@@ -758,15 +765,22 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         if st.button("Carica Condizioni Attuali da DB", type="primary", use_container_width=True):
             if gruppo_sel != "Nessuno":
                 df_temp = st.session_state.rinnovi_df.copy()
+                first_contract = True
                 for idx, row in df_temp.iterrows():
                     contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
                     if contract.listino_r is not None:
+                        # Imposta i valori globali di Carico e Pagamento basandosi sul primo contratto trovato
+                        if first_contract:
+                            st.session_state.global_carico = float(contract.sconto_carico)
+                            st.session_state.global_pagamento = float(contract.sconto_pagamento)
+                            first_contract = False
+                            
                         listino_n = float(contract.listino_r)
                         df_temp.at[idx, '[N] Listino €'] = listino_n
                         df_temp.at[idx, '[N+1] Listino €'] = listino_n
                         
                         p = contract.listino_r
-                        for s in [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5, contract.sconto_6, contract.sconto_7, contract.sconto_y, contract.sconto_carico, contract.sconto_pagamento]:
+                        for s in [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5, contract.sconto_6, contract.sconto_7, contract.sconto_y]:
                             p = p * (Decimal('1') - (s / Decimal('100')))
                         
                         sc_fatt_eq = 0.0
@@ -782,11 +796,14 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                         
                         df_temp.at[idx, 'S1 %'] = float(contract.sconto_1)
                         df_temp.at[idx, 'S2 %'] = float(contract.sconto_2)
-                        df_temp.at[idx, 'S6 %'] = float(contract.sconto_6)
-                        df_temp.at[idx, 'Y %'] = float(contract.sconto_y)
-                        df_temp.at[idx, 'Carico %'] = float(contract.sconto_carico)
-                        df_temp.at[idx, 'Pagamento %'] = float(contract.sconto_pagamento)
+                        df_temp.at[idx, 'S3 %'] = float(contract.sconto_3)
+                        df_temp.at[idx, 'S4 %'] = float(contract.sconto_4)
+                        df_temp.at[idx, 'S5 %'] = float(contract.sconto_5)
                         df_temp.at[idx, 'PFA I %'] = float(contract.voce_i)
+                        df_temp.at[idx, 'PFA II %'] = float(contract.voce_ii)
+                        df_temp.at[idx, 'PFA III %'] = float(contract.voce_iii)
+                        df_temp.at[idx, 'PFA IV %'] = float(contract.voce_iv)
+                        df_temp.at[idx, 'PFA V %'] = float(contract.voce_v)
                         
                 st.session_state.rinnovi_df = df_temp
                 st.rerun()
@@ -796,6 +813,8 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
     with col_btn2:
         if st.button("Popola con Dati di Test (Mock Data)", use_container_width=True):
             df_mock = st.session_state.rinnovi_df.copy()
+            st.session_state.global_carico = 2.0
+            st.session_state.global_pagamento = 1.5
             for idx, row in df_mock.iterrows():
                 floor = row['Minimo Net Net €'] if row['Minimo Net Net €'] > 0 else 3.0
                 vol = random.randint(10, 100) * 100
@@ -832,6 +851,15 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         st.markdown("#### Griglia di Simulazione Contrattuale")
         st.markdown("Modifica i dati e premi **Calcola Simulazione** per aggiornare i risultati. *(Nota: usa il PUNTO per i decimali in fase di inserimento)*")
         
+        # --- NUOVI INPUT GLOBALI PER CARICO E PAGAMENTO ---
+        with st.container(border=True):
+            st.markdown("**Condizioni Logistiche e Finanziarie (Applicate a tutte le referenze)**")
+            col_glob1, col_glob2 = st.columns(2)
+            with col_glob1:
+                st.number_input("Sconto Carico Logistica (%)", min_value=0.0, max_value=100.0, step=0.5, key="global_carico")
+            with col_glob2:
+                st.number_input("Sconto Pagamento (%)", min_value=0.0, max_value=100.0, step=0.5, key="global_pagamento")
+        
         col_up3, col_up4 = st.columns(2)
         with col_up3:
             with st.container(border=True):
@@ -855,8 +883,12 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                     st.rerun()
 
         df_display = st.session_state.rinnovi_df.copy()
-        df_display['Net Net [N] €'] = df_display['[N] Listino €'] * (1 - df_display['[N] Sc. Fattura %']/100) * (1 - df_display['[N] Contratto %']/100)
-        df_display['Net Net [N+1] €'] = df_display['[N+1] Listino €'] * (1 - df_display['[N+1] Sc. Fattura %']/100) * (1 - df_display['[N+1] Contratto %']/100)
+        
+        # Applichiamo carico e pagamento globali al calcolo del Net Net
+        moltiplicatore_globale = (1 - st.session_state.global_carico/100) * (1 - st.session_state.global_pagamento/100)
+        
+        df_display['Net Net [N] €'] = df_display['[N] Listino €'] * (1 - df_display['[N] Sc. Fattura %']/100) * moltiplicatore_globale * (1 - df_display['[N] Contratto %']/100)
+        df_display['Net Net [N+1] €'] = df_display['[N+1] Listino €'] * (1 - df_display['[N+1] Sc. Fattura %']/100) * moltiplicatore_globale * (1 - df_display['[N+1] Contratto %']/100)
         df_display['Delta Assoluto €'] = df_display['Net Net [N+1] €'] - df_display['Net Net [N] €']
         
         def calc_max_promo(row):
@@ -896,7 +928,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             submit_sim = st.form_submit_button("🔄 Calcola Simulazione", type="primary")
             
         if submit_sim:
-            # Salvataggio sicuro tramite indice
             for i, idx in enumerate(df_display.index):
                 for col in ['[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']:
                     st.session_state.rinnovi_df.at[idx, col] = df_sim_edited.iloc[i][col]
@@ -908,8 +939,10 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         if df_active.empty:
             st.warning("Nessuna referenza attiva. Inserisci dei volumi nella Master Grid.")
         else:
-            df_active['Net Net [N] €'] = df_active['[N] Listino €'] * (1 - df_active['[N] Sc. Fattura %']/100) * (1 - df_active['[N] Contratto %']/100)
-            df_active['Net Net [N+1] €'] = df_active['[N+1] Listino €'] * (1 - df_active['[N+1] Sc. Fattura %']/100) * (1 - df_active['[N+1] Contratto %']/100)
+            moltiplicatore_globale = (1 - st.session_state.global_carico/100) * (1 - st.session_state.global_pagamento/100)
+            
+            df_active['Net Net [N] €'] = df_active['[N] Listino €'] * (1 - df_active['[N] Sc. Fattura %']/100) * moltiplicatore_globale * (1 - df_active['[N] Contratto %']/100)
+            df_active['Net Net [N+1] €'] = df_active['[N+1] Listino €'] * (1 - df_active['[N+1] Sc. Fattura %']/100) * moltiplicatore_globale * (1 - df_active['[N+1] Contratto %']/100)
             
             df_active['Fatturato_N'] = df_active['Net Net [N] €'] * df_active['[N+1] Volumi'] 
             df_active['Fatturato_N1'] = df_active['Net Net [N+1] €'] * df_active['[N+1] Volumi']
@@ -1003,7 +1036,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             # --- LOGICA DI VERIFICA ---
             def check_fattura(row):
                 p = 1.0
-                for s in ['S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %', 'S6 %', 'S7 %', 'Y %', 'Carico %', 'Pagamento %']:
+                for s in ['S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %']:
                     p *= (1 - (row[s] / 100))
                 return (1 - p) * 100
                 
@@ -1029,26 +1062,23 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             for col in dettaglio_cols:
                 col_config_exp[col] = st.column_config.NumberColumn(col, format="%.2f %%", step=0.5)
 
-            # Esponiamo TUTTE le colonne per dare massimo controllo all'utente
             cols_to_edit_exp = [
                 'Prodotto', '[N+1] Sc. Fattura %', 'Check Sc. Fattura %', 'Delta Fattura',
-                'S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %', 'S6 %', 'S7 %', 'Y %', 'Carico %', 'Pagamento %',
+                'S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %',
                 '[N+1] Contratto %', 'Check PFA %', 'Delta PFA',
                 'PFA I %', 'PFA II %', 'PFA III %', 'PFA IV %', 'PFA V %'
             ]
             
-            # Pulsante di Export in alto a destra (fuori dal form per non interferire)
             col_spacer, col_btn_exp = st.columns([3, 1])
             with col_btn_exp:
                 st.download_button("📥 Scarica Esplosione Sconti (Excel)", to_excel_bytes(df_explode[cols_to_edit_exp]), "Esplosione_Sconti.xlsx")
 
             with st.form("form_esplosione"):
-                # Pulsanti affiancati in cima al form
                 col_btn_calc, col_btn_align = st.columns(2)
                 with col_btn_calc:
                     submit_exp = st.form_submit_button("🔄 Calcola e Verifica Sconti (Manuale)", type="primary")
                 with col_btn_align:
-                    align_exp = st.form_submit_button("🪄 Allinea Sconti Automaticamente", type="secondary", help="Calcola la differenza matematica e la inserisce in S6 (Fattura) e PFA V (Fuori Fattura) per centrare il target.")
+                    align_exp = st.form_submit_button("🪄 Allinea Sconti Automaticamente", type="secondary", help="Calcola la differenza matematica e la inserisce in S5 (Fattura) e PFA V (Fuori Fattura) per centrare il target.")
                 
                 df_exp_edited = st.data_editor(
                     df_explode[cols_to_edit_exp],
@@ -1060,27 +1090,25 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 )
                 
             if submit_exp or align_exp:
-                 # 1. Salvataggio sicuro tramite indice (applica le modifiche manuali fatte dall'utente)
                  for i, idx in enumerate(df_explode.index):
                      for col in dettaglio_cols:
                          if col in df_exp_edited.columns:
                              st.session_state.rinnovi_df.at[idx, col] = df_exp_edited.iloc[i][col]
                              
-                 # 2. Se è stato cliccato "Allinea", calcola i delta e sovrascrivi S6 e PFA V
                  if align_exp:
                      df_temp = st.session_state.rinnovi_df.copy()
                      for idx, row in df_temp[df_temp['[N+1] Volumi'] > 0].iterrows():
-                         # Allineamento Sconto in Fattura (Geometrico)
+                         # Allineamento Sconto in Fattura (Geometrico) -> in S5
                          target_fatt = row['[N+1] Sc. Fattura %']
                          p_parziale = 1.0
-                         for s in ['S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %', 'S7 %', 'Y %', 'Carico %', 'Pagamento %']:
+                         for s in ['S1 %', 'S2 %', 'S3 %', 'S4 %']:
                              p_parziale *= (1 - (row[s] / 100))
                          
                          if p_parziale > 0:
-                             s6_req = (1 - ((1 - target_fatt/100) / p_parziale)) * 100
-                             df_temp.at[idx, 'S6 %'] = round(s6_req, 2)
+                             s5_req = (1 - ((1 - target_fatt/100) / p_parziale)) * 100
+                             df_temp.at[idx, 'S5 %'] = round(s5_req, 2)
                          
-                         # Allineamento PFA (Algebrico)
+                         # Allineamento PFA (Algebrico) -> in PFA V
                          target_pfa = row['[N+1] Contratto %']
                          pfa_parziale = row['PFA I %'] + row['PFA II %'] + row['PFA III %'] + row['PFA IV %']
                          df_temp.at[idx, 'PFA V %'] = round(target_pfa - pfa_parziale, 2)
