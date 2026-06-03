@@ -678,6 +678,13 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
     anno_corrente = date.today().year
     conn = sqlite3.connect(DB_FILE)
     
+    # Funzione helper per esportare i dataframe in Excel
+    def to_excel_bytes(df):
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Export')
+        return output.getvalue()
+    
     st.markdown("#### 1. Contesto di Riferimento (Pre-compilazione Anno N)")
     
     with st.container(border=True):
@@ -957,6 +964,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 column_config={"Allarme": "Sotto Floor!"},
                 hide_index=True, use_container_width=True
             )
+            st.download_button("📥 Scarica Tabella Categorie (Excel)", to_excel_bytes(df_cat_disp), "Analisi_Categorie.xlsx")
             
             st.divider()
             
@@ -981,6 +989,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 column_config={"Allarme": "Sotto Floor!"},
                 hide_index=True, use_container_width=True
             )
+            st.download_button("📥 Scarica Dettaglio Referenze (Excel)", to_excel_bytes(df_active[cols_sku_disp]), "Dettaglio_Referenze.xlsx")
 
     with tab_esplosione:
         st.markdown("#### Esplosione Sconti (Dettaglio)")
@@ -991,6 +1000,33 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         if df_explode.empty:
             st.warning("Nessuna referenza attiva.")
         else:
+            # --- PULSANTI AZIONE RAPIDA ---
+            col_btn_align, col_btn_exp = st.columns(2)
+            with col_btn_align:
+                if st.button("🪄 Allinea Sconti Automaticamente", type="secondary", help="Calcola la differenza matematica e la inserisce in S6 (Fattura) e PFA V (Fuori Fattura) per centrare il target."):
+                    df_temp = st.session_state.rinnovi_df.copy()
+                    for idx, row in df_temp[df_temp['[N+1] Volumi'] > 0].iterrows():
+                        # 1. Allineamento Sconto in Fattura (Geometrico)
+                        target_fatt = row['[N+1] Sc. Fattura %']
+                        p_parziale = 1.0
+                        # Calcoliamo il peso di tutti gli sconti TRANNE S6
+                        for s in ['S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %', 'S7 %', 'Y %', 'Carico %', 'Pagamento %']:
+                            p_parziale *= (1 - (row[s] / 100))
+                        
+                        if p_parziale > 0:
+                            # Formula inversa per trovare lo sconto geometrico mancante
+                            s6_req = (1 - ((1 - target_fatt/100) / p_parziale)) * 100
+                            df_temp.at[idx, 'S6 %'] = round(s6_req, 2)
+                        
+                        # 2. Allineamento PFA (Algebrico)
+                        target_pfa = row['[N+1] Contratto %']
+                        pfa_parziale = row['PFA I %'] + row['PFA II %'] + row['PFA III %'] + row['PFA IV %']
+                        df_temp.at[idx, 'PFA V %'] = round(target_pfa - pfa_parziale, 2)
+                    
+                    st.session_state.rinnovi_df = df_temp
+                    st.rerun()
+                    
+            # --- LOGICA DI VERIFICA ---
             def check_fattura(row):
                 p = 1.0
                 for s in ['S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %', 'S6 %', 'S7 %', 'Y %', 'Carico %', 'Pagamento %']:
@@ -1019,8 +1055,17 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             for col in dettaglio_cols:
                 col_config_exp[col] = st.column_config.NumberColumn(col, format="%.2f %%", step=0.5)
 
-            cols_to_edit_exp = ['Prodotto', '[N+1] Sc. Fattura %', 'Check Sc. Fattura %', 'Delta Fattura'] + ['S1 %', 'S2 %', 'S6 %', 'Y %', 'Carico %', 'Pagamento %'] + ['[N+1] Contratto %', 'Check PFA %', 'Delta PFA'] + ['PFA I %', 'PFA II %']
+            # Ora esponiamo TUTTE le colonne per dare massimo controllo all'utente
+            cols_to_edit_exp = [
+                'Prodotto', '[N+1] Sc. Fattura %', 'Check Sc. Fattura %', 'Delta Fattura',
+                'S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %', 'S6 %', 'S7 %', 'Y %', 'Carico %', 'Pagamento %',
+                '[N+1] Contratto %', 'Check PFA %', 'Delta PFA',
+                'PFA I %', 'PFA II %', 'PFA III %', 'PFA IV %', 'PFA V %'
+            ]
             
+            with col_btn_exp:
+                st.download_button("📥 Scarica Esplosione Sconti (Excel)", to_excel_bytes(df_explode[cols_to_edit_exp]), "Esplosione_Sconti.xlsx")
+
             with st.form("form_esplosione"):
                 df_exp_edited = st.data_editor(
                     df_explode[cols_to_edit_exp],
@@ -1030,17 +1075,15 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                     height=600,
                     key="editor_esplosione"
                 )
-                submit_exp = st.form_submit_button("🔄 Calcola e Verifica Sconti", type="primary")
+                submit_exp = st.form_submit_button("🔄 Calcola e Verifica Sconti (Manuale)", type="primary")
                 
             if submit_exp:
                  # Salvataggio sicuro tramite indice
                  for i, idx in enumerate(df_explode.index):
                      for col in dettaglio_cols:
-                         # Controlla che la colonna sia effettivamente presente nell'editor
                          if col in df_exp_edited.columns:
                              st.session_state.rinnovi_df.at[idx, col] = df_exp_edited.iloc[i][col]
                  st.rerun()
-
 # ==========================================
 # SCHEDA: STORICO PROMOZIONI
 # ==========================================
