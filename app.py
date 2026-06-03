@@ -1696,22 +1696,6 @@ elif menu == "Back-Office (Contratti)":
                         except Exception as e:
                             st.error(f"Errore durante l'importazione: {e}")
 
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    with st.container(border=True):
-        st.markdown("<h4 style='color: #991B1B;'>Sezione Pericolo (Danger Zone)</h4>", unsafe_allow_html=True)
-        if PRODUCTION_MODE:
-            st.info("Modalità Production: Ripristino demo disattivato.")
-        else:
-            st.warning("Questa operazione ripristinerà il database allo stato iniziale.")
-            pin_conferma = st.text_input("Digita 'RESET' per procedere:")
-            if st.button("ESEGUI HARD RESET DATABASE", disabled=(pin_conferma != "RESET")):
-                try:
-                    seed_baseline_data(conn)
-                    st.success("Database ripristinato.")
-                    st.rerun()
-                except Exception as ex:
-                    st.error(f"Errore: {ex}")
-
     conn.close()
 
 # ==========================================
