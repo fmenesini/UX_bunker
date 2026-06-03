@@ -1447,46 +1447,46 @@ elif menu == "Back-Office (Contratti)":
                             df_import = DataSanitizer.sanitize_excel_import(df_import, expected_columns=colonne_obbligatorie)
                             
                             cursor = conn.cursor()
-                                righe_inserite = 0
-                                
-                                with conn:
-                                    for idx, row in df_import.iterrows():
-                                        gruppo = str(row["GRUPPO_MACRO"]).upper().strip()
-                                        sottogruppo = str(row["SOTTOGRUPPO"]).upper().strip() if (pd.notna(row.get("SOTTOGRUPPO")) and str(row.get("SOTTOGRUPPO")).strip() != "") else ""
-                                        insegna = str(row["ASSOCIATO_INSEGNA"]).upper().strip() if (pd.notna(row.get("ASSOCIATO_INSEGNA")) and str(row.get("ASSOCIATO_INSEGNA")).strip() != "") else ""
-                                        livello = str(row["LIVELLO"]).upper().strip()
-                                        chiave_livello = str(row["CHIAVE_LIVELLO"]).strip() if pd.notna(row["CHIAVE_LIVELLO"]) else ""
-                                        
-                                        if livello == "REFERENZA" and chiave_livello:
-                                            chiave_livello = str(chiave_livello).split('.')[0].zfill(13)
+                            righe_inserite = 0
+                            
+                            with conn:
+                                for idx, row in df_import.iterrows():
+                                    gruppo = str(row["GRUPPO_MACRO"]).upper().strip()
+                                    sottogruppo = str(row["SOTTOGRUPPO"]).upper().strip() if (pd.notna(row.get("SOTTOGRUPPO")) and str(row.get("SOTTOGRUPPO")).strip() != "") else ""
+                                    insegna = str(row["ASSOCIATO_INSEGNA"]).upper().strip() if (pd.notna(row.get("ASSOCIATO_INSEGNA")) and str(row.get("ASSOCIATO_INSEGNA")).strip() != "") else ""
+                                    livello = str(row["LIVELLO"]).upper().strip()
+                                    chiave_livello = str(row["CHIAVE_LIVELLO"]).strip() if pd.notna(row["CHIAVE_LIVELLO"]) else ""
+                                    
+                                    if livello == "REFERENZA" and chiave_livello:
+                                        chiave_livello = str(chiave_livello).split('.')[0].zfill(13)
 
-                                        cursor.execute("INSERT OR IGNORE INTO clienti (gruppo_macro, sottogruppo, associato_insegna) VALUES (?, ?, ?)", (gruppo, sottogruppo, insegna))
+                                    cursor.execute("INSERT OR IGNORE INTO clienti (gruppo_macro, sottogruppo, associato_insegna) VALUES (?, ?, ?)", (gruppo, sottogruppo, insegna))
 
-                                        def to_float_or_none(val):
-                                            if pd.isna(val) or str(val).strip() == "": return None
-                                            try: return float(val)
-                                            except: return None
+                                    def to_float_or_none(val):
+                                        if pd.isna(val) or str(val).strip() == "": return None
+                                        try: return float(val)
+                                        except: return None
 
-                                        cursor.execute("""
-                                        INSERT OR REPLACE INTO accordi_commerciali (
-                                            gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello, listino_r,
-                                            sconto_1, sconto_2, sconto_3, sconto_4, sconto_5,
-                                            sconto_6, sconto_7, sconto_y, sconto_carico, sconto_pagamento,
-                                            voce_contratto_1, voce_contratto_2, voce_contratto_3, voce_contratto_4, voce_contratto_5
-                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                        """, (
-                                            gruppo, sottogruppo, insegna, livello, chiave_livello, to_float_or_none(row.get("LISTINO_BASE_R")),
-                                            to_float_or_none(row.get("SCONTO_1")), to_float_or_none(row.get("SCONTO_2")), to_float_or_none(row.get("SCONTO_3")),
-                                            to_float_or_none(row.get("SCONTO_4")), to_float_or_none(row.get("SCONTO_5")), to_float_or_none(row.get("SCONTO_LOCAL_6")),
-                                            to_float_or_none(row.get("SCONTO_LOCAL_7")), to_float_or_none(row.get("SCONTO_CONTINUATIVO_Y")),
-                                            to_float_or_none(row.get("SCONTO_CARICO_LOGISTICA")),
-                                            to_float_or_none(row.get("SCONTO_PAGAMENTO_AC")), to_float_or_none(row.get("PFA_VOCE_I")),
-                                            to_float_or_none(row.get("PFA_VOCE_II")), to_float_or_none(row.get("PFA_VOCE_III")),
-                                            to_float_or_none(row.get("PFA_VOCE_IV")), to_float_or_none(row.get("PFA_VOCE_V"))
-                                        ))
-                                        righe_inserite += 1
-                                st.success(f"Elaborate {righe_inserite} regole commerciali.")
-                                st.rerun()
+                                    cursor.execute("""
+                                    INSERT OR REPLACE INTO accordi_commerciali (
+                                        gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello, listino_r,
+                                        sconto_1, sconto_2, sconto_3, sconto_4, sconto_5,
+                                        sconto_6, sconto_7, sconto_y, sconto_carico, sconto_pagamento,
+                                        voce_contratto_1, voce_contratto_2, voce_contratto_3, voce_contratto_4, voce_contratto_5
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    """, (
+                                        gruppo, sottogruppo, insegna, livello, chiave_livello, to_float_or_none(row.get("LISTINO_BASE_R")),
+                                        to_float_or_none(row.get("SCONTO_1")), to_float_or_none(row.get("SCONTO_2")), to_float_or_none(row.get("SCONTO_3")),
+                                        to_float_or_none(row.get("SCONTO_4")), to_float_or_none(row.get("SCONTO_5")), to_float_or_none(row.get("SCONTO_LOCAL_6")),
+                                        to_float_or_none(row.get("SCONTO_LOCAL_7")), to_float_or_none(row.get("SCONTO_CONTINUATIVO_Y")),
+                                        to_float_or_none(row.get("SCONTO_CARICO_LOGISTICA")),
+                                        to_float_or_none(row.get("SCONTO_PAGAMENTO_AC")), to_float_or_none(row.get("PFA_VOCE_I")),
+                                        to_float_or_none(row.get("PFA_VOCE_II")), to_float_or_none(row.get("PFA_VOCE_III")),
+                                        to_float_or_none(row.get("PFA_VOCE_IV")), to_float_or_none(row.get("PFA_VOCE_V"))
+                                    ))
+                                    righe_inserite += 1
+                            st.success(f"Elaborate {righe_inserite} regole commerciali.")
+                            st.rerun()
                         except Exception as e:
                             st.error(f"Errore durante l'importazione: {e}")
 
