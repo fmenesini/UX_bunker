@@ -253,6 +253,11 @@ with st.sidebar.container(border=True):
                 conn_reset = sqlite3.connect(DB_FILE)
                 seed_baseline_data(conn_reset)
                 conn_reset.close()
+                
+                # PULIZIA MEMORIA: Svuotiamo la cache di sessione (incluso il Master Grid)
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                    
                 st.sidebar.success("DB ripristinato!")
                 st.rerun()
             except Exception as ex:
