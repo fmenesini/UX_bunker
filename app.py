@@ -238,6 +238,26 @@ menu = st.sidebar.radio("", [
     "Guida Operativa"
 ])
 
+# --- SPOSTAMENTO DANGER ZONE NELLA SIDEBAR ---
+st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
+with st.sidebar.container(border=True):
+    st.markdown("<h4 style='color: #991B1B; font-size: 1.1rem;'>⚠️ Danger Zone</h4>", unsafe_allow_html=True)
+    if PRODUCTION_MODE:
+        st.info("Ripristino disattivato in Prod.")
+    else:
+        st.markdown("<span style='font-size: 0.85rem;'>Ripristina il DB allo stato iniziale.</span>", unsafe_allow_html=True)
+        pin_conferma = st.text_input("Digita 'RESET':", key="reset_pin_sidebar")
+        if st.button("HARD RESET DB", disabled=(pin_conferma != "RESET"), use_container_width=True):
+            try:
+                # Apriamo una connessione rapida solo per il reset
+                conn_reset = sqlite3.connect(DB_FILE)
+                seed_baseline_data(conn_reset)
+                conn_reset.close()
+                st.sidebar.success("DB ripristinato!")
+                st.rerun()
+            except Exception as ex:
+                st.sidebar.error(f"Errore: {ex}")
+# ---------------------------------------------
 # ==========================================
 # SCHEDA 1: SIMULATORE OFFERTE (Singola SKU)
 # ==========================================
