@@ -1982,20 +1982,34 @@ else:
         2. Controlla i campi **Sconto Promo MAX** e **Sconto Unitario MAX**: ti indicano il limite massimo che puoi concedere prima che il semaforo diventi rosso.
         """)
         
-    with st.expander("📊 5. COME USARE LA 'MASTER GRID RINNOVI' (Simulazione N vs N+1)", expanded=False):
+   with st.expander("📊 5. COME USARE LA 'MASTER GRID RINNOVI' (Simulazione N vs N+1)", expanded=False):
         st.markdown("""
-        Questa scheda è lo strumento strategico per i rinnovi annuali. Permette di simulare l'intero portafoglio prodotti di un cliente in un'unica schermata.
+        Questa scheda è lo strumento strategico per i rinnovi annuali. Permette di simulare l'intero portafoglio prodotti di un cliente in un'unica schermata, partendo dagli aggregati fino ad arrivare al dettaglio delle singole voci contrattuali.
         
-        **Flusso di Lavoro:**
-        1. **Seleziona il Cliente:** Scegli Gruppo e Sottogruppo.
-        2. **Carica Dati Attuali:** Premi `Carica Condizioni Attuali da DB`. Il sistema compilerà la colonna dell'Anno [N] con le condizioni oggi in vigore.
-        3. **Inserisci i Volumi:** Inserisci i volumi previsti per il rinnovo nella colonna `[N+1] Volumi`. *Nota: Il sistema analizzerà solo le righe in cui i volumi sono maggiori di zero.*
-        4. **Simula il Rinnovo:** Modifica il Listino, lo Sconto in Fattura o i PFA per l'Anno [N+1]. 
-        5. **Calcola:** Premi il pulsante `🔄 Calcola Simulazione` per aggiornare i risultati. *(Ricorda: usa sempre il PUNTO per i decimali durante l'inserimento dati).*
+        **Flusso di Lavoro Passo-Passo:**
+        
+        **FASE 1: Setup e Condizioni Globali**
+        1. **Identifica il Cliente:** Seleziona il *Gruppo GDO* e il *Sottogruppo* dai menu a tendina.
+        2. **Importa lo Storico:** Clicca su **"Carica Condizioni Attuali da DB"**. Il sistema popolerà le colonne dell'Anno [N] con i listini e gli sconti attualmente in vigore.
+        3. **Imposta gli Oneri Globali:** In cima al Tab 1, verifica e imposta lo **Sconto Carico Logistica (%)** e lo **Sconto Pagamento (%)**. *Attenzione: questi due valori vengono applicati a cascata su TUTTE le referenze attive e abbattono direttamente il Net Net finale.*
 
-        **Come leggere i risultati (L'Effetto "Pollo di Trilussa"):**
-        Nel Tab "Analisi Ponderata", i risultati sono raggruppati per Categoria e Sub-Categoria. 
-        Questo è fondamentale: un cliente potrebbe avere un margine totale positivo (Verde) perché compra enormi volumi di Olio di Semi, ma nascondere una forte perdita (Rosso) sugli Extravergini. Il sistema raggruppa i dati proprio per evidenziare se un cluster specifico sta distruggendo valore, calcolando la media ponderata sui volumi.
+        **FASE 2: Tab 1 - Griglia di Simulazione (Gli Aggregati)**
+        1. **Attiva le Referenze:** Inserisci i volumi previsti nella colonna `[N+1] Volumi`. *Il sistema calcolerà e mostrerà nei risultati SOLO le righe con volumi maggiori di zero.*
+        2. **Imposta i Target:** Agisci sulle colonne `[N+1] Listino €`, `[N+1] Sc. Fattura %` (il totale degli sconti in fattura) e `[N+1] Contratto %` (il totale dei premi fuori fattura).
+        3. **Calcola:** Clicca su **"🔄 Calcola Simulazione"**.
+        4. **Verifica lo Spazio Promo:** Controlla la colonna `Sc. Promo MAX [N+1] %`. Questo valore ti dice quanto sconto volantino potrai fare durante l'anno prima di bucare il limite minimo aziendale (Floor). Modifica i target finché non ottieni lo Spazio Promo desiderato.
+
+        **FASE 3: Tab 2 - Analisi Ponderata (L'Effetto "Pollo di Trilussa")**
+        In questa scheda vedi la sintesi economica. I risultati sono raggruppati per Categoria e Sub-Categoria. 
+        *Perché è fondamentale?* Un cliente potrebbe avere un margine totale positivo (Verde) perché muove enormi volumi di Olio di Semi, ma nascondere una forte perdita (Rosso) sugli Extravergini. Il sistema calcola la media ponderata sui volumi per evidenziare se un cluster specifico sta distruggendo valore.
+
+        **FASE 4: Tab 3 - Esplosione Sconti (Il Dettaglio Contrattuale)**
+        Una volta che i target aggregati nel Tab 1 ti soddisfano, devi "spacchettarli" nelle reali voci del contratto nazionale (S1, S2, PFA I, ecc.).
+        1. **Modifica Manuale:** Inserisci i valori noti (es. S1 al 10%, S2 al 2%).
+        2. **Verifica:** Clicca su **"🔄 Calcola e Verifica Sconti (Manuale)"**. Il sistema calcolerà la cascata geometrica e ti mostrerà sotto "Diff. Fattura" quanto manca per raggiungere il target che avevi fissato nel Tab 1.
+        3. **La Magia (Auto-Allineamento):** Non impazzire con la calcolatrice! Clicca su **"🪄 Allinea Sconti Automaticamente"**. Il sistema calcolerà l'esatta percentuale geometrica mancante e la inserirà in **S5 %**, portando la differenza a zero. Farà la stessa cosa per i premi fuori fattura, inserendo la differenza algebrica in **PFA V %**.
+        
+        *Nota: In ogni Tab è presente un pulsante per scaricare la tabella corrente in Excel.*
         """)
 
     with st.expander("🗄️ 6. STORICO (CRM), REPORTISTICA E BACK-OFFICE", expanded=False):
