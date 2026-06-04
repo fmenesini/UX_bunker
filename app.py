@@ -1396,7 +1396,9 @@ elif menu == "Storico Promozioni":
                     st.session_state['widget_volumi'] = int(promo_data['volumi_stimati'])
                     st.session_state['widget_fisso'] = float(promo_data['contributo_fisso'])
                     st.session_state['widget_pezzo'] = float(promo_data['contributo_pezzo'])
-                    st.session_state.main_menu_radio = "Simulatore Offerte"
+                    
+                    # Usiamo la variabile temporanea per cambiare menu senza errori!
+                    st.session_state.go_to_menu = "Simulatore Offerte"
                     st.rerun()
             else:
                 st.write("Nessun record disponibile.")
