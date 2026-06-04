@@ -1879,64 +1879,90 @@ elif menu == "Report Sintetico":
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # --- DASHBOARD DIREZIONALE ---
+    # --- DASHBOARD DIREZIONALE (MOTORE RISOLTO) ---
     st.markdown("#### 📊 Dashboard Direzionale (Control Tower)")
     
-    col_dash1, col_dash2 = st.columns(2)
+    # 1. Generazione Dati Robusta (Risolve la gerarchia per tutti i clienti attivi)
+    cursor.execute("SELECT gruppo_macro, sottogruppo, associato_insegna FROM clienti WHERE attivo=1")
+    all_clients = cursor.fetchall()
     
-    query_pfa = """
-        SELECT gruppo_macro, 
-               AVG(voce_contratto_1 + COALESCE(voce_contratto_2,0) + COALESCE(voce_contratto_3,0) + COALESCE(voce_contratto_4,0) + COALESCE(voce_contratto_5,0)) as avg_pfa
-        FROM accordi_commerciali
-        GROUP BY gruppo_macro
-        ORDER BY avg_pfa DESC
-        LIMIT 5
-    """
-    df_pfa = pd.read_sql_query(query_pfa, conn)
-    if not df_pfa.empty:
-        fig_pfa = px.bar(df_pfa, x='gruppo_macro', y='avg_pfa', title="Top 5 Clienti per PFA Medio (%)", 
-                         labels={'gruppo_macro': 'Cliente', 'avg_pfa': 'PFA Medio (%)'}, color='avg_pfa', color_continuous_scale='Reds')
-        col_dash1.plotly_chart(fig_pfa, use_container_width=True)
+    cursor.execute("SELECT ean, tipo_olio, descrizione_commerciale, COALESCE(min_net_net_g, 0) FROM anagrafica_master LEFT JOIN guardrail_aziendali USING(ean)")
+    all_products = cursor.fetchall()
     
-    query_health = """
-        SELECT a.gruppo_macro, a.listino_r, a.sconto_1, a.sconto_2, a.sconto_3, a.sconto_4, a.sconto_5, a.sconto_6, a.sconto_7, a.sconto_y, a.sconto_carico, a.sconto_pagamento,
-               (COALESCE(a.voce_contratto_1,0) + COALESCE(a.voce_contratto_2,0) + COALESCE(a.voce_contratto_3,0) + COALESCE(a.voce_contratto_4,0) + COALESCE(a.voce_contratto_5,0)) as pfa_tot,
-               g.min_net_net_g, m.tipo_olio
-        FROM accordi_commerciali a
-        JOIN anagrafica_master m ON a.chiave_livello = m.ean
-        LEFT JOIN guardrail_aziendali g ON a.chiave_livello = g.ean
-        WHERE a.livello = 'REFERENZA' AND a.listino_r IS NOT NULL
-    """
-    df_health = pd.read_sql_query(query_health, conn)
+    dash_data = []
+    for c in all_clients:
+        for p in all_products:
+            res = HierarchyResolver.resolve(conn, c[0], c[1], c[2], p[0], p[1])
+            if res.listino_r is not None:
+                # Calcolo Net Net reale
+                p_net = float(res.listino_r)
+                for s in [res.sconto_1, res.sconto_2, res.sconto_3, res.sconto_4, res.sconto_5, res.sconto_6, res.sconto_7, res.sconto_y, res.sconto_carico, res.sconto_pagamento]:
+                    p_net *= (1 - (float(s)/100))
+                pfa = float(res.voce_i + res.voce_ii + res.voce_iii + res.voce_iv + res.voce_v)
+                p_net *= (1 - (pfa/100))
+                
+                dash_data.append({
+                    'Cliente': c[2] if c[2] else c[0],
+                    'Categoria': p[1],
+                    'Prodotto': p[2],
+                    'NetNet': p_net,
+                    'Floor': float(p[3]),
+                    'PFA_Tot': pfa,
+                    'Stato': 'Verde (Sopra Soglia)' if p_net >= float(p[3]) else 'Rosso (Sotto Soglia)'
+                })
+                
+    df_dash = pd.DataFrame(dash_data)
     
-    def calc_nn_dash(row):
-        p = row['listino_r']
-        for s in ['sconto_1', 'sconto_2', 'sconto_3', 'sconto_4', 'sconto_5', 'sconto_6', 'sconto_7', 'sconto_y', 'sconto_carico', 'sconto_pagamento']:
-            if pd.notna(row[s]):
-                p *= (1 - (row[s]/100))
-        p *= (1 - (row['pfa_tot']/100)) if pd.notna(row['pfa_tot']) else 1
-        return p
-        
-    if not df_health.empty:
-        df_health['net_net'] = df_health.apply(calc_nn_dash, axis=1)
-        df_health['Stato'] = df_health.apply(lambda x: 'Verde (Sopra Soglia)' if x['net_net'] >= x['min_net_net_g'] else 'Rosso (Sotto Soglia)', axis=1)
-        
-        fig_pie = px.pie(df_health, names='Stato', title="Salute Contratti Attivi (Referenze)", 
-                         color='Stato', color_discrete_map={'Verde (Sopra Soglia)':'#22C55E', 'Rosso (Sotto Soglia)':'#EF4444'})
-        col_dash2.plotly_chart(fig_pie, use_container_width=True)
-        
+    if not df_dash.empty:
+        # --- GRAFICO 1: SALUTE CONTRATTI (Con Filtri e Tooltip) ---
+        with st.container(border=True):
+            st.subheader("Salute Contratti Attivi (Redditività)", help="Questo grafico misura la redditività reale. Mostra quanti accordi attuali generano un prezzo Net-Net superiore al limite minimo aziendale (Verde) e quanti invece stanno distruggendo valore vendendo in perdita (Rosso). Usa i filtri per scendere nel dettaglio.")
+            
+            col_filt1, col_filt2 = st.columns(2)
+            with col_filt1:
+                dash_cat = st.selectbox("1. Filtra per Categoria", ["Tutte le Categorie"] + sorted(df_dash['Categoria'].unique().tolist()), key="dash_cat")
+            with col_filt2:
+                prods_available = df_dash[df_dash['Categoria'] == dash_cat]['Prodotto'].unique().tolist() if dash_cat != "Tutte le Categorie" else df_dash['Prodotto'].unique().tolist()
+                dash_prod = st.selectbox("2. Filtra per Referenza Specifica", ["Tutte le Referenze"] + sorted(prods_available), key="dash_prod")
+            
+            df_pie = df_dash.copy()
+            if dash_cat != "Tutte le Categorie": df_pie = df_pie[df_pie['Categoria'] == dash_cat]
+            if dash_prod != "Tutte le Referenze": df_pie = df_pie[df_pie['Prodotto'] == dash_prod]
+            
+            if not df_pie.empty:
+                fig_pie = px.pie(df_pie, names='Stato', color='Stato', color_discrete_map={'Verde (Sopra Soglia)':'#22C55E', 'Rosso (Sotto Soglia)':'#EF4444'})
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("Nessun dato disponibile per i filtri selezionati.")
+
         st.markdown("<br>", unsafe_allow_html=True)
-        df_cat_health = df_health.groupby('tipo_olio')['pfa_tot'].mean().reset_index()
-        fig_cat = px.bar(df_cat_health, x='tipo_olio', y='pfa_tot', title="Pressione Promozionale (PFA off-invoice) per Categoria",
-                         labels={'tipo_olio': 'Categoria', 'pfa_tot': 'PFA Medio (%)'}, color='pfa_tot', color_continuous_scale='Blues')
-        st.plotly_chart(fig_cat, use_container_width=True)
         
+        # --- GRAFICI A BARRE (PFA) ---
+        col_dash1, col_dash2 = st.columns(2)
+        
+        with col_dash1:
+            with st.container(border=True):
+                st.subheader("Top 5 Clienti per PFA Medio (%)", help="Classifica i clienti più 'costosi' in termini di Premi Fuori Fattura. Aiuta a capire chi sta assorbendo la maggior parte del budget promozionale di fine anno.")
+                df_pfa_cli = df_dash.groupby('Cliente')['PFA_Tot'].mean().reset_index().sort_values('PFA_Tot', ascending=False).head(5)
+                fig_pfa = px.bar(df_pfa_cli, x='Cliente', y='PFA_Tot', labels={'Cliente': 'Insegna / Gruppo', 'PFA_Tot': 'PFA Medio (%)'}, color='PFA_Tot', color_continuous_scale='Reds')
+                st.plotly_chart(fig_pfa, use_container_width=True)
+        
+        with col_dash2:
+            with st.container(border=True):
+                st.subheader("Pressione Promozionale (PFA) per Categoria", help="Misura quanto margine viene ceduto a fine anno per ogni famiglia di prodotto. Aiuta a identificare se categorie a basso margine (es. Semi) sono eccessivamente caricate di premi rispetto ad altre.")
+                df_cat_health = df_dash.groupby('Categoria')['PFA_Tot'].mean().reset_index().sort_values('PFA_Tot', ascending=False)
+                fig_cat = px.bar(df_cat_health, x='Categoria', y='PFA_Tot', labels={'Categoria': 'Famiglia Prodotto', 'PFA_Tot': 'PFA Medio (%)'}, color='PFA_Tot', color_continuous_scale='Blues')
+                st.plotly_chart(fig_cat, use_container_width=True)
+
+    else:
+        st.warning("Nessun contratto attivo trovato nel database per generare la Dashboard.")
+
     st.divider()
     # ---------------------------------------------
 
     with st.container(border=True):
         st.markdown("#### Benchmark Comparativo di Canale (Livello Sottogruppo)")
-        st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione logica. In fase di test mettere Sagra Ex.v. CLassico lt1")
+        st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione logica.")
         
         col_f1, col_f2 = st.columns(2)
         with col_f1:
