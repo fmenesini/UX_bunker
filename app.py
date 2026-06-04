@@ -232,6 +232,12 @@ init_db()
 if "main_menu_radio" not in st.session_state:
     st.session_state.main_menu_radio = "Simulatore Offerte"
 
+# --- TRUCCO PER CAMBIO MENU PROGRAMMATICO ---
+if "go_to_menu" in st.session_state:
+    st.session_state.main_menu_radio = st.session_state.go_to_menu
+    del st.session_state.go_to_menu
+# -------------------------------------------
+
 # Menu di navigazione laterale
 st.sidebar.markdown("## Menu Principale")
 menu = st.sidebar.radio("", [
