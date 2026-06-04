@@ -1076,19 +1076,24 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             
             st.markdown("#### 2. Dettaglio Referenze (SKU)")
             
-            # Calcoliamo anche il Delta Assoluto
+            # Calcoli per i Listini
+            df_active['Delta Listino €'] = df_active['[N+1] Listino €'] - df_active['[N] Listino €']
+            df_active['Delta Listino %'] = df_active.apply(lambda x: ((x['[N+1] Listino €'] - x['[N] Listino €']) / x['[N] Listino €'] * 100) if x['[N] Listino €'] > 0 else 0, axis=1)
+            
+            # Calcoli per i Net Net
             df_active['Delta Assoluto €'] = df_active['Net Net [N+1] €'] - df_active['Net Net [N] €']
             df_active['Delta %'] = df_active.apply(lambda x: ((x['Net Net [N+1] €'] - x['Net Net [N] €']) / x['Net Net [N] €'] * 100) if x['Net Net [N] €'] > 0 else 0, axis=1)
+            
+            # Calcoli Spazio Promo
             df_active['Spazio Promo %'] = df_active.apply(lambda x: ((1 - (x['Minimo Net Net €'] / x['Net Net [N+1] €'])) * 100) if x['Net Net [N+1] €'] > x['Minimo Net Net €'] else 0, axis=1)
             df_active['Spazio Promo €'] = df_active['Net Net [N+1] €'] - df_active['Minimo Net Net €']
             df_active['Allarme'] = df_active['Net Net [N+1] €'] < df_active['Minimo Net Net €']
             
-            # Aggiungiamo Listini e Delta Assoluto alle colonne da mostrare
+            # Aggiungiamo Listini e relativi Delta alle colonne da mostrare
             cols_sku_disp = [
                 'Sub-Categoria', 'Prodotto', 
-                '[N] Listino €', '[N+1] Listino €',
-                'Net Net [N] €', 'Net Net [N+1] €', 
-                'Delta Assoluto €', 'Delta %', 
+                '[N] Listino €', '[N+1] Listino €', 'Delta Listino €', 'Delta Listino %',
+                'Net Net [N] €', 'Net Net [N+1] €', 'Delta Assoluto €', 'Delta %', 
                 'Minimo Net Net €', 'Spazio Promo €', 'Spazio Promo %', 'Allarme'
             ]
             
@@ -1096,6 +1101,8 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 df_active[cols_sku_disp].style.apply(highlight_cat, axis=1).format({
                     '[N] Listino €': lambda x: fmt_it(x, 2, is_euro=True),
                     '[N+1] Listino €': lambda x: fmt_it(x, 2, is_euro=True),
+                    'Delta Listino €': lambda x: fmt_it(x, 2, is_euro=True, sign=True),
+                    'Delta Listino %': lambda x: fmt_it(x, 2, is_pct=True, sign=True),
                     'Net Net [N] €': lambda x: fmt_it(x, 3, is_euro=True), 
                     'Net Net [N+1] €': lambda x: fmt_it(x, 3, is_euro=True), 
                     'Delta Assoluto €': lambda x: fmt_it(x, 3, is_euro=True, sign=True),
@@ -1104,7 +1111,11 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                     'Spazio Promo €': lambda x: fmt_it(x, 3, is_euro=True, sign=True),
                     'Spazio Promo %': lambda x: fmt_it(x, 2, is_pct=True)
                 }),
-                column_config={"Allarme": "Sotto Floor!"},
+                column_config={
+                    "Allarme": "Sotto Floor!",
+                    "Delta Assoluto €": "Delta Net Net €",
+                    "Delta %": "Delta Net Net %"
+                },
                 hide_index=True, use_container_width=True
             )
             st.download_button("📥 Scarica Dettaglio Referenze (Excel)", to_excel_bytes(df_active[cols_sku_disp]), "Dettaglio_Referenze.xlsx")
