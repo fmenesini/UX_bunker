@@ -4,6 +4,8 @@ import pandas as pd
 import io
 import openpyxl
 import random
+import plotly.express as px
+import plotly.graph_objects as go
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date
@@ -226,6 +228,10 @@ def seed_baseline_data(conn):
 
 init_db()
 
+# Inizializzazione navigazione globale
+if "main_menu_radio" not in st.session_state:
+    st.session_state.main_menu_radio = "Simulatore Offerte"
+
 # Menu di navigazione laterale
 st.sidebar.markdown("## Menu Principale")
 menu = st.sidebar.radio("", [
@@ -236,7 +242,7 @@ menu = st.sidebar.radio("", [
     "Back-Office (Contratti)", 
     "Report Sintetico", 
     "Guida Operativa"
-])
+], key="main_menu_radio")
 
 # --- SPOSTAMENTO DANGER ZONE NELLA SIDEBAR ---
 st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
@@ -249,20 +255,17 @@ with st.sidebar.container(border=True):
         pin_conferma = st.text_input("Digita 'RESET':", key="reset_pin_sidebar")
         if st.button("HARD RESET DB", disabled=(pin_conferma != "RESET"), use_container_width=True):
             try:
-                # Apriamo una connessione rapida solo per il reset
                 conn_reset = sqlite3.connect(DB_FILE)
                 seed_baseline_data(conn_reset)
                 conn_reset.close()
-                
-                # PULIZIA MEMORIA: Svuotiamo la cache di sessione (incluso il Master Grid)
                 for key in list(st.session_state.keys()):
                     del st.session_state[key]
-                    
                 st.sidebar.success("DB ripristinato!")
                 st.rerun()
             except Exception as ex:
                 st.sidebar.error(f"Errore: {ex}")
 # ---------------------------------------------
+
 # ==========================================
 # SCHEDA 1: SIMULATORE OFFERTE (Singola SKU)
 # ==========================================
@@ -284,17 +287,31 @@ if menu == "Simulatore Offerte":
         col_ctx1, col_ctx2, col_ctx3, col_ctx4 = st.columns(4)
         
         with col_ctx1:
-            gruppo_sel = st.selectbox("1. Gruppo GDO", gruppi)
+            # Se stiamo clonando, forziamo il valore del widget
+            current_gruppo = st.session_state.get('widget_gruppo', gruppi[0])
+            if current_gruppo not in gruppi: current_gruppo = gruppi[0]
+            gruppo_sel = st.selectbox("1. Gruppo GDO", gruppi, key="widget_gruppo")
         
         cursor.execute("SELECT DISTINCT sottogruppo FROM clienti WHERE gruppo_macro=? AND attivo=1 ORDER BY sottogruppo", (gruppo_sel,))
         sottogruppi = [r[0] for r in cursor.fetchall()]
+        if not sottogruppi: sottogruppi = [""]
+        
+        # Pulizia stato residuo da clonazione errata
+        if 'widget_sottogruppo' in st.session_state and st.session_state['widget_sottogruppo'] not in sottogruppi:
+            st.session_state['widget_sottogruppo'] = sottogruppi[0]
+            
         with col_ctx2:
-            sottogruppo_sel = st.selectbox("2. Sottogruppo GDO", sottogruppi)
+            sottogruppo_sel = st.selectbox("2. Sottogruppo GDO", sottogruppi, key="widget_sottogruppo")
         
         cursor.execute("SELECT DISTINCT associato_insegna FROM clienti WHERE gruppo_macro=? AND sottogruppo=? AND attivo=1 ORDER BY associato_insegna", (gruppo_sel, sottogruppo_sel))
         associati = [r[0] for r in cursor.fetchall()]
+        if not associati: associati = [""]
+        
+        if 'widget_insegna' in st.session_state and st.session_state['widget_insegna'] not in associati:
+            st.session_state['widget_insegna'] = associati[0]
+            
         with col_ctx3:
-            associato_sel = st.selectbox("3. Insegna Locale", associati)
+            associato_sel = st.selectbox("3. Insegna Locale", associati, key="widget_insegna")
 
         cursor.execute("""
             SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0), a.codice_sap, a.formato_lt,
@@ -304,8 +321,17 @@ if menu == "Simulatore Offerte":
         """)
         prodotti = cursor.fetchall()
         prodotti_dict = {f"{p[1]} [EAN: {p[0]}]": (p[0], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9]) for p in prodotti}
+        
+        # Intercettazione EAN clonato
+        if 'clone_ean_pending' in st.session_state:
+            ean_to_find = st.session_state.pop('clone_ean_pending')
+            for p_key in prodotti_dict.keys():
+                if ean_to_find in p_key:
+                    st.session_state['widget_prodotto'] = p_key
+                    break
+                    
         with col_ctx4:
-            prodotto_scelto = st.selectbox("4. Referenza Salov", list(prodotti_dict.keys()))
+            prodotto_scelto = st.selectbox("4. Referenza Salov", list(prodotti_dict.keys()), key="widget_prodotto")
         
     ean, tipo_olio, min_net_net_g, codice_sap, formato_lt, pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet = prodotti_dict[prodotto_scelto]
     contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, ean, tipo_olio)
@@ -328,7 +354,8 @@ if menu == "Simulatore Offerte":
             "Seleziona l'approccio negoziale:",
             ["A. Partenza da Prezzo Target (Calcolo automatico Sconto Promo)", "B. Tentativi Spot Manuali (Immissione Sconto Promo libera)"],
             horizontal=False,
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            key="widget_metodo"
         )
 
     with col_met2:
@@ -357,13 +384,13 @@ if menu == "Simulatore Offerte":
             if "A. Partenza" in metodo_lavoro:
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
                 st.markdown("<h5 style='color: #1A3E2F; margin-bottom: 5px;'>Leva Promozionale Diretta</h5>", unsafe_allow_html=True)
-                sconto_aa = st.number_input("Sconto Unitario in fattura (Euro/Pz) [AA]", min_value=0.0, value=0.0, step=0.05)
+                sconto_aa = st.number_input("Sconto Unitario in fattura (Euro/Pz) [AA]", min_value=0.0, step=0.05, key="widget_aa")
             else:
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
                 st.markdown("**Leve Promozionali**")
-                sconto_z_input = st.number_input("Sconto Promozionale (%) [Z] (Manuale)", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+                sconto_z_input = st.number_input("Sconto Promozionale (%) [Z] (Manuale)", min_value=0.0, max_value=100.0, step=0.5, key="widget_z")
                 sconto_z = Decimal(f"{sconto_z_input:.5f}")
-                sconto_aa = st.number_input("Sconto Unitario in fattura (Euro/Pz) [AA]", min_value=0.0, value=0.0, step=0.05)
+                sconto_aa = st.number_input("Sconto Unitario in fattura (Euro/Pz) [AA]", min_value=0.0, step=0.05, key="widget_aa")
 
     if "A. Partenza" in metodo_lavoro:
         target_dec = Decimal(f"{target_net_net:.5f}")
@@ -457,11 +484,11 @@ if menu == "Simulatore Offerte":
     with st.container(border=True):
         col_v1, col_v2, col_v3 = st.columns(3)
         with col_v1:
-            volumi_stimati = st.number_input("Volumi Stimati (Pezzi)", min_value=0, value=0, step=100)
+            volumi_stimati = st.number_input("Volumi Stimati (Pezzi)", min_value=0, step=100, key="widget_volumi")
         with col_v2:
-            contributo_fisso = st.number_input("Contributo Fisso Totale (€)", min_value=0.0, value=0.0, step=50.0)
+            contributo_fisso = st.number_input("Contributo Fisso Totale (€)", min_value=0.0, step=50.0, key="widget_fisso")
         with col_v3:
-            contributo_pezzo = st.number_input("Contributo a Pezzo (€/Pz)", min_value=0.0, value=0.0, step=0.05)
+            contributo_pezzo = st.number_input("Contributo a Pezzo (€/Pz)", min_value=0.0, step=0.05, key="widget_pezzo")
 
         costo_totale_extra = contributo_fisso + (contributo_pezzo * volumi_stimati)
         impatto_unitario_extra = Decimal("0.00")
@@ -489,6 +516,54 @@ if menu == "Simulatore Offerte":
         waterfall_data.append({"Fase Pricing": "Impatto Extra (Sell-Out)", "Valore Unitario": fmt_it(float(net_net_post_promo), 3, is_euro=True), "Dettaglio Operazione": f"-{fmt_it(float(impatto_unitario_extra), 3, is_euro=True)}/Pz"})
         
     st.dataframe(pd.DataFrame(waterfall_data), use_container_width=True, hide_index=True)
+
+    # --- GRAFICO A CASCATA (WATERFALL) ---
+    st.markdown("#### 📊 Grafico a Cascata (Impatto Visivo)")
+    x_vals = []
+    y_vals = []
+    measures = []
+    text_vals = []
+    
+    prev_val = 0.0
+    for i, step in enumerate(result.steps):
+        x_vals.append(step.fase)
+        current_val = float(step.valore)
+        if i == 0:
+            measures.append("relative")
+            y_vals.append(current_val)
+            text_vals.append(fmt_it(current_val, 3))
+        elif i == len(result.steps) - 1:
+            measures.append("total")
+            y_vals.append(current_val)
+            text_vals.append(fmt_it(current_val, 3))
+        else:
+            measures.append("relative")
+            delta = current_val - prev_val
+            y_vals.append(delta)
+            text_vals.append(fmt_it(delta, 3))
+        prev_val = current_val
+        
+    if mostra_impatto:
+        measures[-1] = "relative"
+        y_vals[-1] = current_val - prev_val if len(result.steps) > 1 else current_val
+        
+        x_vals.append("Impatto Extra")
+        measures.append("relative")
+        y_vals.append(-float(impatto_unitario_extra))
+        text_vals.append("-" + fmt_it(float(impatto_unitario_extra), 3))
+        
+        x_vals.append("Net Net Post-Promo")
+        measures.append("total")
+        y_vals.append(float(net_net_post_promo))
+        text_vals.append(fmt_it(float(net_net_post_promo), 3))
+        
+    fig = go.Figure(go.Waterfall(
+        orientation="v", measure=measures, x=x_vals, y=y_vals, text=text_vals, textposition="outside",
+        decreasing={"marker":{"color":"#EF4444"}}, increasing={"marker":{"color":"#22C55E"}}, totals={"marker":{"color":"#1E3A8A"}}
+    ))
+    fig.update_layout(title="Evoluzione del Margine Unitario (€)", waterfallgap=0.2, margin=dict(t=40, b=40, l=40, r=40), showlegend=False)
+    st.plotly_chart(fig, use_container_width=True)
+    # ------------------------------------
 
     st.divider()
     
@@ -770,7 +845,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         '[N+1] Sc. Fattura %', '[N+1] Contratto %'
     ]
     
-    # Rimosse le colonne S6, S7, Y, Carico e Pagamento dal dettaglio referenze
     dettaglio_cols = [
         'S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %',
         'PFA I %', 'PFA II %', 'PFA III %', 'PFA IV %', 'PFA V %'
@@ -794,7 +868,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 for idx, row in df_temp.iterrows():
                     contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
                     if contract.listino_r is not None:
-                        # Imposta i valori globali di Carico e Pagamento basandosi sul primo contratto trovato
                         if first_contract:
                             st.session_state.global_carico = float(contract.sconto_carico)
                             st.session_state.global_pagamento = float(contract.sconto_pagamento)
@@ -874,7 +947,9 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
 
     with tab_simulazione:
         st.markdown("#### Griglia di Simulazione Contrattuale")
-        st.markdown("Modifica i dati e premi **Calcola Simulazione** per aggiornare i risultati. *(Nota: usa il PUNTO per i decimali in fase di inserimento)*")
+        
+        # --- FILTRO RAPIDO ---
+        filtro_vista = st.radio("Filtra Referenze in Tabella:", ["Tutte le Referenze", "Solo con Volumi > 0", "Sotto Soglia (Allarme Rosso)"], horizontal=True)
         
         # --- NUOVI INPUT GLOBALI PER CARICO E PAGAMENTO ---
         with st.container(border=True):
@@ -905,7 +980,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 st.session_state.rinnovi_df[['ean', 'Categoria', 'Sub-Categoria', 'Prodotto', 'Minimo Net Net €'] + operative_cols].to_excel(buf_sim, index=False)
                 st.download_button("Scarica Tabella Simulazione", buf_sim.getvalue(), "Template_Simulazione.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             
-            # Mostra il KPI sotto il box di esportazione
             st.metric("Variazione Totale Ponderata (%)", fmt_it(tot_delta_perc, 2, is_pct=True, sign=True))
 
         with col_up4:
@@ -925,7 +999,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
 
         df_display = st.session_state.rinnovi_df.copy()
         
-        # Applichiamo carico e pagamento globali al calcolo del Net Net
         moltiplicatore_globale = (1 - st.session_state.global_carico/100) * (1 - st.session_state.global_pagamento/100)
         
         df_display['Net Net [N] €'] = df_display['[N] Listino €'] * (1 - df_display['[N] Sc. Fattura %']/100) * moltiplicatore_globale * (1 - df_display['[N] Contratto %']/100)
@@ -940,6 +1013,12 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             return 0.0
             
         df_display['Sc. Promo MAX [N+1] %'] = df_display.apply(calc_max_promo, axis=1)
+        
+        # --- APPLICAZIONE DEL FILTRO ---
+        if filtro_vista == "Solo con Volumi > 0":
+            df_display = df_display[df_display['[N+1] Volumi'] > 0]
+        elif filtro_vista == "Sotto Soglia (Allarme Rosso)":
+            df_display = df_display[df_display['Net Net [N+1] €'] < df_display['Minimo Net Net €']]
 
         col_config = {
             "Prodotto": st.column_config.TextColumn("Prodotto", disabled=True),
@@ -960,11 +1039,8 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         with st.form("form_simulazione"):
             st.markdown("##### ⚡ Azioni Rapide e Aggiornamento Massivo")
             
-            # Creiamo 5 colonne per allineare tutto su una riga
             col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns([2, 2, 1.5, 2, 2])
-            
-            # Otteniamo le categorie uniche presenti nel dataframe
-            categorie_uniche = sorted(df_display['Categoria'].unique().tolist())
+            categorie_uniche = sorted(st.session_state.rinnovi_df['Categoria'].unique().tolist())
             
             with col_m1:
                 cat_mass = st.selectbox("1. Scegli Categoria", ["Tutte le Categorie"] + categorie_uniche)
@@ -973,7 +1049,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             with col_m3:
                 val_mass = st.number_input("3. Valore (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.2f")
             with col_m4:
-                # Spazio vuoto per allineare il pulsante ai menu a tendina
                 st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
                 btn_mass = st.form_submit_button("⚡ Applica Valore", type="secondary", use_container_width=True)
             with col_m5:
@@ -991,14 +1066,11 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 key="editor_simulazione_nativa"
             )
             
-        # Se l'utente preme "Calcola" OPPURE "Applica Valore"
         if submit_sim or btn_mass:
-            # 1. Salviamo PRIMA le eventuali modifiche manuali fatte nella griglia
             for i, idx in enumerate(df_display.index):
                 for col in ['[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']:
                     st.session_state.rinnovi_df.at[idx, col] = df_sim_edited.iloc[i][col]
             
-            # 2. Se è stato premuto il pulsante massivo, sovrascriviamo i valori per la categoria scelta
             if btn_mass:
                 for idx, row in st.session_state.rinnovi_df.iterrows():
                     if cat_mass == "Tutte le Categorie" or row['Categoria'] == cat_mass:
@@ -1076,20 +1148,16 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             
             st.markdown("#### 2. Dettaglio Referenze (SKU)")
             
-            # Calcoli per i Listini
             df_active['Delta Listino €'] = df_active['[N+1] Listino €'] - df_active['[N] Listino €']
             df_active['Delta Listino %'] = df_active.apply(lambda x: ((x['[N+1] Listino €'] - x['[N] Listino €']) / x['[N] Listino €'] * 100) if x['[N] Listino €'] > 0 else 0, axis=1)
             
-            # Calcoli per i Net Net
             df_active['Delta Assoluto €'] = df_active['Net Net [N+1] €'] - df_active['Net Net [N] €']
             df_active['Delta %'] = df_active.apply(lambda x: ((x['Net Net [N+1] €'] - x['Net Net [N] €']) / x['Net Net [N] €'] * 100) if x['Net Net [N] €'] > 0 else 0, axis=1)
             
-            # Calcoli Spazio Promo
             df_active['Spazio Promo %'] = df_active.apply(lambda x: ((1 - (x['Minimo Net Net €'] / x['Net Net [N+1] €'])) * 100) if x['Net Net [N+1] €'] > x['Minimo Net Net €'] else 0, axis=1)
             df_active['Spazio Promo €'] = df_active['Net Net [N+1] €'] - df_active['Minimo Net Net €']
             df_active['Allarme'] = df_active['Net Net [N+1] €'] < df_active['Minimo Net Net €']
             
-            # Aggiungiamo Listini e relativi Delta alle colonne da mostrare
             cols_sku_disp = [
                 'Sub-Categoria', 'Prodotto', 
                 '[N] Listino €', '[N+1] Listino €', 'Delta Listino €', 'Delta Listino %',
@@ -1129,7 +1197,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         if df_explode.empty:
             st.warning("Nessuna referenza attiva.")
         else:
-            # --- LOGICA DI VERIFICA ---
             def check_fattura(row):
                 p = 1.0
                 for s in ['S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %']:
@@ -1194,7 +1261,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                  if align_exp:
                      df_temp = st.session_state.rinnovi_df.copy()
                      for idx, row in df_temp[df_temp['[N+1] Volumi'] > 0].iterrows():
-                         # Allineamento Sconto in Fattura (Geometrico) -> in S5
                          target_fatt = row['[N+1] Sc. Fattura %']
                          p_parziale = 1.0
                          for s in ['S1 %', 'S2 %', 'S3 %', 'S4 %']:
@@ -1204,7 +1270,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                              s5_req = (1 - ((1 - target_fatt/100) / p_parziale)) * 100
                              df_temp.at[idx, 'S5 %'] = round(s5_req, 2)
                          
-                         # Allineamento PFA (Algebrico) -> in PFA V
                          target_pfa = row['[N+1] Contratto %']
                          pfa_parziale = row['PFA I %'] + row['PFA II %'] + row['PFA III %'] + row['PFA IV %']
                          df_temp.at[idx, 'PFA V %'] = round(target_pfa - pfa_parziale, 2)
@@ -1212,6 +1277,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                      st.session_state.rinnovi_df = df_temp
                      
                  st.rerun()
+
 # ==========================================
 # SCHEDA: STORICO PROMOZIONI
 # ==========================================
@@ -1239,10 +1305,10 @@ elif menu == "Storico Promozioni":
             filtro_insegna = st.selectbox("Filtra per Insegna", insegne_storico)
 
     query = """
-        SELECT id, data_salvataggio, stato_promo, gruppo_macro, associato_insegna, descrizione_commerciale, 
+        SELECT id, data_salvataggio, stato_promo, gruppo_macro, associato_insegna, ean, descrizione_commerciale, 
                sell_in_dal, sell_in_al, sell_out_dal, sell_out_al,
                listino_r, sconto_z, sconto_aa, min_net_net_g, net_net_am, net_net_post_promo, 
-               volumi_stimati, costo_totale_extra, note 
+               volumi_stimati, contributo_fisso, contributo_pezzo, costo_totale_extra, note 
         FROM storico_promo WHERE 1=1
     """
     params = []
@@ -1262,7 +1328,7 @@ elif menu == "Storico Promozioni":
     df_storico = pd.read_sql_query(query, conn, params=params)
     
     st.dataframe(
-        df_storico, 
+        df_storico.drop(columns=['ean', 'contributo_fisso', 'contributo_pezzo']), 
         use_container_width=True, 
         hide_index=True,
         column_config={
@@ -1288,36 +1354,60 @@ elif menu == "Storico Promozioni":
         }
     )
     
-    col_export, col_delete = st.columns(2)
+    col_export, col_clone, col_delete = st.columns(3)
     
     with col_export:
+        st.markdown("#### Esporta Dati")
         if not df_storico.empty:
             buffer_storico = io.BytesIO()
             with pd.ExcelWriter(buffer_storico, engine='openpyxl') as writer:
                 df_storico.to_excel(writer, index=False, sheet_name="Storico_Promo")
                 
             st.download_button(
-                label="SCARICA ESTRAZIONE STORICO (Excel)",
+                label="SCARICA ESTRAZIONE (Excel)",
                 data=buffer_storico.getvalue(),
                 file_name=f"Storico_Promozioni_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
             )
         else:
-            st.info("Nessuna promozione salvata corrisponde ai filtri selezionati.")
+            st.info("Nessuna promozione salvata.")
             
+    with col_clone:
+        with st.container(border=True):
+            st.markdown("#### Clona Promozione")
+            if not df_storico.empty:
+                id_to_clone = st.selectbox("Seleziona l'ID da ricaricare:", df_storico['id'].tolist(), key="clone_id")
+                if st.button("CLONA NEL SIMULATORE", use_container_width=True):
+                    promo_data = df_storico[df_storico['id'] == id_to_clone].iloc[0]
+                    st.session_state['widget_gruppo'] = promo_data['gruppo_macro']
+                    # Sottogruppo non è salvato esplicitamente nello storico, usiamo un fallback
+                    st.session_state['widget_insegna'] = promo_data['associato_insegna']
+                    st.session_state['clone_ean_pending'] = promo_data['ean']
+                    st.session_state['widget_metodo'] = "B. Tentativi Spot Manuali (Immissione Sconto Promo libera)"
+                    st.session_state['widget_z'] = float(promo_data['sconto_z'])
+                    st.session_state['widget_aa'] = float(promo_data['sconto_aa'])
+                    st.session_state['widget_volumi'] = int(promo_data['volumi_stimati'])
+                    st.session_state['widget_fisso'] = float(promo_data['contributo_fisso'])
+                    st.session_state['widget_pezzo'] = float(promo_data['contributo_pezzo'])
+                    st.session_state.main_menu_radio = "Simulatore Offerte"
+                    st.rerun()
+            else:
+                st.write("Nessun record disponibile.")
+
     with col_delete:
         with st.container(border=True):
             st.markdown("#### Elimina Record")
             if not df_storico.empty:
-                id_to_delete = st.selectbox("Seleziona l'ID della promozione da eliminare:", df_storico['id'].tolist())
-                if st.button("ELIMINA DEFINITIVAMENTE"):
+                id_to_delete = st.selectbox("Seleziona l'ID da eliminare:", df_storico['id'].tolist(), key="del_id")
+                if st.button("ELIMINA DEFINITIVAMENTE", use_container_width=True):
                     try:
                         cursor.execute("DELETE FROM storico_promo WHERE id=?", (id_to_delete,))
                         conn.commit()
-                        st.success(f"Promozione ID {id_to_delete} eliminata con successo.")
+                        st.success(f"ID {id_to_delete} eliminato.")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Errore durante l'eliminazione: {e}")
+                        st.error(f"Errore: {e}")
             else:
                 st.write("Nessun record disponibile.")
         
@@ -1413,7 +1503,6 @@ elif menu == "Dati Anagrafici (Logistica)":
                     try:
                         df_prod_import = pd.read_excel(uploaded_prod_file)
                         
-                        # 🛡️ CAMERA DI DECONTAMINAZIONE
                         df_prod_import = DataSanitizer.sanitize_excel_import(df_prod_import)
                         
                         col_map = {
@@ -1614,7 +1703,6 @@ elif menu == "Back-Office (Contratti)":
                             df_import = pd.read_excel(uploaded_file)
                             colonne_obbligatorie = ["GRUPPO_MACRO", "SOTTOGRUPPO", "ASSOCIATO_INSEGNA", "LIVELLO", "CHIAVE_LIVELLO"]
                             
-                            # 🛡️ CAMERA DI DECONTAMINAZIONE (fa anche il check delle colonne!)
                             df_import = DataSanitizer.sanitize_excel_import(df_import, expected_columns=colonne_obbligatorie)
                             
                             cursor = conn.cursor()
@@ -1723,12 +1811,9 @@ elif menu == "Back-Office (Contratti)":
                         try:
                             df_g_import = pd.read_excel(uploaded_guardrail)
                             
-                            # 🛡️ CAMERA DI DECONTAMINAZIONE
-                            # (Rinominiamo temporaneamente in maiuscolo per far scattare il check sull'EAN del validatore)
                             df_g_import.rename(columns=lambda x: str(x).upper().strip(), inplace=True)
                             df_g_import = DataSanitizer.sanitize_excel_import(df_g_import)
                             
-                            # Riportiamo in minuscolo come si aspetta il resto del tuo codice
                             df_g_import.columns = [str(c).lower().strip() for c in df_g_import.columns]
                             
                             if "ean" not in df_g_import.columns or "min_net_net_g" not in df_g_import.columns:
@@ -1757,7 +1842,7 @@ elif menu == "Back-Office (Contratti)":
     conn.close()
 
 # ==========================================
-# SCHEDA 4: REPORT SINTETICO
+# SCHEDA 4: REPORT SINTETICO E DASHBOARD
 # ==========================================
 elif menu == "Report Sintetico":
     st.title("Report Sintetico e Analisi Contratti")
@@ -1786,6 +1871,61 @@ elif menu == "Report Sintetico":
     
     st.markdown("<br>", unsafe_allow_html=True)
     
+    # --- DASHBOARD DIREZIONALE ---
+    st.markdown("#### 📊 Dashboard Direzionale (Control Tower)")
+    
+    col_dash1, col_dash2 = st.columns(2)
+    
+    query_pfa = """
+        SELECT gruppo_macro, 
+               AVG(voce_contratto_1 + COALESCE(voce_contratto_2,0) + COALESCE(voce_contratto_3,0) + COALESCE(voce_contratto_4,0) + COALESCE(voce_contratto_5,0)) as avg_pfa
+        FROM accordi_commerciali
+        GROUP BY gruppo_macro
+        ORDER BY avg_pfa DESC
+        LIMIT 5
+    """
+    df_pfa = pd.read_sql_query(query_pfa, conn)
+    if not df_pfa.empty:
+        fig_pfa = px.bar(df_pfa, x='gruppo_macro', y='avg_pfa', title="Top 5 Clienti per PFA Medio (%)", 
+                         labels={'gruppo_macro': 'Cliente', 'avg_pfa': 'PFA Medio (%)'}, color='avg_pfa', color_continuous_scale='Reds')
+        col_dash1.plotly_chart(fig_pfa, use_container_width=True)
+    
+    query_health = """
+        SELECT a.gruppo_macro, a.listino_r, a.sconto_1, a.sconto_2, a.sconto_3, a.sconto_4, a.sconto_5, a.sconto_6, a.sconto_7, a.sconto_y, a.sconto_carico, a.sconto_pagamento,
+               (COALESCE(a.voce_contratto_1,0) + COALESCE(a.voce_contratto_2,0) + COALESCE(a.voce_contratto_3,0) + COALESCE(a.voce_contratto_4,0) + COALESCE(a.voce_contratto_5,0)) as pfa_tot,
+               g.min_net_net_g, m.tipo_olio
+        FROM accordi_commerciali a
+        JOIN anagrafica_master m ON a.chiave_livello = m.ean
+        LEFT JOIN guardrail_aziendali g ON a.chiave_livello = g.ean
+        WHERE a.livello = 'REFERENZA' AND a.listino_r IS NOT NULL
+    """
+    df_health = pd.read_sql_query(query_health, conn)
+    
+    def calc_nn_dash(row):
+        p = row['listino_r']
+        for s in ['sconto_1', 'sconto_2', 'sconto_3', 'sconto_4', 'sconto_5', 'sconto_6', 'sconto_7', 'sconto_y', 'sconto_carico', 'sconto_pagamento']:
+            if pd.notna(row[s]):
+                p *= (1 - (row[s]/100))
+        p *= (1 - (row['pfa_tot']/100)) if pd.notna(row['pfa_tot']) else 1
+        return p
+        
+    if not df_health.empty:
+        df_health['net_net'] = df_health.apply(calc_nn_dash, axis=1)
+        df_health['Stato'] = df_health.apply(lambda x: 'Verde (Sopra Soglia)' if x['net_net'] >= x['min_net_net_g'] else 'Rosso (Sotto Soglia)', axis=1)
+        
+        fig_pie = px.pie(df_health, names='Stato', title="Salute Contratti Attivi (Referenze)", 
+                         color='Stato', color_discrete_map={'Verde (Sopra Soglia)':'#22C55E', 'Rosso (Sotto Soglia)':'#EF4444'})
+        col_dash2.plotly_chart(fig_pie, use_container_width=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        df_cat_health = df_health.groupby('tipo_olio')['pfa_tot'].mean().reset_index()
+        fig_cat = px.bar(df_cat_health, x='tipo_olio', y='pfa_tot', title="Pressione Promozionale (PFA off-invoice) per Categoria",
+                         labels={'tipo_olio': 'Categoria', 'pfa_tot': 'PFA Medio (%)'}, color='pfa_tot', color_continuous_scale='Blues')
+        st.plotly_chart(fig_cat, use_container_width=True)
+        
+    st.divider()
+    # ---------------------------------------------
+
     with st.container(border=True):
         st.markdown("#### Benchmark Comparativo di Canale (Livello Sottogruppo)")
         st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione logica. In fase di test mettere Sagra Ex.v. CLassico lt1")
@@ -2095,10 +2235,11 @@ else:
     with st.expander("🗄️ 6. STORICO (CRM), REPORTISTICA E BACK-OFFICE", expanded=False):
         st.markdown("""
         *   **Storico Promozioni (CRM):** Ogni simulazione può essere salvata nel database (come "Proposta" o "Confermata"). In questa scheda puoi filtrare, consultare ed esportare in Excel tutte le trattative passate. Se hai commesso un errore, puoi eliminare il singolo record tramite il suo ID.
+        *   **Clona Promozione:** Nello Storico puoi selezionare una vecchia promo e cliccare "Clona". Il sistema ti riporterà al Simulatore precompilando tutti i campi, permettendoti di creare una nuova trattativa in pochi secondi.
         *   **Report Sintetico:** Genera un file Excel consolidato per un intero cliente. Mostra l'allineamento di tutti i prezzi e sconti, evidenziando immediatamente le referenze approvate (Verdi) e quelle sotto soglia (Rosse). È il documento ideale da condividere con la Direzione Commerciale.
         *   **Back-Office (Import/Export Excel):** Per aggiornare massivamente le anagrafiche, i guardrail (Floor) o i contratti quadro, non occorre farlo riga per riga a schermo.
             1. Scarica il Template Excel.
             2. Modifica i dati sul tuo computer. **ATTENZIONE:** Assicurati che in Excel la colonna degli EAN sia formattata come "Testo", altrimenti Excel trasformerà i codici a barre in numeri scientifici (es. 8,0022E+12) corrompendo il database.
             3. Ricarica il file tramite l'apposito pulsante.
-        *   **Danger Zone (Reset):** Il pulsante di Reset (protetto da password) cancella tutto il database e ricarica i dati finti di test. Da usare solo in fase di training o manutenzione.
+        *   **Danger Zone (Reset):** Il pulsante di Reset nella barra laterale (protetto da password) cancella tutto il database e ricarica i dati finti di test. Da usare solo in fase di training o manutenzione.
         """)
