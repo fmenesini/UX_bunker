@@ -1902,11 +1902,13 @@ elif menu == "Report Sintetico":
                 p_net *= (1 - (pfa/100))
                 
                 dash_data.append({
+                    'Gruppo': c[0],
                     'Cliente': c[2] if c[2] else c[0],
                     'Categoria': p[1],
                     'Prodotto': p[2],
                     'NetNet': p_net,
                     'Floor': float(p[3]),
+                    'Delta_Euro': p_net - float(p[3]), # Calcolo distanza dal Floor
                     'PFA_Tot': pfa,
                     'Stato': 'Verde (Sopra Soglia)' if p_net >= float(p[3]) else 'Rosso (Sotto Soglia)'
                 })
@@ -1914,9 +1916,9 @@ elif menu == "Report Sintetico":
     df_dash = pd.DataFrame(dash_data)
     
     if not df_dash.empty:
-        # --- GRAFICO 1: SALUTE CONTRATTI (Con Filtri e Tooltip) ---
+        # --- SEZIONE 1: SALUTE CONTRATTI & DELTA MARGINE (Affiancati) ---
         with st.container(border=True):
-            st.subheader("Salute Contratti Attivi (Redditività)", help="Questo grafico misura la redditività reale. Mostra quanti accordi attuali generano un prezzo Net-Net superiore al limite minimo aziendale (Verde) e quanti invece stanno distruggendo valore vendendo in perdita (Rosso). Usa i filtri per scendere nel dettaglio.")
+            st.subheader("Salute Contratti & Profondità Margine", help="A sinistra: Quanti accordi sono sani (Verde) e quanti in perdita (Rosso). Passa il mouse sulle fette per vedere QUALI clienti generano il risultato. A destra: La distanza media in Euro dal limite minimo aziendale (Floor) per ogni categoria.")
             
             col_filt1, col_filt2 = st.columns(2)
             with col_filt1:
@@ -1930,8 +1932,46 @@ elif menu == "Report Sintetico":
             if dash_prod != "Tutte le Referenze": df_pie = df_pie[df_pie['Prodotto'] == dash_prod]
             
             if not df_pie.empty:
-                fig_pie = px.pie(df_pie, names='Stato', color='Stato', color_discrete_map={'Verde (Sopra Soglia)':'#22C55E', 'Rosso (Sotto Soglia)':'#EF4444'})
-                st.plotly_chart(fig_pie, use_container_width=True)
+                # Creiamo due colonne per affiancare i grafici
+                col_chart1, col_chart2 = st.columns(2)
+                
+                with col_chart1:
+                    # Funzione per formattare la lista clienti nel Tooltip in modo pulito
+                    def format_clients(clients):
+                        unique_clients = sorted(list(set(clients)))
+                        if len(unique_clients) > 8:
+                            return "<br>".join(unique_clients[:8]) + "<br><i>...e altri</i>"
+                        return "<br>".join(unique_clients)
+
+                    # Aggreghiamo i dati per la torta inserendo la lista dei clienti
+                    df_pie_agg = df_pie.groupby('Stato').agg(
+                        Conteggio=('Prodotto', 'count'),
+                        Clienti_Lista=('Cliente', format_clients)
+                    ).reset_index()
+
+                    fig_pie = px.pie(df_pie_agg, values='Conteggio', names='Stato',
+                                     custom_data=['Clienti_Lista'],
+                                     title="Distribuzione Referenze (Sopra/Sotto Soglia)",
+                                     color='Stato', color_discrete_map={'Verde (Sopra Soglia)':'#22C55E', 'Rosso (Sotto Soglia)':'#EF4444'})
+                    
+                    # Personalizziamo il popup (Tooltip) per mostrare i clienti
+                    fig_pie.update_traces(hovertemplate="<b>%{label}</b><br>Num. Accordi: %{value}<br><br><b>Clienti coinvolti:</b><br>%{customdata[0]}<extra></extra>")
+                    st.plotly_chart(fig_pie, use_container_width=True)
+                
+                with col_chart2:
+                    # Grafico a barre con il Delta Medio in Euro
+                    df_delta = df_pie.groupby('Categoria')['Delta_Euro'].mean().reset_index()
+                    df_delta['Colore'] = df_delta['Delta_Euro'].apply(lambda x: 'Positivo' if x >= 0 else 'Negativo')
+                    
+                    fig_delta = px.bar(df_delta, x='Categoria', y='Delta_Euro', 
+                                       title="Distanza Media dal Floor (€)",
+                                       color='Colore', color_discrete_map={'Positivo':'#22C55E', 'Negativo':'#EF4444'},
+                                       labels={'Delta_Euro': 'Delta Medio (€)', 'Categoria': ''})
+                    
+                    fig_delta.update_layout(showlegend=False)
+                    fig_delta.update_traces(hovertemplate="<b>%{x}</b><br>Delta Medio: %{y:.3f} €<extra></extra>")
+                    st.plotly_chart(fig_delta, use_container_width=True)
+                    
             else:
                 st.info("Nessun dato disponibile per i filtri selezionati.")
 
