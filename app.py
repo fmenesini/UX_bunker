@@ -1076,17 +1076,29 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             
             st.markdown("#### 2. Dettaglio Referenze (SKU)")
             
+            # Calcoliamo anche il Delta Assoluto
+            df_active['Delta Assoluto €'] = df_active['Net Net [N+1] €'] - df_active['Net Net [N] €']
             df_active['Delta %'] = df_active.apply(lambda x: ((x['Net Net [N+1] €'] - x['Net Net [N] €']) / x['Net Net [N] €'] * 100) if x['Net Net [N] €'] > 0 else 0, axis=1)
             df_active['Spazio Promo %'] = df_active.apply(lambda x: ((1 - (x['Minimo Net Net €'] / x['Net Net [N+1] €'])) * 100) if x['Net Net [N+1] €'] > x['Minimo Net Net €'] else 0, axis=1)
             df_active['Spazio Promo €'] = df_active['Net Net [N+1] €'] - df_active['Minimo Net Net €']
             df_active['Allarme'] = df_active['Net Net [N+1] €'] < df_active['Minimo Net Net €']
             
-            cols_sku_disp = ['Sub-Categoria', 'Prodotto', 'Net Net [N] €', 'Net Net [N+1] €', 'Delta %', 'Minimo Net Net €', 'Spazio Promo €', 'Spazio Promo %', 'Allarme']
+            # Aggiungiamo Listini e Delta Assoluto alle colonne da mostrare
+            cols_sku_disp = [
+                'Sub-Categoria', 'Prodotto', 
+                '[N] Listino €', '[N+1] Listino €',
+                'Net Net [N] €', 'Net Net [N+1] €', 
+                'Delta Assoluto €', 'Delta %', 
+                'Minimo Net Net €', 'Spazio Promo €', 'Spazio Promo %', 'Allarme'
+            ]
             
             st.dataframe(
                 df_active[cols_sku_disp].style.apply(highlight_cat, axis=1).format({
+                    '[N] Listino €': lambda x: fmt_it(x, 2, is_euro=True),
+                    '[N+1] Listino €': lambda x: fmt_it(x, 2, is_euro=True),
                     'Net Net [N] €': lambda x: fmt_it(x, 3, is_euro=True), 
                     'Net Net [N+1] €': lambda x: fmt_it(x, 3, is_euro=True), 
+                    'Delta Assoluto €': lambda x: fmt_it(x, 3, is_euro=True, sign=True),
                     'Delta %': lambda x: fmt_it(x, 2, is_pct=True, sign=True), 
                     'Minimo Net Net €': lambda x: fmt_it(x, 3, is_euro=True),
                     'Spazio Promo €': lambda x: fmt_it(x, 3, is_euro=True, sign=True),
