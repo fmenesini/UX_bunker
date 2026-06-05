@@ -1046,14 +1046,21 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             st.markdown("##### ⚡ Azioni Rapide e Aggiornamento Massivo")
             
             col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns([2, 2, 1.5, 2, 2])
-            categorie_uniche = sorted(st.session_state.rinnovi_df['Categoria'].unique().tolist())
+            
+            # Usiamo 'Sub-Categoria' per avere il dettaglio (Semi di Girasole, Exv Italiano, ecc.)
+            subcat_uniche = sorted(st.session_state.rinnovi_df['Sub-Categoria'].unique().tolist())
             
             with col_m1:
-                cat_mass = st.selectbox("1. Scegli Categoria", ["Tutte le Categorie"] + categorie_uniche)
+                cat_mass = st.selectbox("1. Scegli Categoria", ["Tutto l'Assortimento"] + subcat_uniche)
             with col_m2:
-                col_mass = st.selectbox("2. Scegli Parametro", ["[N+1] Sc. Fattura %", "[N+1] Contratto %"])
+                col_mass = st.selectbox("2. Scegli Parametro", [
+                    "Aumento Listino Base (%)",
+                    "[N+1] Sc. Fattura %", 
+                    "[N+1] Contratto %"
+                ])
             with col_m3:
-                val_mass = st.number_input("3. Valore (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.2f")
+                # min_value in negativo per permettere anche eventuali riduzioni di listino
+                val_mass = st.number_input("3. Valore (%)", min_value=-100.0, max_value=100.0, step=0.5, format="%.2f")
             with col_m4:
                 st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
                 btn_mass = st.form_submit_button("⚡ Applica Valore", type="secondary", use_container_width=True)
@@ -1073,14 +1080,27 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             )
             
         if submit_sim or btn_mass:
+            # 1. Salviamo PRIMA le eventuali modifiche manuali fatte nella griglia
             for i, idx in enumerate(df_display.index):
                 for col in ['[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']:
                     st.session_state.rinnovi_df.at[idx, col] = df_sim_edited.iloc[i][col]
             
+            # 2. Applichiamo l'azione massiva se richiesta
             if btn_mass:
                 for idx, row in st.session_state.rinnovi_df.iterrows():
-                    if cat_mass == "Tutte le Categorie" or row['Categoria'] == cat_mass:
-                        st.session_state.rinnovi_df.at[idx, col_mass] = val_mass
+                    if cat_mass == "Tutto l'Assortimento" or row['Sub-Categoria'] == cat_mass:
+                        
+                        if col_mass == "Aumento Listino Base (%)":
+                            listino_n = row['[N] Listino €']
+                            if listino_n > 0:
+                                # Calcolo matematico dell'aumento percentuale
+                                nuovo_listino = listino_n * (1 + (val_mass / 100))
+                                # Arrotondamento rigoroso alla prima cifra decimale (es. 4.54 -> 4.5, 4.55 -> 4.6)
+                                nuovo_listino_arr = float(Decimal(str(nuovo_listino)).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
+                                st.session_state.rinnovi_df.at[idx, '[N+1] Listino €'] = nuovo_listino_arr
+                        else:
+                            # Comportamento normale per Sconti e Contratti (sovrascrittura diretta)
+                            st.session_state.rinnovi_df.at[idx, col_mass] = val_mass
                         
             st.rerun()
 
