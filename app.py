@@ -11,10 +11,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date
 import logging
 from dataclasses import replace
+from types import SimpleNamespace
 
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
-from core.hierarchy_resolver import HierarchyResolver
 from core.validators import DataSanitizer
 
 logging.basicConfig(level=logging.WARNING)
@@ -75,7 +75,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# INIZIALIZZAZIONE DATABASE E MERGE CONTRATTI
+# INIZIALIZZAZIONE DATABASE
 # ==========================================
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -111,28 +111,104 @@ def init_db():
 
     conn.close()
 
-def get_merged_contract(conn, gruppo, sottogruppo, insegna, ean, categoria):
+# ==========================================
+# NUOVO MOTORE DI RISOLUZIONE CONTRATTI
+# ==========================================
+def resolve_contract(conn, gruppo, sottogruppo, insegna, ean, categoria):
     """
-    Risolve il contratto fondendo gli accordi Nazionali (Strutturali) con quelli Locali (Promo).
-    Garantisce che Listino, S1-S5 e PFA provengano dalla sede centrale, mentre S6, S7 e Y dall'insegna.
+    Motore universale per la risoluzione dei contratti.
+    Garantisce che le regole specifiche (Referenza) battano quelle generiche (Categoria/Gruppo).
+    Fonde automaticamente gli accordi Nazionali con quelli Locali.
     """
-    base = HierarchyResolver.resolve(conn, gruppo, sottogruppo, "", ean, categoria)
-    
-    if insegna and str(insegna).strip() != "":
-        loc = HierarchyResolver.resolve(conn, gruppo, sottogruppo, insegna, ean, categoria)
+    # 1. Recupero Accordi Nazionali (Strutturali)
+    query_nat = """
+        SELECT livello, chiave_livello, sottogruppo,
+               listino_r, sconto_1, sconto_2, sconto_3, sconto_4, sconto_5,
+               sconto_carico, sconto_pagamento,
+               voce_contratto_1, voce_contratto_2, voce_contratto_3, voce_contratto_4, voce_contratto_5
+        FROM accordi_commerciali
+        WHERE gruppo_macro = ?
+          AND (sottogruppo = ? OR sottogruppo = '' OR sottogruppo IS NULL)
+          AND (associato_insegna = '' OR associato_insegna IS NULL)
+    """
+    df_nat = pd.read_sql_query(query_nat, conn, params=(gruppo, sottogruppo))
+
+    # 2. Recupero Accordi Locali (Promo)
+    query_loc = """
+        SELECT livello, chiave_livello, sottogruppo,
+               sconto_6, sconto_7, sconto_y
+        FROM accordi_commerciali
+        WHERE gruppo_macro = ?
+          AND (sottogruppo = ? OR sottogruppo = '' OR sottogruppo IS NULL)
+          AND associato_insegna = ?
+    """
+    df_loc = pd.read_sql_query(query_loc, conn, params=(gruppo, sottogruppo, insegna))
+
+    # Funzione di Scoring per dare priorità alle regole specifiche
+    def get_score(row):
+        score = 0
+        if row.get('sottogruppo') == sottogruppo and sottogruppo != "": score += 5
         
-        strutturali_attrs = [
-            'listino_r', 'sconto_1', 'sconto_2', 'sconto_3', 'sconto_4', 'sconto_5', 
-            'sconto_carico', 'sconto_pagamento', 
-            'voce_i', 'voce_ii', 'voce_iii', 'voce_iv', 'voce_v'
-        ]
-        for attr in strutturali_attrs:
-            if getattr(loc, attr, None) is None:
-                setattr(loc, attr, getattr(base, attr, None))
-                
-        return loc
-    return base
+        lvl = str(row['livello']).upper()
+        chiave = str(row['chiave_livello'])
+        
+        if lvl == 'REFERENZA' and chiave == ean: score += 40
+        elif lvl == 'CATEGORIA' and chiave == categoria: score += 30
+        elif lvl == 'SOTTOGRUPPO': score += 20
+        elif lvl == 'GRUPPO': score += 10
+        else: return -1 # Regola non pertinente
+        return score
+
+    df_nat['score'] = df_nat.apply(get_score, axis=1)
+    df_nat = df_nat[df_nat['score'] >= 0].sort_values('score', ascending=False)
+
+    df_loc['score'] = df_loc.apply(get_score, axis=1)
+    df_loc = df_loc[df_loc['score'] >= 0].sort_values('score', ascending=False)
+
+    # Inizializzazione Contratto Vuoto
+    contract = {
+        'listino_r': None, 'sconto_1': 0.0, 'sconto_2': 0.0, 'sconto_3': 0.0,
+        'sconto_4': 0.0, 'sconto_5': 0.0, 'sconto_6': 0.0, 'sconto_7': 0.0,
+        'sconto_y': 0.0, 'sconto_carico': 0.0, 'sconto_pagamento': 0.0,
+        'voce_i': 0.0, 'voce_ii': 0.0, 'voce_iii': 0.0, 'voce_iv': 0.0, 'voce_v': 0.0,
+        'has_local': not df_loc.empty and insegna != "",
+        'livello_risolto': 'Nessuno'
+    }
+
+    # Popolamento Dati Nazionali (dalla regola con score più alto a scendere)
+    nat_mapping = {
+        'listino_r': 'listino_r', 'sconto_1': 'sconto_1', 'sconto_2': 'sconto_2',
+        'sconto_3': 'sconto_3', 'sconto_4': 'sconto_4', 'sconto_5': 'sconto_5',
+        'sconto_carico': 'sconto_carico', 'sconto_pagamento': 'sconto_pagamento',
+        'voce_contratto_1': 'voce_i', 'voce_contratto_2': 'voce_ii',
+        'voce_contratto_3': 'voce_iii', 'voce_contratto_4': 'voce_iv',
+        'voce_contratto_5': 'voce_v'
+    }
     
+    for _, row in df_nat.iterrows():
+        if contract['livello_risolto'] == 'Nessuno':
+            contract['livello_risolto'] = f"{row['livello']}"
+        for db_col, dict_key in nat_mapping.items():
+            val = row[db_col]
+            if pd.notna(val) and val != "":
+                if contract[dict_key] is None or contract[dict_key] == 0.0:
+                    contract[dict_key] = float(val)
+
+    # Popolamento Dati Locali
+    if insegna != "":
+        loc_mapping = {'sconto_6': 'sconto_6', 'sconto_7': 'sconto_7', 'sconto_y': 'sconto_y'}
+        for _, row in df_loc.iterrows():
+            for db_col, dict_key in loc_mapping.items():
+                val = row[db_col]
+                if pd.notna(val) and val != "":
+                    if contract[dict_key] == 0.0:
+                        contract[dict_key] = float(val)
+
+    return SimpleNamespace(**contract)
+
+# ==========================================
+# SEED DATI DI BASE
+# ==========================================
 def seed_baseline_data(conn):
     cursor = conn.cursor()
     cursor.execute("DELETE FROM accordi_commerciali")
@@ -943,10 +1019,8 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 def safe_float(v): return float(v) if v is not None else 0.0
                 
                 for idx, row in df_temp.iterrows():
-                    contract = get_merged_contract(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
-                    
-                    if contract.listino_r is None:
-                        contract.listino_r = get_listino_strutturale(conn, gruppo_sel, sottogruppo_sel, row['ean'])
+                    # Usiamo il nuovo resolver universale (forzando l'insegna vuota per avere solo i dati nazionali)
+                    contract = get_merged_contract(conn, gruppo_sel, sottogruppo_sel, "", row['ean'], row['tipo_olio'])
                     
                     if contract.listino_r is not None:
                         if first_contract:
@@ -960,8 +1034,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                         
                         p = Decimal(str(listino_n))
                         
-                        # FILTRO STRUTTURALE: Consideriamo SOLO gli sconti da S1 a S5.
-                        # S6, S7 e Y vengono ignorati deliberatamente per mantenere la simulazione "Nazionale".
                         sconti_strutturali = [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5]
                         
                         for s in sconti_strutturali:
@@ -1128,7 +1200,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             
             col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns([2, 2, 1.5, 2, 2])
             
-            # Usiamo 'Sub-Categoria' per avere il dettaglio (Semi di Girasole, Exv Italiano, ecc.)
             subcat_uniche = sorted(st.session_state.rinnovi_df['Sub-Categoria'].unique().tolist())
             
             with col_m1:
@@ -1140,7 +1211,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                     "[N+1] Contratto %"
                 ])
             with col_m3:
-                # min_value in negativo per permettere anche eventuali riduzioni di listino
                 val_mass = st.number_input("3. Valore (%)", min_value=-100.0, max_value=100.0, step=0.5, format="%.2f")
             with col_m4:
                 st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
@@ -1161,12 +1231,10 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             )
             
         if submit_sim or btn_mass:
-            # 1. Salviamo PRIMA le eventuali modifiche manuali fatte nella griglia
             for i, idx in enumerate(df_display.index):
                 for col in ['[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']:
                     st.session_state.rinnovi_df.at[idx, col] = df_sim_edited.iloc[i][col]
             
-            # 2. Applichiamo l'azione massiva se richiesta
             if btn_mass:
                 for idx, row in st.session_state.rinnovi_df.iterrows():
                     if cat_mass == "Tutto l'Assortimento" or row['Sub-Categoria'] == cat_mass:
