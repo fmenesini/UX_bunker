@@ -1778,7 +1778,7 @@ elif menu == "Back-Office (Contratti)":
                             st.error(f"Errore durante l'importazione: {e}")
 
     with tab_guardrail:
-        st.markdown("Questa tabella è isolata dall'anagrafica logistica. Modifica qui i limiti minimi di margine per ogni referenza.")
+        st.markdown("INSERISCI I MINIMI NET NET PER REFERENZA")
         with st.container(border=True):
             st.markdown("#### Modifica Diretta Guardrail")
             
