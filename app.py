@@ -111,6 +111,28 @@ def init_db():
 
     conn.close()
 
+def get_listino_strutturale(conn, gruppo, sottogruppo, ean):
+    """
+    Esegue una ricerca gerarchica del listino_r per una data referenza 
+    a livello nazionale se non è stato definito a livello locale.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT listino_r FROM accordi_commerciali
+        WHERE UPPER(TRIM(gruppo_macro)) = UPPER(TRIM(?))
+          AND (UPPER(TRIM(sottogruppo)) = UPPER(TRIM(?)) OR sottogruppo = '' OR sottogruppo IS NULL)
+          AND livello = 'REFERENZA'
+          AND chiave_livello = ?
+          AND listino_r IS NOT NULL
+        ORDER BY 
+            CASE WHEN SOTTOGRUPPO IS NOT NULL AND SOTTOGRUPPO != '' THEN 1 ELSE 2 END ASC
+        LIMIT 1
+    """, (gruppo, sottogruppo, ean))
+    row = cursor.fetchone()
+    if row:
+        return Decimal(str(row[0]))
+    return None
+
 def get_merged_contract(conn, gruppo, sottogruppo, insegna, ean, categoria):
     """
     Risolve il contratto fondendo gli accordi Nazionali (Strutturali) con quelli Locali (Promo).
@@ -126,6 +148,7 @@ def get_merged_contract(conn, gruppo, sottogruppo, insegna, ean, categoria):
             'sconto_carico', 'sconto_pagamento', 
             'voce_i', 'voce_ii', 'voce_iii', 'voce_iv', 'voce_v'
         ]
+        # Esegue il recupero dal contratto nazionale solo se il campo nel contratto locale è None (non valorizzato)
         for attr in strutturali_attrs:
             if getattr(loc, attr, None) is None:
                 setattr(loc, attr, getattr(base, attr, None))
