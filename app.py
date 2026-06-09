@@ -2186,8 +2186,9 @@ elif menu == "Accordi Locali (Promo)":
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
+    # Gruppo e Sottogruppo sono esclusi dalla SELECT per l'interfaccia utente
     df_locali = pd.read_sql_query("""
-        SELECT a.id, a.gruppo_macro, a.sottogruppo, a.associato_insegna, a.livello, 
+        SELECT a.id, a.associato_insegna, a.livello, 
                COALESCE(m.descrizione_commerciale || ' [' || a.chiave_livello || ']', a.chiave_livello) as prodotto_ean,
                a.sconto_6, a.sconto_7, a.sconto_y, a.note_locali
         FROM accordi_commerciali a
@@ -2195,14 +2196,8 @@ elif menu == "Accordi Locali (Promo)":
         WHERE a.associato_insegna != '' AND a.associato_insegna IS NOT NULL
     """, conn)
     
-    cursor.execute("SELECT DISTINCT gruppo_macro FROM struttura_gdo WHERE attivo=1 ORDER BY gruppo_macro")
-    gruppi_attivi = [r[0] for r in cursor.fetchall()]
-    
     cursor.execute("SELECT DISTINCT associato_insegna FROM struttura_gdo WHERE attivo=1 ORDER BY associato_insegna")
     insegne_attive = [r[0] for r in cursor.fetchall()]
-    
-    cursor.execute("SELECT DISTINCT sottogruppo FROM accordi_commerciali WHERE sottogruppo != '' ORDER BY sottogruppo")
-    sottogruppi_noti = [r[0] for r in cursor.fetchall()]
     
     cursor.execute("SELECT ean, descrizione_commerciale FROM anagrafica_master")
     prod_list = [f"{r[1]} [{r[0]}]" for r in cursor.fetchall()]
@@ -2216,8 +2211,6 @@ elif menu == "Accordi Locali (Promo)":
             use_container_width=True,
             column_config={
                 "id": None,
-                "gruppo_macro": st.column_config.SelectboxColumn("Gruppo", options=gruppi_attivi, required=True),
-                "sottogruppo": st.column_config.SelectboxColumn("Sottogruppo", options=sottogruppi_noti),
                 "associato_insegna": st.column_config.SelectboxColumn("Insegna Locale", options=insegne_attive, required=True),
                 "livello": st.column_config.SelectboxColumn("Livello", options=["CATEGORIA", "REFERENZA"], required=True),
                 "prodotto_ean": st.column_config.SelectboxColumn("Referenza / Categoria", options=prod_list, required=True),
@@ -2241,6 +2234,14 @@ elif menu == "Accordi Locali (Promo)":
                             chiave_pulita = raw_chiave.split("[")[-1].replace("]", "").strip()
                         else:
                             chiave_pulita = raw_chiave.strip()
+                        
+                        # Recupero automatico di Gruppo e Sottogruppo in background
+                        ins_locale = str(r.get("associato_insegna")).upper().strip() if pd.notna(r.get("associato_insegna")) else ""
+                        cursor.execute("SELECT gruppo_macro, sottogruppo FROM struttura_gdo WHERE UPPER(TRIM(associato_insegna)) = ? LIMIT 1", (ins_locale,))
+                        res_gdo = cursor.fetchone()
+                        
+                        g_macro = res_gdo[0] if res_gdo else ""
+                        s_grup = res_gdo[1] if (res_gdo and res_gdo[1]) else ""
                             
                         cursor.execute("""
                         INSERT OR REPLACE INTO accordi_commerciali (
@@ -2248,8 +2249,8 @@ elif menu == "Accordi Locali (Promo)":
                             sconto_6, sconto_7, sconto_y, note_locali
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (
-                            str(r.get("gruppo_macro")).upper().strip() if pd.notna(r.get("gruppo_macro")) else "",
-                            str(r.get("sottogruppo")).upper().strip() if pd.notna(r.get("sottogruppo")) else "",
+                            g_macro,
+                            s_grup,
                             str(r.get("associato_insegna")).upper().strip() if pd.notna(r.get("associato_insegna")) else "",
                             str(r.get("livello")).upper().strip() if pd.notna(r.get("livello")) else "REFERENZA",
                             chiave_pulita,
@@ -2278,7 +2279,7 @@ elif menu == "Accordi Locali (Promo)":
                 if st.button("Conferma Importazione Locali"):
                     try:
                         df_imp_locali = pd.read_excel(up_locali)
-                        df_imp_locali = DataSanitizer.sanitize_excel_import(df_imp_locali, expected_columns=["gruppo_macro", "associato_insegna", "livello", "prodotto_ean"])
+                        df_imp_locali = DataSanitizer.sanitize_excel_import(df_imp_locali, expected_columns=["associato_insegna", "livello", "prodotto_ean"])
                         with conn:
                             for _, r in df_imp_locali.iterrows():
                                 raw_chiave = str(r.get("prodotto_ean"))
@@ -2289,6 +2290,14 @@ elif menu == "Accordi Locali (Promo)":
                                     
                                 def check_nan(val):
                                     return float(val) if (pd.notna(val) and str(val).strip() != "") else None
+                                
+                                # Recupero automatico dei gruppi associati all'insegna importata
+                                ins_locale = str(r.get("associato_insegna")).upper().strip()
+                                cursor.execute("SELECT gruppo_macro, sottogruppo FROM struttura_gdo WHERE UPPER(TRIM(associato_insegna)) = ? LIMIT 1", (ins_locale,))
+                                res_gdo = cursor.fetchone()
+                                
+                                g_macro = res_gdo[0] if res_gdo else ""
+                                s_grup = res_gdo[1] if (res_gdo and res_gdo[1]) else ""
                                     
                                 cursor.execute("""
                                 INSERT OR REPLACE INTO accordi_commerciali (
@@ -2296,8 +2305,8 @@ elif menu == "Accordi Locali (Promo)":
                                     sconto_6, sconto_7, sconto_y, note_locali
                                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 """, (
-                                    str(r.get("gruppo_macro")).upper().strip(),
-                                    str(r.get("sottogruppo")).upper().strip() if pd.notna(r.get("sottogruppo")) else "",
+                                    g_macro,
+                                    s_grup,
                                     str(r.get("associato_insegna")).upper().strip(),
                                     str(r.get("livello")).upper().strip(),
                                     chiave_pulita,
