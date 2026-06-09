@@ -354,70 +354,77 @@ menu = menu_selection
 
 # --- DANGER ZONE NELLA SIDEBAR ---
 st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
-with st.sidebar.container(border=True):
-    st.markdown("<h4 style='color: #991B1B; font-size: 1.1rem;'>⚠️ Danger Zone</h4>", unsafe_allow_html=True)
-    if PRODUCTION_MODE:
-        st.info("Ripristino disattivato in Prod.")
-    else:
-        st.markdown("<span style='font-size: 0.85rem;'>Ripristina il DB allo stato iniziale.</span>", unsafe_allow_html=True)
-        pin_conferma = st.text_input("Digita 'RESET':", key="reset_pin_sidebar")
-        if st.button("HARD RESET DB", disabled=(pin_conferma != "RESET"), use_container_width=True):
-            try:
-                conn_reset = sqlite3.connect(DB_FILE)
-                seed_baseline_data(conn_reset)
-                conn_reset.close()
-                for key in list(st.session_state.keys()):
-                    del st.session_state[key]
-                st.sidebar.success("DB ripristinato!")
-                st.rerun()
-            except Exception as ex:
-                st.sidebar.error(f"Errore: {ex}")
-# ---------------------------------------------
+def on_insegna_change():
+        ins = st.session_state.widget_insegna
+        if ins and ins != "":
+            conn_cb = sqlite3.connect(DB_FILE)
+            cursor_cb = conn_cb.cursor()
+            cursor_cb.execute("SELECT gruppo_macro, sottogruppo FROM struttura_gdo WHERE associato_insegna=? LIMIT 1", (ins,))
+            res = cursor_cb.fetchone()
+            conn_cb.close()
+            if res:
+                st.session_state.widget_gruppo = res[0]
+                st.session_state.widget_sottogruppo = res[1] or ""
 
-# ==========================================
-# SCHEDA 1: SIMULATORE OFFERTE (Singola SKU)
-# ==========================================
-if menu == "Simulatore Offerte":
-    conn = sqlite3.connect(DB_FILE)
-    
-    st.markdown("## Commerciale Salov - Simulatore")
-    
-    cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT gruppo_macro FROM struttura_gdo WHERE attivo=1 ORDER BY gruppo_macro")
-    gruppi = [r[0] for r in cursor.fetchall()]
-    
-    if not gruppi:
-        st.warning("Nessun cliente attivo. Vai in 'Anagrafica GDO' per attivare le insegne.")
-        st.stop()
+    def on_gruppo_change():
+        grp = st.session_state.widget_gruppo
+        ins = st.session_state.widget_insegna
+        if ins and ins != "":
+            conn_cb = sqlite3.connect(DB_FILE)
+            cursor_cb = conn_cb.cursor()
+            cursor_cb.execute("SELECT COUNT(*) FROM struttura_gdo WHERE associato_insegna=? AND gruppo_macro=?", (ins, grp))
+            belongs = cursor_cb.fetchone()[0] > 0
+            conn_cb.close()
+            if not belongs:
+                st.session_state.widget_insegna = ""
+                st.session_state.widget_sottogruppo = ""
+
+    if 'widget_insegna' not in st.session_state:
+        st.session_state.widget_insegna = ""
+    if 'widget_gruppo' not in st.session_state:
+        st.session_state.widget_gruppo = gruppi[0]
+    if 'widget_sottogruppo' not in st.session_state:
+        st.session_state.widget_sottogruppo = ""
+
+    cursor.execute("SELECT DISTINCT associato_insegna FROM struttura_gdo WHERE attivo=1 ORDER BY associato_insegna")
+    tutte_insegne_attive = [r[0] for r in cursor.fetchall() if r[0]]
 
     with st.container(border=True):
         st.markdown("#### Contesto Negoziale")
         col_ctx1, col_ctx2, col_ctx3, col_ctx4 = st.columns(4)
         
         with col_ctx1:
-            current_gruppo = st.session_state.get('widget_gruppo', gruppi[0])
-            if current_gruppo not in gruppi: current_gruppo = gruppi[0]
-            gruppo_sel = st.selectbox("1. Gruppo GDO", gruppi, key="widget_gruppo")
-        
-        cursor.execute("SELECT DISTINCT sottogruppo FROM accordi_commerciali WHERE gruppo_macro=? AND sottogruppo != '' ORDER BY sottogruppo", (gruppo_sel,))
-        sottogruppi = [r[0] for r in cursor.fetchall()]
-        if not sottogruppi: sottogruppi = [""]
-        
-        if 'widget_sottogruppo' in st.session_state and st.session_state['widget_sottogruppo'] not in sottogruppi:
-            st.session_state['widget_sottogruppo'] = sottogruppi[0]
+            associato_sel = st.selectbox(
+                "1. Insegna Locale", 
+                [""] + tutte_insegne_attive, 
+                key="widget_insegna", 
+                on_change=on_insegna_change
+            )
             
         with col_ctx2:
-            sottogruppo_sel = st.selectbox("2. Sottogruppo GDO", sottogruppi, key="widget_sottogruppo")
+            gruppo_sel = st.selectbox(
+                "2. Gruppo GDO", 
+                gruppi, 
+                key="widget_gruppo", 
+                on_change=on_gruppo_change
+            )
         
-        cursor.execute("SELECT DISTINCT associato_insegna FROM struttura_gdo WHERE gruppo_macro=? AND attivo=1 ORDER BY associato_insegna", (gruppo_sel,))
-        associati = [r[0] for r in cursor.fetchall()]
-        if not associati: associati = [""]
-        
-        if 'widget_insegna' in st.session_state and st.session_state['widget_insegna'] not in associati:
-            st.session_state['widget_insegna'] = associati[0]
+        cursor.execute("""
+            SELECT DISTINCT sottogruppo FROM accordi_commerciali WHERE gruppo_macro=? AND sottogruppo != ''
+            UNION
+            SELECT DISTINCT sottogruppo FROM struttura_gdo WHERE gruppo_macro=? AND sottogruppo != '' AND sottogruppo IS NOT NULL
+            ORDER BY sottogruppo
+        """, (gruppo_sel, gruppo_sel))
+        sottogruppi = [r[0] for r in cursor.fetchall()]
+        if not sottogruppi: 
+            sottogruppi = [""]
             
         with col_ctx3:
-            associato_sel = st.selectbox("3. Insegna Locale", associati, key="widget_insegna")
+            sottogruppo_sel = st.selectbox(
+                "3. Sottogruppo GDO", 
+                sottogruppi, 
+                key="widget_sottogruppo"
+            )
 
         cursor.execute("""
             SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0), a.codice_sap, a.formato_lt,
