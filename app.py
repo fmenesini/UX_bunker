@@ -2305,8 +2305,14 @@ elif menu == "Report Sintetico":
         sg = res_sub[0] if res_sub else ""
         
         for p in all_products:
-            res = get_merged_contract(conn, c[0], sg, c[1], p[0], p[1])
-                
+            res = HierarchyResolver.resolve(
+                conn=conn, 
+                gruppo=c[0], 
+                sottogruppo=sg, 
+                insegna=c[1], 
+                ean=p[0], 
+                categoria=p[1]
+            )                
             if res.listino_r is not None:
                 p_net = float(res.listino_r)
                 for s in [res.sconto_1, res.sconto_2, res.sconto_3, res.sconto_4, res.sconto_5, res.sconto_6, res.sconto_7, res.sconto_y, res.sconto_carico, res.sconto_pagamento]:
