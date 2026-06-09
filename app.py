@@ -2022,7 +2022,7 @@ elif menu == "Report Sintetico":
 
     with st.container(border=True):
         st.markdown("#### Benchmark Comparativo di Canale (Livello Sottogruppo)")
-        st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione logica.")
+        st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione logica. IN FASE DI TEST USARE EX.V. SAGRA CLASSICO Lt1")
         
         col_f1, col_f2 = st.columns(2)
         with col_f1:
