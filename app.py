@@ -1971,7 +1971,7 @@ elif menu == "Report Sintetico":
 
                     fig_pie = px.pie(df_pie_agg, values='Conteggio', names='Stato',
                                      custom_data=['Clienti_Lista'],
-                                     title="Distribuzione Referenze (Sopra/Sotto Soglia rispetto net net contrattuale)",
+                                     title="Distribuzione Referenze (Sopra/Sotto Soglia Vs net net contrattuale)",
                                      color='Stato', color_discrete_map={'Verde (Sopra Soglia)':'#22C55E', 'Rosso (Sotto Soglia)':'#EF4444'})
                     
                     # Personalizziamo il popup (Tooltip) per mostrare i clienti
