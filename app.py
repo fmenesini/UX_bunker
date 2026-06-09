@@ -510,9 +510,12 @@ if menu == "Simulatore Offerte":
         
         # Se il listino_r è None ma il contratto esiste, recuperiamo il listino base dall'anagrafica prodotti
         if contract.listino_r is None:
-            p_base = cursor.execute("SELECT prezzo_listino_base FROM anagrafica_prodotti WHERE TRIM(ean) = TRIM(?)", (ean,)).fetchone()
-            if p_base and p_base[0]:
-                contract.listino_r = Decimal(str(p_base[0]))
+            # Estrazione sicura indipendente dal tipo di row_factory (tupla o dizionario)
+            row_base = conn.execute("SELECT prezzo_listino_base FROM anagrafica_prodotti WHERE TRIM(ean) = TRIM(?)", (str(ean).strip(),)).fetchone()
+            if row_base:
+                # Gestisce sia l'accesso a dizionario/Row ['prezzo_listino_base'] sia l'accesso a tupla posizionale [0]
+                val_base = row_base['prezzo_listino_base'] if isinstance(row_base, sqlite3.Row) or isinstance(row_base, dict) else row_base[0]
+                contract.listino_r = Decimal(str(val_base)) if val_base is not None else Decimal("0.00")
             else:
                 contract.listino_r = Decimal("0.00")
 
