@@ -2325,7 +2325,7 @@ else:
         1. **Modifica Manuale:** Inserisci i valori noti (es. S1 al 10%, S2 al 2%).
         2. **Verifica:** Clicca su **"🔄 Calcola e Verifica Sconti (Manuale)"**. Il sistema calcolerà la cascata geometrica e ti mostrerà sotto "Diff. Fattura" quanto manca per raggiungere il target che avevi fissato nel Tab 1.
         3. **La Magia (Auto-Allineamento):** Non impazzire con la calcolatrice! Clicca su **"🪄 Allinea Sconti Automaticamente"**. Il sistema calcolerà l'esatta percentuale geometrica mancante e la inserirà in **S5 %**, portando la differenza a zero. Farà la stessa cosa per i premi fuori fattura, inserendo la differenza algebrica in **PFA V %**.
-        4. **Trucco:** se vuoi agire su uno dei due sconti in fattura presenti senza doverne creare un terzo (l'S5 della simulazione) azzera uno degli sconti contrattuali, avvia la simulazione e poi sostituisci la colonna dello sconto contrattuale che vuoi modificare con i valori in S5. Ripeti l'allienamento automatico per evidenziari eventuali errori. 
+        4. **Trucco:** se vuoi agire su uno dei due sconti in fattura presenti senza doverne creare un terzo (l'S5 della simulazione) azzera uno degli sconti contrattuali, avvia la simulazione e poi sostituisci la colonna dello sconto contrattuale che vuoi modificare con i valori in S5. Ripeti l'allineamento automatico per evidenziare eventuali errori. 
         
         *Nota: In ogni Tab è presente un pulsante per scaricare la tabella corrente in Excel.*
         """)
