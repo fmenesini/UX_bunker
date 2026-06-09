@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.WARNING)
 st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide", initial_sidebar_state="expanded")
 
 # ==========================================
-# FUNZIONE FORMATTAZIONE ITALIANA (1.234,56)
+# FUNZIONI DI SUPPORTO E FORMATTAZIONE
 # ==========================================
 def fmt_it(val, decimals=2, is_euro=False, is_pct=False, sign=False):
     if pd.isna(val): return ""
@@ -34,6 +34,14 @@ def fmt_it(val, decimals=2, is_euro=False, is_pct=False, sign=False):
     if is_euro: return f"€ {s}"
     if is_pct: return f"{s} %"
     return s
+
+def safe_dec(val):
+    if pd.isna(val) or val is None or str(val).strip() == "":
+        return Decimal("0.00")
+    try:
+        return Decimal(str(val))
+    except:
+        return Decimal("0.00")
 
 # ==========================================
 # CSS AVANZATO
@@ -66,7 +74,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# INIZIALIZZAZIONE DATABASE
+# INIZIALIZZAZIONE DATABASE E MERGE CONTRATTI
 # ==========================================
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -102,26 +110,30 @@ def init_db():
 
     conn.close()
 
-# --- FUNZIONE DI SALVATAGGIO LISTINO ---
-# Forza il recupero del Listino Base dal livello Sottogruppo o Gruppo, ignorando gli accordi locali
-def get_listino_strutturale(conn, gruppo, sottogruppo, ean):
-    c = conn.cursor()
-    c.execute("""
-        SELECT listino_r FROM accordi_commerciali 
-        WHERE gruppo_macro=? AND sottogruppo=? AND chiave_livello=? AND livello='REFERENZA' 
-        AND (associato_insegna='' OR associato_insegna IS NULL) AND listino_r IS NOT NULL
-    """, (gruppo, sottogruppo, ean))
-    res = c.fetchone()
-    if res: return res[0]
+def get_merged_contract(conn, gruppo, sottogruppo, insegna, ean, categoria):
+    """
+    Risolve il contratto fondendo gli accordi Nazionali (Strutturali) con quelli Locali (Promo).
+    Garantisce che Listino, S1-S5 e PFA provengano dalla sede centrale, mentre S6, S7 e Y dall'insegna.
+    """
+    # 1. Recupero contratto strutturale (Insegna vuota)
+    base = HierarchyResolver.resolve(conn, gruppo, sottogruppo, "", ean, categoria)
     
-    c.execute("""
-        SELECT listino_r FROM accordi_commerciali 
-        WHERE gruppo_macro=? AND (sottogruppo='' OR sottogruppo IS NULL) AND chiave_livello=? AND livello='REFERENZA' 
-        AND (associato_insegna='' OR associato_insegna IS NULL) AND listino_r IS NOT NULL
-    """, (gruppo, ean))
-    res = c.fetchone()
-    return res[0] if res else None
-# ---------------------------------------
+    # 2. Se c'è un'insegna, recupero contratto locale e fondo i dati
+    if insegna and str(insegna).strip() != "":
+        loc = HierarchyResolver.resolve(conn, gruppo, sottogruppo, insegna, ean, categoria)
+        
+        # Se il locale non ha un listino o sconti strutturali, li eredita dal base
+        strutturali_attrs = [
+            'listino_r', 'sconto_1', 'sconto_2', 'sconto_3', 'sconto_4', 'sconto_5', 
+            'sconto_carico', 'sconto_pagamento', 
+            'voce_i', 'voce_ii', 'voce_iii', 'voce_iv', 'voce_v'
+        ]
+        for attr in strutturali_attrs:
+            if getattr(loc, attr, None) is None:
+                setattr(loc, attr, getattr(base, attr, None))
+                
+        return loc
+    return base
     
 def seed_baseline_data(conn):
     cursor = conn.cursor()
@@ -271,31 +283,30 @@ def seed_baseline_data(conn):
 
 init_db()
 
-# Inizializzazione navigazione globale
-if "main_menu_radio" not in st.session_state:
-    st.session_state.main_menu_radio = "Simulatore Offerte"
+# ==========================================
+# GESTIONE NAVIGAZIONE MENU (RIORGANIZZATA)
+# ==========================================
+if "nav_section" not in st.session_state:
+    st.session_state.nav_section = "Simulazioni"
+if "nav_module_sim" not in st.session_state:
+    st.session_state.nav_module_sim = "Simulatore Offerte"
 
-# --- TRUCCO PER CAMBIO MENU PROGRAMMATICO ---
 if "go_to_menu" in st.session_state:
-    st.session_state.main_menu_radio = st.session_state.go_to_menu
+    st.session_state.nav_section = "Simulazioni"
+    st.session_state.nav_module_sim = st.session_state.go_to_menu
     del st.session_state.go_to_menu
-# -------------------------------------------
 
-# Menu di navigazione laterale
 st.sidebar.markdown("## Menu Principale")
-menu = st.sidebar.radio("", [
-    "Simulatore Offerte", 
-    "Master Grid Rinnovi (N vs N+1)",
-    "Storico Promozioni", 
-    "Anagrafica GDO (Clienti)",
-    "Dati Anagrafici (Logistica)", 
-    "Back-Office (Contratti Nazionali)", 
-    "Accordi Locali (Promo)",
-    "Report Sintetico", 
-    "Guida Operativa"
-], key="main_menu_radio")
+sec = st.sidebar.selectbox("Sezione", ["Simulazioni", "Database", "Report e Guide"], key="nav_section")
 
-# --- SPOSTAMENTO DANGER ZONE NELLA SIDEBAR ---
+if sec == "Simulazioni":
+    menu = st.sidebar.radio("Modulo", ["Master Grid Rinnovi (N vs N+1)", "Simulatore Offerte", "Storico Promozioni"], key="nav_module_sim")
+elif sec == "Database":
+    menu = st.sidebar.radio("Modulo", ["Dati Anagrafici (Logistica)", "Back-Office (Contratti Nazionali)", "Anagrafica GDO (Clienti)", "Accordi Locali (Promo)"], key="nav_module_db")
+else:
+    menu = st.sidebar.radio("Modulo", ["Report Sintetico", "Guida Operativa"], key="nav_module_rep")
+
+# --- DANGER ZONE NELLA SIDEBAR ---
 st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
 with st.sidebar.container(border=True):
     st.markdown("<h4 style='color: #991B1B; font-size: 1.1rem;'>⚠️ Danger Zone</h4>", unsafe_allow_html=True)
@@ -382,16 +393,15 @@ if menu == "Simulatore Offerte":
             prodotto_scelto = st.selectbox("4. Referenza Salov", list(prodotti_dict.keys()), key="widget_prodotto")
         
     ean, tipo_olio, min_net_net_g, codice_sap, formato_lt, pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet = prodotti_dict[prodotto_scelto]
-    contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, ean, tipo_olio)
     
-    if contract.listino_r is None:
-        contract.listino_r = get_listino_strutturale(conn, gruppo_sel, sottogruppo_sel, ean)
+    # Merge strutturale e locale in modo pulito
+    contract = get_merged_contract(conn, gruppo_sel, sottogruppo_sel, associato_sel, ean, tipo_olio)
 
     # --- AVVISO ACCORDI LOCALI ---
-    cursor.execute("SELECT COUNT(*) FROM accordi_commerciali WHERE gruppo_macro=? AND associato_insegna=? AND associato_insegna != ''", (gruppo_sel, associato_sel))
+    cursor.execute("SELECT COUNT(*) FROM accordi_commerciali WHERE gruppo_macro=? AND associato_insegna=? AND associato_insegna != '' AND chiave_livello=?", (gruppo_sel, associato_sel, ean))
     has_local = cursor.fetchone()[0] > 0
     if has_local:
-        st.info(f"✅ Sono presenti accordi locali precaricati per l'insegna **{associato_sel}**.")
+        st.info(f"✅ **Accordi Locali Attivi per {associato_sel}:** Sconto 6: **{contract.sconto_6 or 0}%** | Sconto 7: **{contract.sconto_7 or 0}%** | Sconto Y: **{contract.sconto_y or 0}%**")
     else:
         st.warning(f"⚠️ Non sono presenti accordi locali per l'insegna **{associato_sel}**. Verranno applicate solo le condizioni nazionali del Sottogruppo.")
     # -----------------------------
@@ -437,81 +447,73 @@ if menu == "Simulatore Offerte":
     with col_l1:
         st.markdown("#### Scontistiche Utilizzabili")
         with st.container(border=True):
-            sconto_y = st.number_input("Sconto Continuativo Y (%)", min_value=0.0, max_value=100.0, value=float(contract.sconto_y), step=0.5)
-            if contract.sconto_y > 0:
+            sconto_y = st.number_input("Sconto Continuativo Y (%)", min_value=0.0, max_value=100.0, value=float(contract.sconto_y or 0.0), step=0.5)
+            if contract.sconto_y and float(contract.sconto_y) > 0:
                 st.markdown(f"<div class='alert-box alert-warning'>ATTENZIONE - SE LO SCONTO CONTINUATIVO DERIVA DA UN ACCORDO LOCALE NON LO SI PUO' VARIARE SENZA UN NUOVO ACCORDO - valore attuale: {fmt_it(float(contract.sconto_y), is_pct=True)}</div>", unsafe_allow_html=True)
             
             if "A. Partenza" in metodo_lavoro:
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
                 st.markdown("<h5 style='color: #1A3E2F; margin-bottom: 5px;'>Leva Promozionale Diretta</h5>", unsafe_allow_html=True)
                 sconto_aa = st.number_input("Sconto Unitario in fattura (Euro/Pz) [AA]", min_value=0.0, step=0.05, key="widget_aa")
+                sconto_z_input = 0.0
             else:
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
                 st.markdown("**Leve Promozionali**")
                 sconto_z_input = st.number_input("Sconto Promozionale (%) [Z] (Manuale)", min_value=0.0, max_value=100.0, step=0.5, key="widget_z")
-                sconto_z = Decimal(f"{sconto_z_input:.5f}")
                 sconto_aa = st.number_input("Sconto Unitario in fattura (Euro/Pz) [AA]", min_value=0.0, step=0.05, key="widget_aa")
+                
+            sconto_z = safe_dec(sconto_z_input)
+
+    # Input protetto per il PricingEngine
+    engine_input = PricingInput(
+        listino_r=safe_dec(contract.listino_r),
+        sconto_1=safe_dec(contract.sconto_1),
+        sconto_2=safe_dec(contract.sconto_2),
+        sconto_3=safe_dec(contract.sconto_3),
+        sconto_4=safe_dec(contract.sconto_4),
+        sconto_5=safe_dec(contract.sconto_5),
+        sconto_6=safe_dec(contract.sconto_6),
+        sconto_7=safe_dec(contract.sconto_7),
+        sconto_y=safe_dec(sconto_y),
+        sconto_z=sconto_z,
+        sconto_aa=safe_dec(sconto_aa),
+        sconto_carico=safe_dec(contract.sconto_carico),
+        sconto_pagamento=safe_dec(contract.sconto_pagamento),
+        voce_i=safe_dec(contract.voce_i),
+        voce_ii=safe_dec(contract.voce_ii),
+        voce_iii=safe_dec(contract.voce_iii),
+        voce_iv=safe_dec(contract.voce_iv),
+        voce_v=safe_dec(contract.voce_v),
+        min_net_net_g=safe_dec(min_net_net_g)
+    )
 
     if "A. Partenza" in metodo_lavoro:
-        target_dec = Decimal(f"{target_net_net:.5f}")
-        temp_input = PricingInput(
-            listino_r=contract.listino_r, sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
-            sconto_4=contract.sconto_4, sconto_5=contract.sconto_5, sconto_6=contract.sconto_6, sconto_7=contract.sconto_7,
-            sconto_y=Decimal(f"{sconto_y:.5f}"), sconto_z=Decimal("0.00"), sconto_aa=Decimal(f"{sconto_aa:.5f}"),
-            sconto_carico=contract.sconto_carico, sconto_pagamento=contract.sconto_pagamento,
-            voce_i=contract.voce_i, voce_ii=contract.voce_ii, voce_iii=contract.voce_iii, voce_iv=contract.voce_iv, voce_v=contract.voce_v,
-            min_net_net_g=Decimal(str(min_net_net_g))
-        )
-        sconto_z = PricingEngine.calculate_inverse(target_dec, temp_input, "Z")
+        target_dec = safe_dec(target_net_net)
+        sconto_z = PricingEngine.calculate_inverse(target_dec, engine_input, "Z")
+        engine_input.sconto_z = sconto_z
 
     with col_l2:
         st.markdown("#### Limiti Promozionali per il net net minimo")
         with st.container(border=True):
             if "A. Partenza" in metodo_lavoro:
-                temp_input_max_z = PricingInput(
-                    listino_r=contract.listino_r, sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
-                    sconto_4=contract.sconto_4, sconto_5=contract.sconto_5, sconto_6=contract.sconto_6, sconto_7=contract.sconto_7,
-                    sconto_y=Decimal(f"{sconto_y:.5f}"), sconto_z=Decimal("0.00"), sconto_aa=Decimal(f"{sconto_aa:.5f}"),
-                    sconto_carico=contract.sconto_carico, sconto_pagamento=contract.sconto_pagamento,
-                    voce_i=contract.voce_i, voce_ii=contract.voce_ii, voce_iii=contract.voce_iii, voce_iv=contract.voce_iv, voce_v=contract.voce_v,
-                    min_net_net_g=Decimal(str(min_net_net_g))
-                )
-                z_max_consentito = PricingEngine.calculate_inverse(Decimal(str(min_net_net_g)), temp_input_max_z, "Z")
+                engine_max_z = PricingInput(**engine_input.__dict__)
+                engine_max_z.sconto_z = Decimal("0.00")
+                z_max_consentito = PricingEngine.calculate_inverse(safe_dec(min_net_net_g), engine_max_z, "Z")
                 st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f")
                 st.markdown("<div style='height: 85px;'></div>", unsafe_allow_html=True) 
             else:
-                temp_input_max_z = PricingInput(
-                    listino_r=contract.listino_r, sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
-                    sconto_4=contract.sconto_4, sconto_5=contract.sconto_5, sconto_6=contract.sconto_6, sconto_7=contract.sconto_7,
-                    sconto_y=Decimal(f"{sconto_y:.5f}"), sconto_z=Decimal("0.00"), sconto_aa=Decimal(f"{sconto_aa:.5f}"),
-                    sconto_carico=contract.sconto_carico, sconto_pagamento=contract.sconto_pagamento,
-                    voce_i=contract.voce_i, voce_ii=contract.voce_ii, voce_iii=contract.voce_iii, voce_iv=contract.voce_iv, voce_v=contract.voce_v,
-                    min_net_net_g=Decimal(str(min_net_net_g))
-                )
-                z_max_consentito = PricingEngine.calculate_inverse(Decimal(str(min_net_net_g)), temp_input_max_z, "Z")
+                engine_max_z = PricingInput(**engine_input.__dict__)
+                engine_max_z.sconto_z = Decimal("0.00")
+                z_max_consentito = PricingEngine.calculate_inverse(safe_dec(min_net_net_g), engine_max_z, "Z")
                 st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f")
                 
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
                 
-                temp_input_max_aa = PricingInput(
-                    listino_r=contract.listino_r, sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
-                    sconto_4=contract.sconto_4, sconto_5=contract.sconto_5, sconto_6=contract.sconto_6, sconto_7=contract.sconto_7,
-                    sconto_y=Decimal(f"{sconto_y:.5f}"), sconto_z=Decimal(f"{sconto_z:.5f}"), sconto_aa=Decimal("0.00"),
-                    sconto_carico=contract.sconto_carico, sconto_pagamento=contract.sconto_pagamento,
-                    voce_i=contract.voce_i, voce_ii=contract.voce_ii, voce_iii=contract.voce_iii, voce_iv=contract.voce_iv, voce_v=contract.voce_v,
-                    min_net_net_g=Decimal(str(min_net_net_g))
-                )
-                aa_max_consentito = PricingEngine.calculate_inverse(Decimal(str(min_net_net_g)), temp_input_max_aa, "AA")
+                engine_max_aa = PricingInput(**engine_input.__dict__)
+                engine_max_aa.sconto_aa = Decimal("0.00")
+                aa_max_consentito = PricingEngine.calculate_inverse(safe_dec(min_net_net_g), engine_max_aa, "AA")
                 st.number_input("Sconto Unitario MAX Consentito [AA]", value=float(aa_max_consentito), disabled=True, format="%.2f")
 
-    engine_input = PricingInput(
-        listino_r=contract.listino_r, sconto_1=contract.sconto_1, sconto_2=contract.sconto_2, sconto_3=contract.sconto_3,
-        sconto_4=contract.sconto_4, sconto_5=contract.sconto_5, sconto_6=contract.sconto_6, sconto_7=contract.sconto_7,
-        sconto_y=Decimal(f"{sconto_y:.5f}"), sconto_z=sconto_z, sconto_aa=Decimal(f"{sconto_aa:.5f}"),
-        sconto_carico=contract.sconto_carico, sconto_pagamento=contract.sconto_pagamento,
-        voce_i=contract.voce_i, voce_ii=contract.voce_ii, voce_iii=contract.voce_iii, voce_iv=contract.voce_iv, voce_v=contract.voce_v,
-        min_net_net_g=Decimal(str(min_net_net_g))
-    )
     result = PricingEngine.calculate(engine_input)
 
     st.divider()
@@ -858,7 +860,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         cursor.execute("SELECT DISTINCT gruppo_macro FROM struttura_gdo WHERE attivo=1 ORDER BY gruppo_macro")
         gruppi = [r[0] for r in cursor.fetchall()]
         
-        # --- RIPRISTINATO IL 3° SELETTORE PER TROVARE I LISTINI ---
         col_ctx1, col_ctx2, col_ctx3 = st.columns(3)
         with col_ctx1:
             gruppo_sel = st.selectbox("Gruppo GDO", ["Nessuno"] + gruppi)
@@ -876,7 +877,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             associati = [r[0] for r in cursor.fetchall()]
         with col_ctx3:
             associato_sel = st.selectbox("Insegna Locale (Opzionale)", [""] + associati if gruppo_sel != "Nessuno" else [""], help="Seleziona l'insegna solo se il Listino Base è stato salvato a livello locale. Gli sconti locali verranno comunque ignorati in questa griglia.")
-        # --------------------------------------------------------
 
     query = """
         SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0) as min_net_net_g
@@ -936,10 +936,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 def safe_float(v): return float(v) if v is not None else 0.0
                 
                 for idx, row in df_temp.iterrows():
-                    contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
-                    
-                    if contract.listino_r is None:
-                        contract.listino_r = get_listino_strutturale(conn, gruppo_sel, sottogruppo_sel, row['ean'])
+                    contract = get_merged_contract(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
                     
                     if contract.listino_r is not None:
                         if first_contract:
@@ -1167,13 +1164,10 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                         if col_mass == "Aumento Listino Base (%)":
                             listino_n = row['[N] Listino €']
                             if listino_n > 0:
-                                # Calcolo matematico dell'aumento percentuale
                                 nuovo_listino = listino_n * (1 + (val_mass / 100))
-                                # Arrotondamento rigoroso alla prima cifra decimale (es. 4.54 -> 4.5, 4.55 -> 4.6)
                                 nuovo_listino_arr = float(Decimal(str(nuovo_listino)).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
                                 st.session_state.rinnovi_df.at[idx, '[N+1] Listino €'] = nuovo_listino_arr
                         else:
-                            # Comportamento normale per Sconti e Contratti (sovrascrittura diretta)
                             st.session_state.rinnovi_df.at[idx, col_mass] = val_mass
                         
             st.rerun()
@@ -1481,7 +1475,6 @@ elif menu == "Storico Promozioni":
                 if st.button("CLONA NEL SIMULATORE", use_container_width=True):
                     promo_data = df_storico[df_storico['id'] == id_to_clone].iloc[0]
                     st.session_state['widget_gruppo'] = promo_data['gruppo_macro']
-                    # Sottogruppo non è salvato esplicitamente nello storico, usiamo un fallback
                     st.session_state['widget_insegna'] = promo_data['associato_insegna']
                     st.session_state['clone_ean_pending'] = promo_data['ean']
                     st.session_state['widget_metodo'] = "B. Tentativi Spot Manuali (Immissione Sconto Promo libera)"
@@ -1491,7 +1484,6 @@ elif menu == "Storico Promozioni":
                     st.session_state['widget_fisso'] = float(promo_data['contributo_fisso'])
                     st.session_state['widget_pezzo'] = float(promo_data['contributo_pezzo'])
                     
-                    # Usiamo la variabile temporanea per cambiare menu senza errori!
                     st.session_state.go_to_menu = "Simulatore Offerte"
                     st.rerun()
             else:
@@ -1718,6 +1710,76 @@ elif menu == "Back-Office (Contratti Nazionali)":
     st.title("Back-Office - Contratti Nazionali")
     st.markdown("Gestione degli accordi strutturali (Listini, S1-S5, PFA) a livello di Gruppo e Sottogruppo. **Gli sconti locali si inseriscono nella scheda apposita.**")
     conn = sqlite3.connect(DB_FILE)
+    
+    # --- INSERIMENTO RAPIDO REGOLA NAZIONALE ---
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT gruppo_macro FROM struttura_gdo WHERE attivo=1 ORDER BY gruppo_macro")
+    gruppi_attivi = [r[0] for r in cursor.fetchall()]
+    
+    cursor.execute("SELECT DISTINCT sottogruppo FROM accordi_commerciali WHERE sottogruppo != '' ORDER BY sottogruppo")
+    sottogruppi_noti = [r[0] for r in cursor.fetchall()]
+    
+    cursor.execute("SELECT DISTINCT tipo_olio FROM anagrafica_master")
+    categorie_disponibili = [r[0] for r in cursor.fetchall()]
+    
+    cursor.execute("SELECT ean, descrizione_commerciale FROM anagrafica_master")
+    prod_list = [f"{r[1]} [{r[0]}]" for r in cursor.fetchall()]
+    
+    with st.container(border=True):
+        st.markdown("#### ➕ Inserimento Rapido Regola Nazionale")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            ins_gruppo = st.selectbox("Gruppo", gruppi_attivi, key="ins_g")
+            ins_sottogruppo = st.selectbox("Sottogruppo", [""] + sottogruppi_noti, key="ins_sg")
+        with col2:
+            ins_livello = st.selectbox("Livello", ["GRUPPO", "SOTTOGRUPPO", "CATEGORIA", "REFERENZA"], key="ins_l")
+            
+            opzioni_chiave = [""]
+            if ins_livello == "CATEGORIA":
+                opzioni_chiave = categorie_disponibili
+            elif ins_livello == "REFERENZA":
+                opzioni_chiave = prod_list
+            ins_chiave = st.selectbox("Chiave Livello", opzioni_chiave, key="ins_c")
+            
+        with col3:
+            ins_parametro = st.selectbox("Parametro da Impostare", [
+                "Listino Base (R)", "Sconto 1", "Sconto 2", "Sconto 3", "Sconto 4", "Sconto 5",
+                "Oneri Logistica", "Oneri Pagamento", 
+                "PFA Voce I", "PFA Voce II", "PFA Voce III", "PFA Voce IV", "PFA Voce V"
+            ], key="ins_p")
+            ins_valore = st.number_input("Valore", step=0.5, format="%.2f", key="ins_v")
+            
+        with col4:
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+            if st.button("Inserisci / Aggiorna Regola", type="primary", use_container_width=True):
+                chiave_pulita = ""
+                if ins_livello == "CATEGORIA":
+                    chiave_pulita = ins_chiave
+                elif ins_livello == "REFERENZA":
+                    chiave_pulita = ins_chiave.split("[")[-1].replace("]", "").strip() if "[" in ins_chiave else ins_chiave
+                
+                col_map = {
+                    "Listino Base (R)": "listino_r", "Sconto 1": "sconto_1", "Sconto 2": "sconto_2",
+                    "Sconto 3": "sconto_3", "Sconto 4": "sconto_4", "Sconto 5": "sconto_5",
+                    "Oneri Logistica": "sconto_carico", "Oneri Pagamento": "sconto_pagamento",
+                    "PFA Voce I": "voce_contratto_1", "PFA Voce II": "voce_contratto_2", 
+                    "PFA Voce III": "voce_contratto_3", "PFA Voce IV": "voce_contratto_4", "PFA Voce V": "voce_contratto_5"
+                }
+                col_name = col_map[ins_parametro]
+                
+                try:
+                    with conn:
+                        cursor.execute("SELECT id FROM accordi_commerciali WHERE gruppo_macro=? AND sottogruppo=? AND associato_insegna='' AND livello=? AND chiave_livello=?", (ins_gruppo, ins_sottogruppo, ins_livello, chiave_pulita))
+                        row = cursor.fetchone()
+                        if row:
+                            cursor.execute(f"UPDATE accordi_commerciali SET {col_name}=? WHERE id=?", (ins_valore, row[0]))
+                        else:
+                            cursor.execute(f"INSERT INTO accordi_commerciali (gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello, {col_name}) VALUES (?, ?, '', ?, ?, ?)", (ins_gruppo, ins_sottogruppo, ins_livello, chiave_pulita, ins_valore))
+                    st.success("Regola salvata!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore: {e}")
+    # -------------------------------------------
     
     tab_contratti, tab_guardrail = st.tabs(["Gestione Contratti Nazionali", "Gestione Minimi Net Net"])
     
@@ -2034,7 +2096,6 @@ elif menu == "Accordi Locali (Promo)":
                         def check_nan(val):
                             return float(val) if (pd.notna(val) and str(val).strip() != "") else None
                             
-                        # Estrai l'EAN dalla stringa "Nome [EAN]"
                         raw_chiave = str(r.get("prodotto_ean"))
                         if "[" in raw_chiave and "]" in raw_chiave:
                             chiave_pulita = raw_chiave.split("[")[-1].replace("]", "").strip()
@@ -2143,7 +2204,6 @@ elif menu == "Report Sintetico":
     # --- DASHBOARD DIREZIONALE (MOTORE RISOLTO) ---
     st.markdown("#### 📊 Dashboard Direzionale (Control Tower)")
     
-    # 1. Generazione Dati Robusta (Risolve la gerarchia per tutti i clienti attivi)
     cursor.execute("SELECT gruppo_macro, associato_insegna FROM struttura_gdo WHERE attivo=1")
     all_clients = cursor.fetchall()
     
@@ -2152,18 +2212,14 @@ elif menu == "Report Sintetico":
     
     dash_data = []
     for c in all_clients:
-        # Troviamo il sottogruppo prevalente per questo gruppo
         cursor.execute("SELECT sottogruppo FROM accordi_commerciali WHERE gruppo_macro=? AND sottogruppo != '' LIMIT 1", (c[0],))
         res_sub = cursor.fetchone()
         sg = res_sub[0] if res_sub else ""
         
         for p in all_products:
-            res = HierarchyResolver.resolve(conn, c[0], sg, c[1], p[0], p[1])
-            if res.listino_r is None:
-                res.listino_r = get_listino_strutturale(conn, c[0], sg, p[0])
+            res = get_merged_contract(conn, c[0], sg, c[1], p[0], p[1])
                 
             if res.listino_r is not None:
-                # Calcolo Net Net reale
                 p_net = float(res.listino_r)
                 for s in [res.sconto_1, res.sconto_2, res.sconto_3, res.sconto_4, res.sconto_5, res.sconto_6, res.sconto_7, res.sconto_y, res.sconto_carico, res.sconto_pagamento]:
                     if s is not None:
@@ -2178,7 +2234,7 @@ elif menu == "Report Sintetico":
                     'Prodotto': p[2],
                     'NetNet': p_net,
                     'Floor': float(p[3]),
-                    'Delta_Euro': p_net - float(p[3]), # Calcolo distanza dal Floor
+                    'Delta_Euro': p_net - float(p[3]),
                     'PFA_Tot': pfa,
                     'Stato': 'Verde (Sopra Soglia)' if p_net >= float(p[3]) else 'Rosso (Sotto Soglia)'
                 })
@@ -2186,7 +2242,6 @@ elif menu == "Report Sintetico":
     df_dash = pd.DataFrame(dash_data)
     
     if not df_dash.empty:
-        # --- SEZIONE 1: SALUTE CONTRATTI & DELTA MARGINE (Affiancati) ---
         with st.container(border=True):
             st.subheader("Salute Contratti & Profondità Margine", help="A sinistra: Quanti accordi sono sani (Verde) e quanti in perdita (Rosso). Passa il mouse sulle fette per vedere QUALI clienti generano il risultato. A destra: La distanza media in Euro dal limite minimo aziendale (Floor) per ogni categoria.")
             
@@ -2202,18 +2257,15 @@ elif menu == "Report Sintetico":
             if dash_prod != "Tutte le Referenze": df_pie = df_pie[df_pie['Prodotto'] == dash_prod]
             
             if not df_pie.empty:
-                # Creiamo due colonne per affiancare i grafici
                 col_chart1, col_chart2 = st.columns(2)
                 
                 with col_chart1:
-                    # Funzione per formattare la lista clienti nel Tooltip in modo pulito
                     def format_clients(clients):
                         unique_clients = sorted(list(set(clients)))
                         if len(unique_clients) > 8:
                             return "<br>".join(unique_clients[:8]) + "<br><i>...e altri</i>"
                         return "<br>".join(unique_clients)
 
-                    # Aggreghiamo i dati per la torta inserendo la lista dei clienti
                     df_pie_agg = df_pie.groupby('Stato').agg(
                         Conteggio=('Prodotto', 'count'),
                         Clienti_Lista=('Cliente', format_clients)
@@ -2224,12 +2276,10 @@ elif menu == "Report Sintetico":
                                      title="Distribuzione Referenze (Sopra/Sotto Soglia Vs net net contrattuale)",
                                      color='Stato', color_discrete_map={'Verde (Sopra Soglia)':'#22C55E', 'Rosso (Sotto Soglia)':'#EF4444'})
                     
-                    # Personalizziamo il popup (Tooltip) per mostrare i clienti
                     fig_pie.update_traces(hovertemplate="<b>%{label}</b><br>Num. Accordi: %{value}<br><br><b>Clienti coinvolti:</b><br>%{customdata[0]}<extra></extra>")
                     st.plotly_chart(fig_pie, use_container_width=True)
                 
                 with col_chart2:
-                    # Grafico a barre con il Delta Medio in Euro
                     df_delta = df_pie.groupby('Categoria')['Delta_Euro'].mean().reset_index()
                     df_delta['Colore'] = df_delta['Delta_Euro'].apply(lambda x: 'Positivo' if x >= 0 else 'Negativo')
                     
@@ -2247,7 +2297,6 @@ elif menu == "Report Sintetico":
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # --- GRAFICI A BARRE (PFA) ---
         col_dash1, col_dash2 = st.columns(2)
         
         with col_dash1:
@@ -2268,7 +2317,6 @@ elif menu == "Report Sintetico":
         st.warning("Nessun contratto attivo trovato nel database per generare la Dashboard.")
 
     st.divider()
-    # ---------------------------------------------
 
     with st.container(border=True):
         st.markdown("#### Benchmark Comparativo di Canale (Livello Sottogruppo)")
@@ -2318,9 +2366,7 @@ elif menu == "Report Sintetico":
                 
                 insegna_campione = res_ins[0] if res_ins else ""
                 
-                contratto_risolto = HierarchyResolver.resolve(conn, g_macro, s_gruppo, insegna_campione, ean_bench, tipo_olio_bench)
-                if contratto_risolto.listino_r is None:
-                    contratto_risolto.listino_r = get_listino_strutturale(conn, g_macro, s_gruppo, ean_bench)
+                contratto_risolto = get_merged_contract(conn, g_macro, s_gruppo, insegna_campione, ean_bench, tipo_olio_bench)
                 
                 if contratto_risolto.listino_r is not None:
                     cursor.execute("SELECT min_net_net_g FROM guardrail_aziendali WHERE ean=?", (ean_bench,))
@@ -2328,13 +2374,13 @@ elif menu == "Report Sintetico":
                     soglia_g = res_g[0] if res_g else 0.0
                     
                     input_strutturale = PricingInput(
-                        listino_r=contratto_risolto.listino_r,
-                        sconto_1=contratto_risolto.sconto_1, sconto_2=contratto_risolto.sconto_2, sconto_3=contratto_risolto.sconto_3,
-                        sconto_4=contratto_risolto.sconto_4, sconto_5=contratto_risolto.sconto_5, sconto_6=contratto_risolto.sconto_6, sconto_7=contratto_risolto.sconto_7,
-                        sconto_y=contratto_risolto.sconto_y, sconto_z=Decimal("0.00"), sconto_aa=Decimal("0.00"),
-                        sconto_carico=contratto_risolto.sconto_carico, sconto_pagamento=contratto_risolto.sconto_pagamento,
-                        voce_i=contratto_risolto.voce_i, voce_ii=contratto_risolto.voce_ii, voce_iii=contratto_risolto.voce_iii, voce_iv=contratto_risolto.voce_iv, voce_v=contratto_risolto.voce_v,
-                        min_net_net_g=Decimal(str(soglia_g))
+                        listino_r=safe_dec(contratto_risolto.listino_r),
+                        sconto_1=safe_dec(contratto_risolto.sconto_1), sconto_2=safe_dec(contratto_risolto.sconto_2), sconto_3=safe_dec(contratto_risolto.sconto_3),
+                        sconto_4=safe_dec(contratto_risolto.sconto_4), sconto_5=safe_dec(contratto_risolto.sconto_5), sconto_6=safe_dec(contratto_risolto.sconto_6), sconto_7=safe_dec(contratto_risolto.sconto_7),
+                        sconto_y=safe_dec(contratto_risolto.sconto_y), sconto_z=Decimal("0.00"), sconto_aa=Decimal("0.00"),
+                        sconto_carico=safe_dec(contratto_risolto.sconto_carico), sconto_pagamento=safe_dec(contratto_risolto.sconto_pagamento),
+                        voce_i=safe_dec(contratto_risolto.voce_i), voce_ii=safe_dec(contratto_risolto.voce_ii), voce_iii=safe_dec(contratto_risolto.voce_iii), voce_iv=safe_dec(contratto_risolto.voce_iv), voce_v=safe_dec(contratto_risolto.voce_v),
+                        min_net_net_g=safe_dec(soglia_g)
                     )
                     calcolo_strutturale = PricingEngine.calculate(input_strutturale)
                     
@@ -2412,26 +2458,23 @@ elif menu == "Report Sintetico":
                 rows_report = []
                 for p in all_prods:
                     p_ean, p_desc, p_tipo, p_min_g, p_sap, p_form, p_conf = p
-                    resolved = HierarchyResolver.resolve(conn, grp_rep_sel, sub_rep_sel, ass_rep_sel, p_ean, p_tipo)
-                    
-                    if resolved.listino_r is None:
-                        resolved.listino_r = get_listino_strutturale(conn, grp_rep_sel, sub_rep_sel, p_ean)
+                    resolved = get_merged_contract(conn, grp_rep_sel, sub_rep_sel, ass_rep_sel, p_ean, p_tipo)
                     
                     if resolved.listino_r is not None:
                         input_calc = PricingInput(
-                            listino_r=resolved.listino_r, sconto_1=resolved.sconto_1, sconto_2=resolved.sconto_2, sconto_3=resolved.sconto_3,
-                            sconto_4=resolved.sconto_4, sconto_5=resolved.sconto_5, sconto_6=resolved.sconto_6, sconto_7=resolved.sconto_7,
-                            sconto_y=resolved.sconto_y, sconto_z=Decimal("0.00"), sconto_aa=Decimal("0.00"),
-                            sconto_carico=resolved.sconto_carico, sconto_pagamento=resolved.sconto_pagamento,
-                            voce_i=resolved.voce_i, voce_ii=resolved.voce_ii, voce_iii=resolved.voce_iii, voce_iv=resolved.voce_iv, voce_v=resolved.voce_v,
-                            min_net_net_g=Decimal(str(p_min_g))
+                            listino_r=safe_dec(resolved.listino_r), sconto_1=safe_dec(resolved.sconto_1), sconto_2=safe_dec(resolved.sconto_2), sconto_3=safe_dec(resolved.sconto_3),
+                            sconto_4=safe_dec(resolved.sconto_4), sconto_5=safe_dec(resolved.sconto_5), sconto_6=safe_dec(resolved.sconto_6), sconto_7=safe_dec(resolved.sconto_7),
+                            sconto_y=safe_dec(resolved.sconto_y), sconto_z=Decimal("0.00"), sconto_aa=Decimal("0.00"),
+                            sconto_carico=safe_dec(resolved.sconto_carico), sconto_pagamento=safe_dec(resolved.sconto_pagamento),
+                            voce_i=safe_dec(resolved.voce_i), voce_ii=safe_dec(resolved.voce_ii), voce_iii=safe_dec(resolved.voce_iii), voce_iv=safe_dec(resolved.voce_iv), voce_v=safe_dec(resolved.voce_v),
+                            min_net_net_g=safe_dec(p_min_g)
                         )
                         res_calc = PricingEngine.calculate(input_calc)
                         
                         rows_report.append({
                             "EAN": p_ean, "Codice SAP": p_sap, "Descrizione Commerciale": p_desc, "Formato Lt": p_form, "Confezione": p_conf,
-                            "Listino Base R (Euro)": float(resolved.listino_r), "Sconto 1 (%)": float(resolved.sconto_1), "Sconto 2 (%)": float(resolved.sconto_2),
-                            "Sconto Local 6 (%)": float(resolved.sconto_6), "Oneri Logistica (%)": float(resolved.sconto_carico), "Oneri Pagamento (%)": float(resolved.sconto_pagamento),
+                            "Listino Base R (Euro)": float(resolved.listino_r), "Sconto 1 (%)": float(resolved.sconto_1 or 0), "Sconto 2 (%)": float(resolved.sconto_2 or 0),
+                            "Sconto Local 6 (%)": float(resolved.sconto_6 or 0), "Oneri Logistica (%)": float(resolved.sconto_carico or 0), "Oneri Pagamento (%)": float(resolved.sconto_pagamento or 0),
                             "Prezzo Netto AF (Euro)": float(res_calc.netto_in_fattura_2), "Premi Off-Invoice AL (%)": float(res_calc.contratto_tot_pfa),
                             "Prezzo Net Net AM (Euro)": float(res_calc.net_net_finale), "Soglia Sicurezza G (Euro)": float(p_min_g),
                             "Delta Margine (Euro)": float(res_calc.delta_vs_min), "Stato Approvazione": "VERDE" if res_calc.guardrail_ok else "ROSSO"
@@ -2469,6 +2512,7 @@ elif menu == "Report Sintetico":
                     )
 
     conn.close()
+    
 # ==========================================
 # SCHEDA 5: GUIDA OPERATIVA (MANUALE UTENTE COMPLETO)
 # ==========================================
