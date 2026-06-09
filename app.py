@@ -500,9 +500,21 @@ if menu == "Simulatore Offerte":
         st.warning(f"⚠️ Non sono presenti accordi locali per l'insegna **{associato_sel}**. Verranno applicate solo le condizioni nazionali del Sottogruppo.")
     # -----------------------------
 
-    if contract.listino_r is None:
-        st.error("ATTENZIONE: PRODOTTO FUORI ASSORTIMENTO PER QUESTO CLIENTE")
-        st.stop()
+# Un prodotto è fuori assortimento solo se il resolver non trova alcun accordo a nessun livello gerarchico
+    if contract.livello_risolto == "NESSUNO":
+        st.warning("⚠️ ATTENZIONE: PRODOTTO FUORI ASSORTIMENTO PER QUESTO CLIENTE")
+        is_fuori_assortimento = True
+    else:
+        st.success(f"✅ Accordo commerciale attivo trovato a livello: **{contract.livello_risolto}**")
+        is_fuori_assortimento = False
+        
+        # Se il listino_r è None ma il contratto esiste, recuperiamo il listino base dall'anagrafica prodotti
+        if contract.listino_r is None:
+            p_base = cursor.execute("SELECT prezzo_listino_base FROM anagrafica_prodotti WHERE TRIM(ean) = TRIM(?)", (ean,)).fetchone()
+            if p_base and p_base[0]:
+                contract.listino_r = Decimal(str(p_base[0]))
+            else:
+                contract.listino_r = Decimal("0.00")
 
     col_m1, col_m2, col_m3 = st.columns(3)
     col_m1.metric("Listino Base (R)", fmt_it(float(contract.listino_r), is_euro=True))
