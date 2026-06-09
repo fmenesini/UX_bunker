@@ -1932,6 +1932,14 @@ elif menu == "Back-Office (Contratti Nazionali)":
                 FROM accordi_commerciali a
                 LEFT JOIN anagrafica_master p ON a.chiave_livello = p.ean AND a.livello = 'REFERENZA'
                 WHERE a.associato_insegna = '' OR a.associato_insegna IS NULL
+                ORDER BY a.gruppo_macro ASC, a.sottogruppo ASC, 
+                    CASE a.livello
+                        WHEN 'GRUPPO' THEN 1
+                        WHEN 'SOTTOGRUPPO' THEN 2
+                        WHEN 'CATEGORIA' THEN 3
+                        WHEN 'REFERENZA' THEN 4
+                        ELSE 5
+                    END ASC
             """, conn)
             
             edited_df = st.data_editor(
