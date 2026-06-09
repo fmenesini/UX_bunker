@@ -2235,7 +2235,9 @@ else:
         *   **Netto Fattura 2 (AF):** Il prezzo reale a cui il prodotto viene fatturato, calcolato dopo aver applicato tutti gli sconti e gli oneri.
         *   **Premi Fuori Fattura / Off-Invoice (PFA):** (Voci I, II, III, ecc.). Sono i contributi di fine anno o fine periodo richiesti dalla GDO (es. premi di fine anno, contributi assortimento). *Riducono il nostro margine, ma non abbassano il prezzo a scaffale del cliente*.
         *   **NET-NET FINALE (AM):** È il ricavo reale e pulito per l'azienda. Si ottiene sottraendo i PFA dal Netto Fattura.
-        *   **Minimo Net-Net / Floor (G):** È la soglia minima di redditività fissata dall'azienda per una specifica referenza. Scendere sotto questo valore significa vendere in perdita.
+        *   **Minimo Net-Net:** È la soglia minima di redditività fissata dall'azienda per una specifica referenza. Scendere sotto questo valore significa vendere in perdita.
+        *   **Floor (G) / Guardrail Aziendale:** Rappresenta il limite fisico e invalicabile impostato dalla Direzione nel database, il "pavimento" sotto il quale il sistema blocca l'operazione. Agisce come un vero e proprio salvavita.
+            * *Esempio pratico:* Immagina che produrre, imbottigliare e consegnare una bottiglia di Extravergine costi 3,50 €. L'azienda fissa il Floor (G) a 3,80 € per garantirsi la sopravvivenza e coprire i costi fissi. Se durante una negoziazione concedi un mix di sconti, premi di fine anno e contributi volantino che fa crollare il tuo ricavo reale a 3,75 €, il sistema farà scattare il semaforo **ROSSO**. Ti avviserà immediatamente che stai "bucando il Floor", distruggendo valore per 0,05 € su ogni singola bottiglia venduta.
         *   **Spazio Promo MAX (% o €):** Indica il margine di manovra residuo. È la differenza tra il prezzo simulato e il Floor minimo aziendale.
         """)
         
