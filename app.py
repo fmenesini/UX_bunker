@@ -1028,8 +1028,15 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 
                 for idx, row in df_temp.iterrows():
                     # Usiamo il nuovo resolver universale (forzando l'insegna vuota per avere solo i dati nazionali)
-                    contract = get_merged_contract(conn, gruppo_sel, sottogruppo_sel, "", row['ean'], row['tipo_olio'])
-                    
+                    contract = HierarchyResolver.resolve(
+                        conn=conn,
+                        gruppo=gruppo_sel,
+                        sottogruppo=sottogruppo_sel,
+                        insegna="",
+                        ean=row['ean'],
+                        categoria=row['tipo_olio']
+                    )
+                        
                     if contract.listino_r is not None:
                         if first_contract:
                             st.session_state.global_carico = safe_float(contract.sconto_carico)
@@ -2459,8 +2466,15 @@ elif menu == "Report Sintetico":
                 
                 insegna_campione = res_ins[0] if res_ins else ""
                 
-                contratto_risolto = get_merged_contract(conn, g_macro, s_gruppo, insegna_campione, ean_bench, tipo_olio_bench)
-                
+                contratto_risolto = HierarchyResolver.resolve(
+                    conn=conn,
+                    gruppo=g_macro,
+                    sottogruppo=s_gruppo,
+                    insegna=insegna_campione,
+                    ean=ean_bench,
+                    categoria=tipo_olio_bench
+                )
+                   
                 if contratto_risolto.listino_r is not None:
                     cursor.execute("SELECT min_net_net_g FROM guardrail_aziendali WHERE ean=?", (ean_bench,))
                     res_g = cursor.fetchone()
