@@ -66,13 +66,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# INIZIALIZZAZIONE DATABASE (RISCRITTA PER ESSERE ROBUSTA)
+# INIZIALIZZAZIONE DATABASE
 # ==========================================
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # 1. Creazione sicura di tutte le tabelle (se non esistono)
     cursor.execute("CREATE TABLE IF NOT EXISTS anagrafica_master (ean TEXT PRIMARY KEY, codice_sap TEXT, tipo_olio TEXT, descrizione_sap TEXT, descrizione_commerciale TEXT, formato_lt REAL, confezione TEXT, pezzi_cartone INTEGER, cartoni_strato INTEGER, strati_pallet INTEGER, cartoni_pallet INTEGER, conservazione_mesi INTEGER, shelf_life_mesi INTEGER)")
     cursor.execute("CREATE TABLE IF NOT EXISTS guardrail_aziendali (ean TEXT PRIMARY KEY, min_net_net_g REAL DEFAULT 0.0)")
     cursor.execute("CREATE TABLE IF NOT EXISTS clienti (id INTEGER PRIMARY KEY AUTOINCREMENT, gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, attivo BOOLEAN DEFAULT 1, UNIQUE(gruppo_macro, sottogruppo, associato_insegna))")
@@ -81,7 +80,6 @@ def init_db():
     cursor.execute("CREATE TABLE IF NOT EXISTS storico_promo (id INTEGER PRIMARY KEY AUTOINCREMENT, data_salvataggio TIMESTAMP DEFAULT CURRENT_TIMESTAMP, stato_promo TEXT, gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, ean TEXT, descrizione_commerciale TEXT, listino_r REAL, sconto_y REAL, sconto_z REAL, sconto_aa REAL, net_net_am REAL, volumi_stimati INTEGER, contributo_fisso REAL, contributo_pezzo REAL, costo_totale_extra REAL, note TEXT, sell_in_dal DATE, sell_in_al DATE, sell_out_dal DATE, sell_out_al DATE, min_net_net_g REAL, net_net_post_promo REAL)")
     conn.commit()
 
-    # 2. Aggiunta sicura di colonne mancanti (per vecchi database)
     migrazioni = [
         "ALTER TABLE storico_promo ADD COLUMN sell_in_dal DATE",
         "ALTER TABLE storico_promo ADD COLUMN sell_in_al DATE",
@@ -95,16 +93,35 @@ def init_db():
         try:
             cursor.execute(query)
         except sqlite3.OperationalError:
-            # Se la colonna esiste già, ignora l'errore e passa alla successiva
             pass
     conn.commit()
 
-    # 3. Se il database è completamente vuoto, facciamo il seed iniziale
     cursor.execute("SELECT COUNT(*) FROM anagrafica_master")
     if cursor.fetchone()[0] == 0:
         seed_baseline_data(conn)
 
     conn.close()
+
+# --- FUNZIONE DI SALVATAGGIO LISTINO ---
+# Forza il recupero del Listino Base dal livello Sottogruppo o Gruppo, ignorando gli accordi locali
+def get_listino_strutturale(conn, gruppo, sottogruppo, ean):
+    c = conn.cursor()
+    c.execute("""
+        SELECT listino_r FROM accordi_commerciali 
+        WHERE gruppo_macro=? AND sottogruppo=? AND chiave_livello=? AND livello='REFERENZA' 
+        AND (associato_insegna='' OR associato_insegna IS NULL) AND listino_r IS NOT NULL
+    """, (gruppo, sottogruppo, ean))
+    res = c.fetchone()
+    if res: return res[0]
+    
+    c.execute("""
+        SELECT listino_r FROM accordi_commerciali 
+        WHERE gruppo_macro=? AND (sottogruppo='' OR sottogruppo IS NULL) AND chiave_livello=? AND livello='REFERENZA' 
+        AND (associato_insegna='' OR associato_insegna IS NULL) AND listino_r IS NOT NULL
+    """, (gruppo, ean))
+    res = c.fetchone()
+    return res[0] if res else None
+# ---------------------------------------
     
 def seed_baseline_data(conn):
     cursor = conn.cursor()
@@ -366,6 +383,9 @@ if menu == "Simulatore Offerte":
         
     ean, tipo_olio, min_net_net_g, codice_sap, formato_lt, pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet = prodotti_dict[prodotto_scelto]
     contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, ean, tipo_olio)
+    
+    if contract.listino_r is None:
+        contract.listino_r = get_listino_strutturale(conn, gruppo_sel, sottogruppo_sel, ean)
 
     # --- AVVISO ACCORDI LOCALI ---
     cursor.execute("SELECT COUNT(*) FROM accordi_commerciali WHERE gruppo_macro=? AND associato_insegna=? AND associato_insegna != ''", (gruppo_sel, associato_sel))
@@ -917,6 +937,9 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 
                 for idx, row in df_temp.iterrows():
                     contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
+                    
+                    if contract.listino_r is None:
+                        contract.listino_r = get_listino_strutturale(conn, gruppo_sel, sottogruppo_sel, row['ean'])
                     
                     if contract.listino_r is not None:
                         if first_contract:
@@ -1962,10 +1985,12 @@ elif menu == "Accordi Locali (Promo)":
     cursor = conn.cursor()
     
     df_locali = pd.read_sql_query("""
-        SELECT id, gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello,
-               sconto_6, sconto_7, sconto_y, note_locali
-        FROM accordi_commerciali
-        WHERE associato_insegna != '' AND associato_insegna IS NOT NULL
+        SELECT a.id, a.gruppo_macro, a.sottogruppo, a.associato_insegna, a.livello, 
+               COALESCE(m.descrizione_commerciale || ' [' || a.chiave_livello || ']', a.chiave_livello) as prodotto_ean,
+               a.sconto_6, a.sconto_7, a.sconto_y, a.note_locali
+        FROM accordi_commerciali a
+        LEFT JOIN anagrafica_master m ON a.chiave_livello = m.ean
+        WHERE a.associato_insegna != '' AND a.associato_insegna IS NOT NULL
     """, conn)
     
     cursor.execute("SELECT DISTINCT gruppo_macro FROM struttura_gdo WHERE attivo=1 ORDER BY gruppo_macro")
@@ -1976,6 +2001,9 @@ elif menu == "Accordi Locali (Promo)":
     
     cursor.execute("SELECT DISTINCT sottogruppo FROM accordi_commerciali WHERE sottogruppo != '' ORDER BY sottogruppo")
     sottogruppi_noti = [r[0] for r in cursor.fetchall()]
+    
+    cursor.execute("SELECT ean, descrizione_commerciale FROM anagrafica_master")
+    prod_list = [f"{r[1]} [{r[0]}]" for r in cursor.fetchall()]
     
     with st.container(border=True):
         st.markdown("#### Gestione Accordi Locali")
@@ -1990,7 +2018,7 @@ elif menu == "Accordi Locali (Promo)":
                 "sottogruppo": st.column_config.SelectboxColumn("Sottogruppo", options=sottogruppi_noti),
                 "associato_insegna": st.column_config.SelectboxColumn("Insegna Locale", options=insegne_attive, required=True),
                 "livello": st.column_config.SelectboxColumn("Livello", options=["CATEGORIA", "REFERENZA"], required=True),
-                "chiave_livello": st.column_config.TextColumn("EAN / Categoria"),
+                "prodotto_ean": st.column_config.SelectboxColumn("Referenza / Categoria", options=prod_list, required=True),
                 "sconto_6": st.column_config.NumberColumn("Sconto 6 (%)", format="%.2f"),
                 "sconto_7": st.column_config.NumberColumn("Sconto 7 (%)", format="%.2f"),
                 "sconto_y": st.column_config.NumberColumn("Sconto Y (%)", format="%.2f"),
@@ -2006,6 +2034,13 @@ elif menu == "Accordi Locali (Promo)":
                         def check_nan(val):
                             return float(val) if (pd.notna(val) and str(val).strip() != "") else None
                             
+                        # Estrai l'EAN dalla stringa "Nome [EAN]"
+                        raw_chiave = str(r.get("prodotto_ean"))
+                        if "[" in raw_chiave and "]" in raw_chiave:
+                            chiave_pulita = raw_chiave.split("[")[-1].replace("]", "").strip()
+                        else:
+                            chiave_pulita = raw_chiave.strip()
+                            
                         cursor.execute("""
                         INSERT OR REPLACE INTO accordi_commerciali (
                             gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello,
@@ -2016,7 +2051,7 @@ elif menu == "Accordi Locali (Promo)":
                             str(r.get("sottogruppo")).upper().strip() if pd.notna(r.get("sottogruppo")) else "",
                             str(r.get("associato_insegna")).upper().strip() if pd.notna(r.get("associato_insegna")) else "",
                             str(r.get("livello")).upper().strip() if pd.notna(r.get("livello")) else "REFERENZA",
-                            str(r.get("chiave_livello")).strip() if pd.notna(r.get("chiave_livello")) else "",
+                            chiave_pulita,
                             check_nan(r.get("sconto_6")), check_nan(r.get("sconto_7")), check_nan(r.get("sconto_y")),
                             str(r.get("note_locali")).strip() if pd.notna(r.get("note_locali")) else ""
                         ))
@@ -2025,6 +2060,54 @@ elif menu == "Accordi Locali (Promo)":
             except Exception as e:
                 st.error(f"Errore durante l'elaborazione: {e}")
                 
+    col_l1, col_l2 = st.columns(2)
+    with col_l1:
+        with st.container(border=True):
+            st.markdown("#### Esporta Accordi Locali")
+            buffer_locali = io.BytesIO()
+            with pd.ExcelWriter(buffer_locali, engine='openpyxl') as writer:
+                df_locali.to_excel(writer, index=False, sheet_name="Accordi_Locali")
+            st.download_button("Scarica Accordi Locali (Excel)", buffer_locali.getvalue(), f"Accordi_Locali_{datetime.now().strftime('%Y%m%d')}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            
+    with col_l2:
+        with st.container(border=True):
+            st.markdown("#### Importa Accordi Locali")
+            up_locali = st.file_uploader("Carica Excel Accordi Locali", type=['xlsx'], key="up_locali")
+            if up_locali:
+                if st.button("Conferma Importazione Locali"):
+                    try:
+                        df_imp_locali = pd.read_excel(up_locali)
+                        df_imp_locali = DataSanitizer.sanitize_excel_import(df_imp_locali, expected_columns=["gruppo_macro", "associato_insegna", "livello", "prodotto_ean"])
+                        with conn:
+                            for _, r in df_imp_locali.iterrows():
+                                raw_chiave = str(r.get("prodotto_ean"))
+                                if "[" in raw_chiave and "]" in raw_chiave:
+                                    chiave_pulita = raw_chiave.split("[")[-1].replace("]", "").strip()
+                                else:
+                                    chiave_pulita = raw_chiave.strip()
+                                    
+                                def check_nan(val):
+                                    return float(val) if (pd.notna(val) and str(val).strip() != "") else None
+                                    
+                                cursor.execute("""
+                                INSERT OR REPLACE INTO accordi_commerciali (
+                                    gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello,
+                                    sconto_6, sconto_7, sconto_y, note_locali
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                """, (
+                                    str(r.get("gruppo_macro")).upper().strip(),
+                                    str(r.get("sottogruppo")).upper().strip() if pd.notna(r.get("sottogruppo")) else "",
+                                    str(r.get("associato_insegna")).upper().strip(),
+                                    str(r.get("livello")).upper().strip(),
+                                    chiave_pulita,
+                                    check_nan(r.get("sconto_6")), check_nan(r.get("sconto_7")), check_nan(r.get("sconto_y")),
+                                    str(r.get("note_locali")).strip() if pd.notna(r.get("note_locali")) else ""
+                                ))
+                        st.success("Importazione completata.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore importazione: {e}")
+                        
     conn.close()
 
 # ==========================================
@@ -2076,6 +2159,9 @@ elif menu == "Report Sintetico":
         
         for p in all_products:
             res = HierarchyResolver.resolve(conn, c[0], sg, c[1], p[0], p[1])
+            if res.listino_r is None:
+                res.listino_r = get_listino_strutturale(conn, c[0], sg, p[0])
+                
             if res.listino_r is not None:
                 # Calcolo Net Net reale
                 p_net = float(res.listino_r)
@@ -2192,13 +2278,13 @@ elif menu == "Report Sintetico":
         with col_f1:
             cursor.execute("SELECT DISTINCT tipo_olio FROM anagrafica_master ORDER BY tipo_olio")
             categorie_disponibili = [r[0] for r in cursor.fetchall()]
-            cat_scelta = st.selectbox("Filtra per Categoria Merceologica", categorie_disponibili, key="bench_cat")
+            cat_scelta = st.selectbox("Filtra per Categoria Merceologica", categorie_disponibili, key="bench_cat_old")
             
         with col_f2:
             cursor.execute("SELECT ean, descrizione_commerciale FROM anagrafica_master WHERE tipo_olio=? ORDER BY descrizione_commerciale", (cat_scelta,))
             prod_dict = {f"{p[1]} [{p[0]}]": (p[0], cat_scelta) for p in cursor.fetchall()}
             if prod_dict:
-                prod_scelto_bench = st.selectbox("Seleziona Referenza da Analizzare", list(prod_dict.keys()), key="bench_prod")
+                prod_scelto_bench = st.selectbox("Seleziona Referenza da Analizzare", list(prod_dict.keys()), key="bench_prod_old")
                 ean_bench, tipo_olio_bench = prod_dict[prod_scelto_bench]
             else:
                 st.warning("Nessun prodotto trovato.")
@@ -2233,6 +2319,8 @@ elif menu == "Report Sintetico":
                 insegna_campione = res_ins[0] if res_ins else ""
                 
                 contratto_risolto = HierarchyResolver.resolve(conn, g_macro, s_gruppo, insegna_campione, ean_bench, tipo_olio_bench)
+                if contratto_risolto.listino_r is None:
+                    contratto_risolto.listino_r = get_listino_strutturale(conn, g_macro, s_gruppo, ean_bench)
                 
                 if contratto_risolto.listino_r is not None:
                     cursor.execute("SELECT min_net_net_g FROM guardrail_aziendali WHERE ean=?", (ean_bench,))
@@ -2325,6 +2413,9 @@ elif menu == "Report Sintetico":
                 for p in all_prods:
                     p_ean, p_desc, p_tipo, p_min_g, p_sap, p_form, p_conf = p
                     resolved = HierarchyResolver.resolve(conn, grp_rep_sel, sub_rep_sel, ass_rep_sel, p_ean, p_tipo)
+                    
+                    if resolved.listino_r is None:
+                        resolved.listino_r = get_listino_strutturale(conn, grp_rep_sel, sub_rep_sel, p_ean)
                     
                     if resolved.listino_r is not None:
                         input_calc = PricingInput(
