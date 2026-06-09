@@ -84,11 +84,23 @@ def init_db():
     cursor.execute("CREATE TABLE IF NOT EXISTS anagrafica_master (ean TEXT PRIMARY KEY, codice_sap TEXT, tipo_olio TEXT, descrizione_sap TEXT, descrizione_commerciale TEXT, formato_lt REAL, confezione TEXT, pezzi_cartone INTEGER, cartoni_strato INTEGER, strati_pallet INTEGER, cartoni_pallet INTEGER, conservazione_mesi INTEGER, shelf_life_mesi INTEGER)")
     cursor.execute("CREATE TABLE IF NOT EXISTS guardrail_aziendali (ean TEXT PRIMARY KEY, min_net_net_g REAL DEFAULT 0.0)")
     cursor.execute("CREATE TABLE IF NOT EXISTS clienti (id INTEGER PRIMARY KEY AUTOINCREMENT, gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, attivo BOOLEAN DEFAULT 1, UNIQUE(gruppo_macro, sottogruppo, associato_insegna))")
-    cursor.execute("CREATE TABLE IF NOT EXISTS struttura_gdo (id INTEGER PRIMARY KEY AUTOINCREMENT, gruppo_macro TEXT, associato_insegna TEXT, attivo BOOLEAN DEFAULT 0, UNIQUE(gruppo_macro, associato_insegna))")
+    
+    # Tabella struttura_gdo aggiornata con colonna sottogruppo
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS struttura_gdo (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, 
+            gruppo_macro TEXT, 
+            sottogruppo TEXT, 
+            associato_insegna TEXT, 
+            attivo BOOLEAN DEFAULT 0, 
+            UNIQUE(gruppo_macro, sottogruppo, associato_insegna)
+        )
+    """)
     cursor.execute("CREATE TABLE IF NOT EXISTS accordi_commerciali (id INTEGER PRIMARY KEY AUTOINCREMENT, gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, livello TEXT, chiave_livello TEXT, listino_r REAL, sconto_1 REAL, sconto_2 REAL, sconto_3 REAL, sconto_4 REAL, sconto_5 REAL, sconto_6 REAL, sconto_7 REAL, sconto_y REAL, sconto_carico REAL, sconto_pagamento REAL, voce_contratto_1 REAL, voce_contratto_2 REAL, voce_contratto_3 REAL, voce_contratto_4 REAL, voce_contratto_5 REAL, note_locali TEXT, UNIQUE(gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello))")
     cursor.execute("CREATE TABLE IF NOT EXISTS storico_promo (id INTEGER PRIMARY KEY AUTOINCREMENT, data_salvataggio TIMESTAMP DEFAULT CURRENT_TIMESTAMP, stato_promo TEXT, gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, ean TEXT, descrizione_commerciale TEXT, listino_r REAL, sconto_y REAL, sconto_z REAL, sconto_aa REAL, net_net_am REAL, volumi_stimati INTEGER, contributo_fisso REAL, contributo_pezzo REAL, costo_totale_extra REAL, note TEXT, sell_in_dal DATE, sell_in_al DATE, sell_out_dal DATE, sell_out_al DATE, min_net_net_g REAL, net_net_post_promo REAL)")
     conn.commit()
 
+    # Blocco Migrazioni del database
     migrazioni = [
         "ALTER TABLE storico_promo ADD COLUMN sell_in_dal DATE",
         "ALTER TABLE storico_promo ADD COLUMN sell_in_al DATE",
@@ -96,7 +108,8 @@ def init_db():
         "ALTER TABLE storico_promo ADD COLUMN sell_out_al DATE",
         "ALTER TABLE storico_promo ADD COLUMN min_net_net_g REAL",
         "ALTER TABLE storico_promo ADD COLUMN net_net_post_promo REAL",
-        "ALTER TABLE accordi_commerciali ADD COLUMN note_locali TEXT"
+        "ALTER TABLE accordi_commerciali ADD COLUMN note_locali TEXT",
+        "ALTER TABLE struttura_gdo ADD COLUMN sottogruppo TEXT" # Migrazione automatica se tabella pre-esistente
     ]
     for query in migrazioni:
         try:
