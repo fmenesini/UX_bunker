@@ -2289,8 +2289,9 @@ else:
         Da usare quando il Buyer fissa un obiettivo di prezzo. Esempio: *"Voglio pagare questa bottiglia 3,80 € netti"*.
         1. Seleziona la Modalità A.
         2. Inserisci `3.80` nel campo "Prezzo Target Net Net".
-        3. Il sistema calcolerà automaticamente la percentuale esatta di **Sconto Promozionale [Z]** necessaria per arrivare a quel risultato.
+        3. Il sistema calcolerà automaticamente la percentuale esatta di **Sconto Promozionale [Z]** necessaria per arrivare a quel risultato; questo valore varia dinamicamente ma non è modificabile direttamante in quanto va a garantire il rispetto del limite net net pre impostato
         4. Se 3,80 € è inferiore al minimo aziendale (Floor), il sistema mostrerà l'avviso in **ROSSO**, indicando la perdita esatta.
+        5. LE uniche leve utilizzabili sono lo Sconto continuativo %, da utilizzare previa verifica di accordo locale, e lo sconto unitario in fattura. Al variare di questi lo Sconto Promozionale si adatterà di conseguneza.
 
         **Modalità B: Tentativi Spot Manuali**
         Da usare per simulazioni libere.
