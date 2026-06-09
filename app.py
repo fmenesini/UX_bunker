@@ -6,14 +6,13 @@ import openpyxl
 import random
 import plotly.express as px
 import plotly.graph_objects as go
-import HierarchyResolver
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date
 import logging
 from dataclasses import replace
 from types import SimpleNamespace
-from core.hierarchy_resolver
+from core.hierarchy_resolver import HierarchyResolver
 
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
