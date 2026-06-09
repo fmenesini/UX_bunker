@@ -810,8 +810,8 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         cursor.execute("SELECT DISTINCT gruppo_macro FROM clienti WHERE attivo=1 ORDER BY gruppo_macro")
         gruppi = [r[0] for r in cursor.fetchall()]
         
-        # --- AGGIUNTO IL TERZO SELETTORE PER L'INSEGNA LOCALE ---
-        col_ctx1, col_ctx2, col_ctx3 = st.columns(3)
+        # --- RIPRISTINO A 2 LIVELLI (Accordi Nazionali/Interregionali) ---
+        col_ctx1, col_ctx2 = st.columns(2)
         with col_ctx1:
             gruppo_sel = st.selectbox("Gruppo GDO", ["Nessuno"] + gruppi)
         
@@ -822,12 +822,8 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         with col_ctx2:
             sottogruppo_sel = st.selectbox("Sottogruppo GDO", [""] + sottogruppi if gruppo_sel != "Nessuno" else [""])
             
-        associati = []
-        if gruppo_sel != "Nessuno":
-            cursor.execute("SELECT DISTINCT associato_insegna FROM clienti WHERE gruppo_macro=? AND sottogruppo=? AND attivo=1 ORDER BY associato_insegna", (gruppo_sel, sottogruppo_sel))
-            associati = [r[0] for r in cursor.fetchall()]
-        with col_ctx3:
-            associato_sel = st.selectbox("Insegna Locale", [""] + associati if gruppo_sel != "Nessuno" else [""])
+        # Forziamo l'insegna vuota: il sistema ignorerà le promo locali e prenderà solo gli accordi di Gruppo/Sottogruppo
+        associato_sel = ""
         # --------------------------------------------------------
 
     query = """
