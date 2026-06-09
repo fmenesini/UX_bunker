@@ -1778,7 +1778,7 @@ elif menu == "Back-Office (Contratti)":
                             st.error(f"Errore durante l'importazione: {e}")
 
     with tab_guardrail:
-        st.markdown("INSERISCI I MINIMI NET NET PER REFERENZA")
+        st.markdown("Minimi Net Net €/pz per Referenza")
         with st.container(border=True):
             st.markdown("#### Modifica Diretta Guardrail")
             
