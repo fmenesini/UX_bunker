@@ -1839,7 +1839,22 @@ elif menu == "Back-Office (Contratti Nazionali)":
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             ins_gruppo = st.selectbox("Gruppo", gruppi_attivi, key="ins_g")
-            ins_sottogruppo = st.selectbox("Sottogruppo", [""] + sottogruppi_noti, key="ins_sg")
+            
+            cursor.execute("""
+                SELECT DISTINCT sottogruppo FROM accordi_commerciali 
+                WHERE gruppo_macro=? AND sottogruppo != '' AND sottogruppo IS NOT NULL
+                UNION
+                SELECT DISTINCT sottogruppo FROM struttura_gdo 
+                WHERE gruppo_macro=? AND sottogruppo != '' AND sottogruppo IS NOT NULL
+                ORDER BY sottogruppo
+            """, (ins_gruppo, ins_gruppo))
+            sottogruppi_attivi_del_gruppo = [r[0] for r in cursor.fetchall()]
+            
+            ins_sottogruppo = st.selectbox(
+                "Sottogruppo", 
+                [""] + sottogruppi_attivi_del_gruppo, 
+                key="ins_sg"
+            )
         with col2:
             ins_livello = st.selectbox("Livello Regola", ["GRUPPO", "SOTTOGRUPPO", "CATEGORIA", "REFERENZA"], key="ins_l")
             
