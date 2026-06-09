@@ -10,6 +10,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date
 import logging
+from dataclasses import replace
 
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
@@ -115,14 +116,11 @@ def get_merged_contract(conn, gruppo, sottogruppo, insegna, ean, categoria):
     Risolve il contratto fondendo gli accordi Nazionali (Strutturali) con quelli Locali (Promo).
     Garantisce che Listino, S1-S5 e PFA provengano dalla sede centrale, mentre S6, S7 e Y dall'insegna.
     """
-    # 1. Recupero contratto strutturale (Insegna vuota)
     base = HierarchyResolver.resolve(conn, gruppo, sottogruppo, "", ean, categoria)
     
-    # 2. Se c'è un'insegna, recupero contratto locale e fondo i dati
     if insegna and str(insegna).strip() != "":
         loc = HierarchyResolver.resolve(conn, gruppo, sottogruppo, insegna, ean, categoria)
         
-        # Se il locale non ha un listino o sconti strutturali, li eredita dal base
         strutturali_attrs = [
             'listino_r', 'sconto_1', 'sconto_2', 'sconto_3', 'sconto_4', 'sconto_5', 
             'sconto_carico', 'sconto_pagamento', 
@@ -286,25 +284,37 @@ init_db()
 # ==========================================
 # GESTIONE NAVIGAZIONE MENU (RIORGANIZZATA)
 # ==========================================
-if "nav_section" not in st.session_state:
-    st.session_state.nav_section = "Simulazioni"
-if "nav_module_sim" not in st.session_state:
-    st.session_state.nav_module_sim = "Simulatore Offerte"
+if "main_menu_radio" not in st.session_state:
+    st.session_state.main_menu_radio = "Simulatore Offerte"
 
 if "go_to_menu" in st.session_state:
-    st.session_state.nav_section = "Simulazioni"
-    st.session_state.nav_module_sim = st.session_state.go_to_menu
+    st.session_state.main_menu_radio = st.session_state.go_to_menu
     del st.session_state.go_to_menu
 
 st.sidebar.markdown("## Menu Principale")
-sec = st.sidebar.selectbox("Sezione", ["Simulazioni", "Database", "Report e Guide"], key="nav_section")
 
-if sec == "Simulazioni":
-    menu = st.sidebar.radio("Modulo", ["Master Grid Rinnovi (N vs N+1)", "Simulatore Offerte", "Storico Promozioni"], key="nav_module_sim")
-elif sec == "Database":
-    menu = st.sidebar.radio("Modulo", ["Dati Anagrafici (Logistica)", "Back-Office (Contratti Nazionali)", "Anagrafica GDO (Clienti)", "Accordi Locali (Promo)"], key="nav_module_db")
-else:
-    menu = st.sidebar.radio("Modulo", ["Report Sintetico", "Guida Operativa"], key="nav_module_rep")
+menu_options = [
+    "--- 📊 SIMULAZIONI ---",
+    "Simulatore Offerte", 
+    "Master Grid Rinnovi (N vs N+1)",
+    "Storico Promozioni", 
+    "--- 🗄️ DATABASE ---",
+    "Dati Anagrafici (Logistica)", 
+    "Back-Office (Contratti Nazionali)", 
+    "Anagrafica GDO (Clienti)",
+    "Accordi Locali (Promo)",
+    "--- 📈 REPORT E GUIDE ---",
+    "Report Sintetico", 
+    "Guida Operativa"
+]
+
+menu_selection = st.sidebar.radio("", menu_options, label_visibility="collapsed", key="main_menu_radio")
+
+if menu_selection.startswith("---"):
+    st.sidebar.warning("Seleziona una voce valida dal menu ⬆️")
+    st.stop()
+    
+menu = menu_selection
 
 # --- DANGER ZONE NELLA SIDEBAR ---
 st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
@@ -490,27 +500,24 @@ if menu == "Simulatore Offerte":
     if "A. Partenza" in metodo_lavoro:
         target_dec = safe_dec(target_net_net)
         sconto_z = PricingEngine.calculate_inverse(target_dec, engine_input, "Z")
-        engine_input.sconto_z = sconto_z
+        engine_input = replace(engine_input, sconto_z=sconto_z)
 
     with col_l2:
         st.markdown("#### Limiti Promozionali per il net net minimo")
         with st.container(border=True):
             if "A. Partenza" in metodo_lavoro:
-                engine_max_z = PricingInput(**engine_input.__dict__)
-                engine_max_z.sconto_z = Decimal("0.00")
+                engine_max_z = replace(engine_input, sconto_z=Decimal("0.00"))
                 z_max_consentito = PricingEngine.calculate_inverse(safe_dec(min_net_net_g), engine_max_z, "Z")
                 st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f")
                 st.markdown("<div style='height: 85px;'></div>", unsafe_allow_html=True) 
             else:
-                engine_max_z = PricingInput(**engine_input.__dict__)
-                engine_max_z.sconto_z = Decimal("0.00")
+                engine_max_z = replace(engine_input, sconto_z=Decimal("0.00"))
                 z_max_consentito = PricingEngine.calculate_inverse(safe_dec(min_net_net_g), engine_max_z, "Z")
                 st.number_input("Sconto Promo MAX Consentito [Z]", value=float(z_max_consentito), disabled=True, format="%.2f")
                 
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
                 
-                engine_max_aa = PricingInput(**engine_input.__dict__)
-                engine_max_aa.sconto_aa = Decimal("0.00")
+                engine_max_aa = replace(engine_input, sconto_aa=Decimal("0.00"))
                 aa_max_consentito = PricingEngine.calculate_inverse(safe_dec(min_net_net_g), engine_max_aa, "AA")
                 st.number_input("Sconto Unitario MAX Consentito [AA]", value=float(aa_max_consentito), disabled=True, format="%.2f")
 
@@ -937,6 +944,9 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                 
                 for idx, row in df_temp.iterrows():
                     contract = get_merged_contract(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
+                    
+                    if contract.listino_r is None:
+                        contract.listino_r = get_listino_strutturale(conn, gruppo_sel, sottogruppo_sel, row['ean'])
                     
                     if contract.listino_r is not None:
                         if first_contract:
@@ -1732,14 +1742,15 @@ elif menu == "Back-Office (Contratti Nazionali)":
             ins_gruppo = st.selectbox("Gruppo", gruppi_attivi, key="ins_g")
             ins_sottogruppo = st.selectbox("Sottogruppo", [""] + sottogruppi_noti, key="ins_sg")
         with col2:
-            ins_livello = st.selectbox("Livello", ["GRUPPO", "SOTTOGRUPPO", "CATEGORIA", "REFERENZA"], key="ins_l")
+            ins_livello = st.selectbox("Livello Regola", ["GRUPPO", "SOTTOGRUPPO", "CATEGORIA", "REFERENZA"], key="ins_l")
             
-            opzioni_chiave = [""]
             if ins_livello == "CATEGORIA":
-                opzioni_chiave = categorie_disponibili
+                ins_chiave = st.selectbox("Seleziona Categoria", categorie_disponibili, key="ins_c_cat")
             elif ins_livello == "REFERENZA":
-                opzioni_chiave = prod_list
-            ins_chiave = st.selectbox("Chiave Livello", opzioni_chiave, key="ins_c")
+                ins_chiave = st.selectbox("Seleziona Referenza", prod_list, key="ins_c_ref")
+            else:
+                st.info(f"Regola applicata a tutto il {ins_livello}")
+                ins_chiave = ""
             
         with col3:
             ins_parametro = st.selectbox("Parametro da Impostare", [
@@ -2512,7 +2523,6 @@ elif menu == "Report Sintetico":
                     )
 
     conn.close()
-    
 # ==========================================
 # SCHEDA 5: GUIDA OPERATIVA (MANUALE UTENTE COMPLETO)
 # ==========================================
