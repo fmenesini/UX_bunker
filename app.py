@@ -1625,7 +1625,11 @@ elif menu == "Anagrafica GDO (Clienti)":
     
     conn = sqlite3.connect(DB_FILE)
     
-    df_gdo = pd.read_sql_query("SELECT id, gruppo_macro, associato_insegna, attivo FROM struttura_gdo ORDER BY gruppo_macro, associato_insegna", conn)
+    df_gdo = pd.read_sql_query("""
+        SELECT id, gruppo_macro, sottogruppo, associato_insegna, attivo 
+        FROM struttura_gdo 
+        ORDER BY gruppo_macro, sottogruppo, associato_insegna
+    """, conn)
     df_gdo['attivo'] = df_gdo['attivo'].astype(bool)
     
     with st.container(border=True):
@@ -1634,8 +1638,10 @@ elif menu == "Anagrafica GDO (Clienti)":
             df_gdo,
             hide_index=True,
             use_container_width=True,
-            disabled=["id", "gruppo_macro", "associato_insegna"]
+            disabled=["id", "gruppo_macro", "sottogruppo", "associato_insegna"]
         )
+
+
         
         if st.button("SALVA STATO INSEGNE", type="primary"):
             cursor = conn.cursor()
