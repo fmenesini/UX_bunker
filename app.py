@@ -84,23 +84,11 @@ def init_db():
     cursor.execute("CREATE TABLE IF NOT EXISTS anagrafica_master (ean TEXT PRIMARY KEY, codice_sap TEXT, tipo_olio TEXT, descrizione_sap TEXT, descrizione_commerciale TEXT, formato_lt REAL, confezione TEXT, pezzi_cartone INTEGER, cartoni_strato INTEGER, strati_pallet INTEGER, cartoni_pallet INTEGER, conservazione_mesi INTEGER, shelf_life_mesi INTEGER)")
     cursor.execute("CREATE TABLE IF NOT EXISTS guardrail_aziendali (ean TEXT PRIMARY KEY, min_net_net_g REAL DEFAULT 0.0)")
     cursor.execute("CREATE TABLE IF NOT EXISTS clienti (id INTEGER PRIMARY KEY AUTOINCREMENT, gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, attivo BOOLEAN DEFAULT 1, UNIQUE(gruppo_macro, sottogruppo, associato_insegna))")
-    
-    # Tabella struttura_gdo aggiornata con colonna sottogruppo
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS struttura_gdo (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
-            gruppo_macro TEXT, 
-            sottogruppo TEXT, 
-            associato_insegna TEXT, 
-            attivo BOOLEAN DEFAULT 0, 
-            UNIQUE(gruppo_macro, sottogruppo, associato_insegna)
-        )
-    """)
+    cursor.execute("CREATE TABLE IF NOT EXISTS struttura_gdo (id INTEGER PRIMARY KEY AUTOINCREMENT, gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, attivo BOOLEAN DEFAULT 0, UNIQUE(gruppo_macro, sottogruppo, associato_insegna))")
     cursor.execute("CREATE TABLE IF NOT EXISTS accordi_commerciali (id INTEGER PRIMARY KEY AUTOINCREMENT, gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, livello TEXT, chiave_livello TEXT, listino_r REAL, sconto_1 REAL, sconto_2 REAL, sconto_3 REAL, sconto_4 REAL, sconto_5 REAL, sconto_6 REAL, sconto_7 REAL, sconto_y REAL, sconto_carico REAL, sconto_pagamento REAL, voce_contratto_1 REAL, voce_contratto_2 REAL, voce_contratto_3 REAL, voce_contratto_4 REAL, voce_contratto_5 REAL, note_locali TEXT, UNIQUE(gruppo_macro, sottogruppo, associato_insegna, livello, chiave_livello))")
     cursor.execute("CREATE TABLE IF NOT EXISTS storico_promo (id INTEGER PRIMARY KEY AUTOINCREMENT, data_salvataggio TIMESTAMP DEFAULT CURRENT_TIMESTAMP, stato_promo TEXT, gruppo_macro TEXT, sottogruppo TEXT, associato_insegna TEXT, ean TEXT, descrizione_commerciale TEXT, listino_r REAL, sconto_y REAL, sconto_z REAL, sconto_aa REAL, net_net_am REAL, volumi_stimati INTEGER, contributo_fisso REAL, contributo_pezzo REAL, costo_totale_extra REAL, note TEXT, sell_in_dal DATE, sell_in_al DATE, sell_out_dal DATE, sell_out_al DATE, min_net_net_g REAL, net_net_post_promo REAL)")
     conn.commit()
 
-    # Blocco Migrazioni del database
     migrazioni = [
         "ALTER TABLE storico_promo ADD COLUMN sell_in_dal DATE",
         "ALTER TABLE storico_promo ADD COLUMN sell_in_al DATE",
@@ -109,7 +97,7 @@ def init_db():
         "ALTER TABLE storico_promo ADD COLUMN min_net_net_g REAL",
         "ALTER TABLE storico_promo ADD COLUMN net_net_post_promo REAL",
         "ALTER TABLE accordi_commerciali ADD COLUMN note_locali TEXT",
-        "ALTER TABLE struttura_gdo ADD COLUMN sottogruppo TEXT" # Migrazione automatica se tabella pre-esistente
+        "ALTER TABLE struttura_gdo ADD COLUMN sottogruppo TEXT"
     ]
     for query in migrazioni:
         try:
@@ -161,7 +149,6 @@ def get_merged_contract(conn, gruppo, sottogruppo, insegna, ean, categoria):
             'sconto_carico', 'sconto_pagamento', 
             'voce_i', 'voce_ii', 'voce_iii', 'voce_iv', 'voce_v'
         ]
-        # Esegue il recupero dal contratto nazionale solo se il campo nel contratto locale è None (non valorizzato)
         for attr in strutturali_attrs:
             if getattr(loc, attr, None) is None:
                 setattr(loc, attr, getattr(base, attr, None))
@@ -330,16 +317,13 @@ if "go_to_menu" in st.session_state:
 st.sidebar.markdown("## Menu Principale")
 
 menu_options = [
-
     "Simulatore Offerte", 
     "Master Grid Rinnovi (N vs N+1)",
     "Storico Promozioni", 
-
     "Dati Anagrafici (Logistica)", 
     "Back-Office (Contratti Nazionali)", 
     "Anagrafica GDO (Clienti)",
     "Accordi Locali (Promo)",
-
     "Report Sintetico", 
     "Guida Operativa"
 ]
@@ -354,7 +338,43 @@ menu = menu_selection
 
 # --- DANGER ZONE NELLA SIDEBAR ---
 st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
-def on_insegna_change():
+with st.sidebar.container(border=True):
+    st.markdown("<h4 style='color: #991B1B; font-size: 1.1rem;'>⚠️ Danger Zone</h4>", unsafe_allow_html=True)
+    if PRODUCTION_MODE:
+        st.info("Ripristino disattivato in Prod.")
+    else:
+        st.markdown("<span style='font-size: 0.85rem;'>Ripristina il DB allo stato iniziale.</span>", unsafe_allow_html=True)
+        pin_conferma = st.text_input("Digita 'RESET':", key="reset_pin_sidebar")
+        if st.button("HARD RESET DB", disabled=(pin_conferma != "RESET"), use_container_width=True):
+            try:
+                conn_reset = sqlite3.connect(DB_FILE)
+                seed_baseline_data(conn_reset)
+                conn_reset.close()
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.sidebar.success("DB ripristinato!")
+                st.rerun()
+            except Exception as ex:
+                st.sidebar.error(f"Errore: {ex}")
+# ---------------------------------------------
+
+# ==========================================
+# SCHEDA 1: SIMULATORE OFFERTE (Singola SKU)
+# ==========================================
+if menu == "Simulatore Offerte":
+    conn = sqlite3.connect(DB_FILE)
+    st.markdown("## Commerciale Salov - Simulatore")
+    
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT gruppo_macro FROM struttura_gdo WHERE attivo=1 ORDER BY gruppo_macro")
+    gruppi = [r[0] for r in cursor.fetchall()]
+    
+    if not gruppi:
+        st.warning("Nessun cliente attivo. Vai in 'Anagrafica GDO' per attivare le insegne.")
+        st.stop()
+
+    # --- CALLBACKS DI AUTOCOMPILAZIONE REATTIVA ---
+    def on_insegna_change():
         ins = st.session_state.widget_insegna
         if ins and ins != "":
             conn_cb = sqlite3.connect(DB_FILE)
@@ -444,10 +464,10 @@ def on_insegna_change():
                     
         with col_ctx4:
             prodotto_scelto = st.selectbox("4. Referenza Salov", list(prodotti_dict.keys()), key="widget_prodotto")
-        
+
     ean, tipo_olio, min_net_net_g, codice_sap, formato_lt, pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet = prodotti_dict[prodotto_scelto]
     
-    # Merge strutturale e locale in modo pulito
+    # Merge strutturale e locale
     contract = get_merged_contract(conn, gruppo_sel, sottogruppo_sel, associato_sel, ean, tipo_olio)
 
     # --- AVVISO ACCORDI LOCALI ---
@@ -578,7 +598,7 @@ def on_insegna_change():
             if result.guardrail_ok:
                 st.success(f"APPROVATO - Margine sicuro. Delta: +{fmt_it(float(result.delta_vs_min), 3, is_euro=True)}")
             else:
-                st.error(f"BLOCCATO! SI PERDE SOLDI !!! - Sotto soglia di {fmt_it(float(abs(result.delta_vs_min)), 3, is_euro=True)}")
+                st.error(f"BLOCCATO! - Sotto soglia di {fmt_it(float(abs(result.delta_vs_min)), 3, is_euro=True)}")
             
     with res_col2:
         with st.expander("Finestra Temporale Promo", expanded=True):
@@ -890,19 +910,14 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
     anno_corrente = date.today().year
     conn = sqlite3.connect(DB_FILE)
     
-    # Funzione helper per esportare i dataframe in Excel
+    # Helper per l'esportazione Excel
     def to_excel_bytes(df):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Export')
         return output.getvalue()
     
-    # Inizializzazione variabili globali in session_state
-    if 'global_carico' not in st.session_state:
-        st.session_state.global_carico = 0.0
-    if 'global_pagamento' not in st.session_state:
-        st.session_state.global_pagamento = 0.0
-    
+    # Inizializzazione session state rinnovi
     if 'global_carico' not in st.session_state:
         st.session_state.global_carico = 0.0
     if 'global_pagamento' not in st.session_state:
@@ -914,6 +929,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
     if 'rinnovi_sottogruppo' not in st.session_state:
         st.session_state.rinnovi_sottogruppo = ""
 
+    # --- CALLBACKS DI AUTOCOMPILAZIONE MASTER GRID ---
     def on_rinnovi_insegna_change():
         ins = st.session_state.rinnovi_insegna
         if ins and ins != "":
@@ -1058,9 +1074,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                         df_temp.at[idx, '[N+1] Listino €'] = listino_n
                         
                         p = Decimal(str(listino_n))
-                        
-                        # FILTRO STRUTTURALE: Consideriamo SOLO gli sconti da S1 a S5.
-                        # S6, S7 e Y vengono ignorati deliberatamente per mantenere la simulazione "Nazionale".
                         sconti_strutturali = [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5]
                         
                         for s in sconti_strutturali:
@@ -1137,7 +1150,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         # --- FILTRO RAPIDO ---
         filtro_vista = st.radio("Filtra Referenze in Tabella:", ["Tutte le Referenze", "Solo con Volumi > 0", "Sotto Soglia (Allarme Rosso)"], horizontal=True)
         
-        # --- NUOVI INPUT GLOBALI PER CARICO E PAGAMENTO ---
+        # --- INPUT GLOBALI PER CARICO E PAGAMENTO ---
         with st.container(border=True):
             st.markdown("**Condizioni Logistiche e Finanziarie (Applicate a tutte le referenze)**")
             col_glob1, col_glob2 = st.columns(2)
@@ -1146,7 +1159,7 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             with col_glob2:
                 st.number_input("Sconto Pagamento (%)", min_value=0.0, max_value=100.0, step=0.5, key="global_pagamento")
         
-        # --- CALCOLO KPI VARIAZIONE TOTALE PONDERATA (Per visualizzazione in alto) ---
+        # --- CALCOLO KPI VARIAZIONE TOTALE PONDERATA ---
         df_kpi = st.session_state.rinnovi_df[st.session_state.rinnovi_df['[N+1] Volumi'] > 0].copy()
         tot_delta_perc = 0.0
         if not df_kpi.empty:
@@ -1184,7 +1197,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                     st.rerun()
 
         df_display = st.session_state.rinnovi_df.copy()
-        
         moltiplicatore_globale = (1 - st.session_state.global_carico/100) * (1 - st.session_state.global_pagamento/100)
         
         df_display['Net Net [N] €'] = df_display['[N] Listino €'] * (1 - df_display['[N] Sc. Fattura %']/100) * moltiplicatore_globale * (1 - df_display['[N] Contratto %']/100)
@@ -1226,8 +1238,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             st.markdown("##### ⚡ Azioni Rapide e Aggiornamento Massivo")
             
             col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns([2, 2, 1.5, 2, 2])
-            
-            # Usiamo 'Sub-Categoria' per avere il dettaglio (Semi di Girasole, Exv Italiano, ecc.)
             subcat_uniche = sorted(st.session_state.rinnovi_df['Sub-Categoria'].unique().tolist())
             
             with col_m1:
@@ -1239,7 +1249,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
                     "[N+1] Contratto %"
                 ])
             with col_m3:
-                # min_value in negativo per permettere anche eventuali riduzioni di listino
                 val_mass = st.number_input("3. Valore (%)", min_value=-100.0, max_value=100.0, step=0.5, format="%.2f")
             with col_m4:
                 st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
@@ -1260,16 +1269,13 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             )
             
         if submit_sim or btn_mass:
-            # 1. Salviamo PRIMA le eventuali modifiche manuali fatte nella griglia
             for i, idx in enumerate(df_display.index):
                 for col in ['[N+1] Volumi', '[N+1] Listino €', '[N+1] Sc. Fattura %', '[N+1] Contratto %', 'Minimo Net Net €']:
                     st.session_state.rinnovi_df.at[idx, col] = df_sim_edited.iloc[i][col]
             
-            # 2. Applichiamo l'azione massiva se richiesta
             if btn_mass:
                 for idx, row in st.session_state.rinnovi_df.iterrows():
                     if cat_mass == "Tutto l'Assortimento" or row['Sub-Categoria'] == cat_mass:
-                        
                         if col_mass == "Aumento Listino Base (%)":
                             listino_n = row['[N] Listino €']
                             if listino_n > 0:
@@ -1353,7 +1359,6 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             
             df_active['Delta Listino €'] = df_active['[N+1] Listino €'] - df_active['[N] Listino €']
             df_active['Delta Listino %'] = df_active.apply(lambda x: ((x['[N+1] Listino €'] - x['[N] Listino €']) / x['[N] Listino €'] * 100) if x['[N] Listino €'] > 0 else 0, axis=1)
-            
             df_active['Delta Assoluto €'] = df_active['Net Net [N+1] €'] - df_active['Net Net [N] €']
             df_active['Delta %'] = df_active.apply(lambda x: ((x['Net Net [N+1] €'] - x['Net Net [N] €']) / x['Net Net [N] €'] * 100) if x['Net Net [N] €'] > 0 else 0, axis=1)
             
@@ -1605,6 +1610,7 @@ elif menu == "Storico Promozioni":
                 id_to_delete = st.selectbox("Seleziona l'ID da eliminare:", df_storico['id'].tolist(), key="del_id")
                 if st.button("ELIMINA DEFINITIVAMENTE", use_container_width=True):
                     try:
+                        cursor = conn.cursor()
                         cursor.execute("DELETE FROM storico_promo WHERE id=?", (id_to_delete,))
                         conn.commit()
                         st.success(f"ID {id_to_delete} eliminato.")
@@ -1640,8 +1646,6 @@ elif menu == "Anagrafica GDO (Clienti)":
             use_container_width=True,
             disabled=["id", "gruppo_macro", "sottogruppo", "associato_insegna"]
         )
-
-
         
         if st.button("SALVA STATO INSEGNE", type="primary"):
             cursor = conn.cursor()
@@ -1744,7 +1748,6 @@ elif menu == "Dati Anagrafici (Logistica)":
                 if st.button("Conferma Scrittura Anagrafica"):
                     try:
                         df_prod_import = pd.read_excel(uploaded_prod_file)
-                        
                         df_prod_import = DataSanitizer.sanitize_excel_import(df_prod_import)
                         
                         col_map = {
@@ -1831,9 +1834,6 @@ elif menu == "Back-Office (Contratti Nazionali)":
     cursor.execute("SELECT DISTINCT gruppo_macro FROM struttura_gdo WHERE attivo=1 ORDER BY gruppo_macro")
     gruppi_attivi = [r[0] for r in cursor.fetchall()]
     
-    cursor.execute("SELECT DISTINCT sottogruppo FROM accordi_commerciali WHERE sottogruppo != '' ORDER BY sottogruppo")
-    sottogruppi_noti = [r[0] for r in cursor.fetchall()]
-    
     cursor.execute("SELECT DISTINCT tipo_olio FROM anagrafica_master")
     categorie_disponibili = [r[0] for r in cursor.fetchall()]
     
@@ -1846,6 +1846,7 @@ elif menu == "Back-Office (Contratti Nazionali)":
         with col1:
             ins_gruppo = st.selectbox("Gruppo", gruppi_attivi, key="ins_g")
             
+            # Filtro reattivo sui sottogruppi
             cursor.execute("""
                 SELECT DISTINCT sottogruppo FROM accordi_commerciali 
                 WHERE gruppo_macro=? AND sottogruppo != '' AND sottogruppo IS NOT NULL
@@ -1861,6 +1862,7 @@ elif menu == "Back-Office (Contratti Nazionali)":
                 [""] + sottogruppi_attivi_del_gruppo, 
                 key="ins_sg"
             )
+            
         with col2:
             ins_livello = st.selectbox("Livello Regola", ["GRUPPO", "SOTTOGRUPPO", "CATEGORIA", "REFERENZA"], key="ins_l")
             
@@ -1918,6 +1920,7 @@ elif menu == "Back-Office (Contratti Nazionali)":
         with st.container(border=True):
             st.markdown("#### Modifica Diretta dei Contratti in Database")
             
+            # Ordinamento automatico integrato nella query
             df_database_editor = pd.read_sql_query("""
                 SELECT a.id, a.gruppo_macro, a.sottogruppo, a.livello, a.chiave_livello,
                        CASE 
@@ -1971,7 +1974,7 @@ elif menu == "Back-Office (Contratti Nazionali)":
                                 check_nan(r.get("id")),
                                 str(r.get("gruppo_macro")).upper().strip() if pd.notna(r.get("gruppo_macro")) else "",
                                 str(r.get("sottogruppo")).upper().strip() if pd.notna(r.get("sottogruppo")) else "",
-                                "", # Forza l'insegna vuota per i contratti nazionali
+                                "", 
                                 str(r.get("livello")).upper().strip() if pd.notna(r.get("livello")) else "GRUPPO",
                                 str(r.get("chiave_livello")).strip() if pd.notna(r.get("chiave_livello")) else "",
                                 check_nan(r.get("listino_r")),
@@ -2144,10 +2147,8 @@ elif menu == "Back-Office (Contratti Nazionali)":
                     if st.button("Conferma Scrittura Guardrail"):
                         try:
                             df_g_import = pd.read_excel(uploaded_guardrail)
-                            
                             df_g_import.rename(columns=lambda x: str(x).upper().strip(), inplace=True)
                             df_g_import = DataSanitizer.sanitize_excel_import(df_g_import)
-                            
                             df_g_import.columns = [str(c).lower().strip() for c in df_g_import.columns]
                             
                             if "ean" not in df_g_import.columns or "min_net_net_g" not in df_g_import.columns:
@@ -2340,7 +2341,7 @@ elif menu == "Report Sintetico":
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # --- DASHBOARD DIREZIONALE (MOTORE RISOLTO) ---
+    # --- DASHBOARD DIREZIONALE ---
     st.markdown("#### 📊 Dashboard Direzionale (Control Tower)")
     
     cursor.execute("SELECT gruppo_macro, associato_insegna FROM struttura_gdo WHERE attivo=1")
@@ -2382,7 +2383,7 @@ elif menu == "Report Sintetico":
     
     if not df_dash.empty:
         with st.container(border=True):
-            st.subheader("Salute Contratti & Profondità Margine", help="A sinistra: Quanti accordi sono sani (Verde) e quanti in perdita (Rosso). Passa il mouse sulle fette per vedere QUALI clienti generano il risultato. A destra: La distanza media in Euro dal limite minimo aziendale (Floor) per ogni categoria.")
+            st.subheader("Salute Contratti & Profondità Margine", help="Marginalità residua sui contratti attivi.")
             
             col_filt1, col_filt2 = st.columns(2)
             with col_filt1:
@@ -2440,14 +2441,14 @@ elif menu == "Report Sintetico":
         
         with col_dash1:
             with st.container(border=True):
-                st.subheader("Top 5 Clienti per PFA Medio (%)", help="Classifica i clienti più 'costosi' in termini di Premi Fuori Fattura. Aiuta a capire chi sta assorbendo la maggior parte del budget promozionale di fine anno.")
+                st.subheader("Top 5 Clienti per PFA Medio (%)")
                 df_pfa_cli = df_dash.groupby('Cliente')['PFA_Tot'].mean().reset_index().sort_values('PFA_Tot', ascending=False).head(5)
                 fig_pfa = px.bar(df_pfa_cli, x='Cliente', y='PFA_Tot', labels={'Cliente': 'Insegna / Gruppo', 'PFA_Tot': 'PFA Medio (%)'}, color='PFA_Tot', color_continuous_scale='Reds')
                 st.plotly_chart(fig_pfa, use_container_width=True)
         
         with col_dash2:
             with st.container(border=True):
-                st.subheader("Pressione Promozionale (PFA) per Categoria", help="Misura quanto margine viene ceduto a fine anno per ogni famiglia di prodotto. Aiuta a identificare se categorie a basso margine (es. Semi) sono eccessivamente caricate di premi rispetto ad altre.")
+                st.subheader("Pressione Promozionale (PFA) per Categoria")
                 df_cat_health = df_dash.groupby('Categoria')['PFA_Tot'].mean().reset_index().sort_values('PFA_Tot', ascending=False)
                 fig_cat = px.bar(df_cat_health, x='Categoria', y='PFA_Tot', labels={'Categoria': 'Famiglia Prodotto', 'PFA_Tot': 'PFA Medio (%)'}, color='PFA_Tot', color_continuous_scale='Blues')
                 st.plotly_chart(fig_cat, use_container_width=True)
@@ -2459,7 +2460,7 @@ elif menu == "Report Sintetico":
 
     with st.container(border=True):
         st.markdown("#### Benchmark Comparativo di Canale (Livello Sottogruppo)")
-        st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione logica. IN FASE DI TEST USARE EX.V. SAGRA CLASSICO Lt1")
+        st.markdown("Analisi strutturale delle asimmetrie commerciali.")
         
         col_f1, col_f2 = st.columns(2)
         with col_f1:
@@ -2504,7 +2505,6 @@ elif menu == "Report Sintetico":
                     res_ins = cursor.fetchone()
                 
                 insegna_campione = res_ins[0] if res_ins else ""
-                
                 contratto_risolto = get_merged_contract(conn, g_macro, s_gruppo, insegna_campione, ean_bench, tipo_olio_bench)
                 
                 if contratto_risolto.listino_r is not None:
@@ -2651,8 +2651,9 @@ elif menu == "Report Sintetico":
                     )
 
     conn.close()
+
 # ==========================================
-# SCHEDA 5: GUIDA OPERATIVA (MANUALE UTENTE COMPLETO)
+# SCHEDA 5: GUIDA OPERATIVA
 # ==========================================
 else:
     st.title("📚 Manuale Operativo e Linee Guida")
@@ -2673,8 +2674,8 @@ else:
         *   **Premi Fuori Fattura / Off-Invoice (PFA):** (Voci I, II, III, ecc.). Sono i contributi di fine anno o fine periodo richiesti dalla GDO (es. premi di fine anno, contributi assortimento). *Riducono il nostro margine, ma non abbassano il prezzo a scaffale del cliente*.
         *   **NET-NET FINALE (AM):** È il ricavo reale e pulito per l'azienda. Si ottiene sottraendo i PFA dal Netto Fattura.
         *   **Minimo Net-Net:** È la soglia minima di redditività fissata dall'azienda per una specifica referenza. Scendere sotto questo valore significa vendere in perdita.
-        *   **Floor (G) / Guardrail Aziendale:** Rappresenta il limite fisico e invalicabile impostato dalla Direzione nel database, il "pavimento" sotto il quale il sistema blocca l'operazione. Agisce come un vero e proprio salvavita.
-            * *Esempio pratico:* Immagina che produrre, imbottigliare e consegnare una bottiglia di Extravergine costi 3,50 €. L'azienda fissa il Floor (G) a 3,80 € per garantirsi la sopravvivenza e coprire i costi fissi. Se durante una negoziazione concedi un mix di sconti, premi di fine anno e contributi volantino che fa crollare il tuo ricavo reale a 3,75 €, il sistema farà scattare il semaforo **ROSSO**. Ti avviserà immediatamente che stai "bucando il Floor", distruggendo valore per 0,05 € su ogni singola bottiglia venduta.
+        *   **Floor (G) / Guardrail Aziendale:** Rappresenta il limite fisico e invalicabile impostato dalla Direzione nel database, il \"pavimento\" sotto il quale il sistema blocca l'operazione. Agisce come un vero e proprio salvavita.
+            * *Esempio pratico:* Immagina che produrre, imbottigliare e consegnare una bottiglia di Extravergine costi 3,50 €. L'azienda fissa il Floor (G) a 3,80 € per garantirsi la sopravvivenza e coprire i costi fissi. Se durante una negoziazione concedi un mix di sconti, premi di fine anno e contributi volantino che fa crollare il tuo ricavo reale a 3,75 €, il sistema farà scattare il semaforo **ROSSO**. Ti avviserà immediatamente che stai \"bucando il Floor\", distruggendo valore per 0,05 € su ogni singola bottiglia venduta.
         *   **Spazio Promo MAX (% o €):** Indica il margine di manovra residuo. È la differenza tra il prezzo simulato e il Floor minimo aziendale.
         """)
         
@@ -2715,7 +2716,7 @@ else:
         **Casi Pratici di Inserimento Dati:**
         *   **L'Ereditarietà (Cella Vuota):** Se il Gruppo Macro ha uno Sconto 1 del 10%, non serve riscriverlo sulle singole referenze. Lasciando la cella vuota, il sistema erediterà automaticamente il 10%.
         *   **L'Override (Forzare l'esclusione):** Se una specifica referenza Premium NON deve ricevere lo Sconto 1 del 10% stabilito dal Gruppo, devi inserire esplicitamente il valore **`0.0`** nella riga di quella referenza. Questo `0.0` funge da scudo e blocca l'ereditarietà.
-        *   **Fuori Assortimento:** Se una referenza non ha un Listino Base (R) associato, il sistema la bloccherà indicando "Prodotto Fuori Assortimento".
+        *   **Fuori Assortimento:** Se una referenza non ha un Listino Base (R) associato, il sistema la bloccherà indicando \"Prodotto Fuori Assortimento\".
         """)
         
     with st.expander("📞 4. COME USARE IL 'SIMULATORE OFFERTE' (Singola Referenza)", expanded=False):
@@ -2723,9 +2724,9 @@ else:
         Questa scheda è lo strumento tattico da usare durante una trattativa rapida su un singolo prodotto.
         
         **Modalità A: Partenza da Prezzo Target (Consigliata)**
-        Da usare quando il Buyer fissa un obiettivo di prezzo. Esempio: *"Voglio pagare questa bottiglia 3,80 € netti"*.
+        Da usare quando il Buyer fissa un obiettivo di prezzo. Esempio: *\"Voglio pagare questa bottiglia 3,80 € netti\"*.
         1. Seleziona la Modalità A.
-        2. Inserisci `3.80` nel campo "Prezzo Target Net Net".
+        2. Inserisci `3.80` nel campo \"Prezzo Target Net Net\".
         3. Il sistema calcolerà automaticamente la percentuale esatta di **Sconto Promozionale [Z]** necessaria per arrivare a quel risultato; questo valore varia dinamicamente ma non è modificabile direttamante in quanto va a garantire il rispetto del limite net net pre impostato
         4. Se 3,80 € è inferiore al minimo aziendale (Floor), il sistema mostrerà l'avviso in **ROSSO**, indicando la perdita esatta.
         5. Le uniche leve utilizzabili sono lo Sconto continuativo % (da utilizzare previa verifica di accordo locale) e lo sconto unitario in fattura. Al variare di questi lo Sconto Promozionale si adatterà di conseguenza.
@@ -2743,38 +2744,38 @@ else:
         **Flusso di Lavoro Passo-Passo:**
         
         **FASE 1: Setup e Condizioni Globali**
-        1. **Identifica il Cliente:** Seleziona il *Gruppo GDO* e il *Sottogruppo* dai menu a tendina.
-        2. **Importa lo Storico:** Clicca su **"Carica Condizioni Attuali da DB"**. Il sistema popolerà le colonne dell'Anno [N] con i listini e gli sconti attualmente in vigore.
+        1. **Identifica il Cliente:** Seleziona l' *Insegna Locale* o il *Gruppo GDO*. La compilazione degli altri campi è automatica.
+        2. **Importa lo Storico:** Clicca su **\"Carica Condizioni Attuali da DB\"**. Il sistema popolerà le colonne dell'Anno [N] con i listini e gli sconti attualmente in vigore.
         3. **Imposta gli Oneri Globali:** In cima al Tab 1, verifica e imposta lo **Sconto Carico Logistica (%)** e lo **Sconto Pagamento (%)**. *Attenzione: questi due valori vengono applicati a cascata su TUTTE le referenze attive e abbattono direttamente il Net Net finale.*
 
         **FASE 2: Tab 1 - Griglia di Simulazione (Gli Aggregati)**
         1. **Attiva le Referenze:** Inserisci i volumi previsti nella colonna `[N+1] Volumi`. *Il sistema calcolerà e mostrerà nei risultati SOLO le righe con volumi maggiori di zero.*
         2. **Imposta i Target:** Agisci sulle colonne `[N+1] Listino €`, `[N+1] Sc. Fattura %` (il totale degli sconti in fattura) e `[N+1] Contratto %` (il totale dei premi fuori fattura).
-        3. **Calcola:** Clicca su **"🔄 Calcola Simulazione"**.
+        3. **Calcola:** Clicca su **\"🔄 Calcola Simulazione\"**.
         4. **Verifica lo Spazio Promo:** Controlla la colonna `Sc. Promo MAX [N+1] %`. Questo valore ti dice quanto sconto volantino potrai fare durante l'anno prima di bucare il limite minimo aziendale (Floor). Modifica i target finché non ottieni lo Spazio Promo desiderato.
 
-        **FASE 3: Tab 2 - Analisi Ponderata (L'Effetto "Pollo di Trilussa")**
+        **FASE 3: Tab 2 - Analisi Ponderata (L'Effetto \"Pollo di Trilussa\")**
         In questa scheda vedi la sintesi economica. I risultati sono raggruppati per Categoria e Sub-Categoria. 
         *Perché è fondamentale?* Un cliente potrebbe avere un margine totale positivo (Verde) perché muove enormi volumi di Olio di Semi, ma nascondere una forte perdita (Rosso) sugli Extravergini. Il sistema calcola la media ponderata sui volumi per evidenziare se un cluster specifico sta distruggendo valore.
 
         **FASE 4: Tab 3 - Esplosione Sconti (Il Dettaglio Contrattuale)**
-        Una volta che i target aggregati nel Tab 1 ti soddisfano, devi "spacchettarli" nelle reali voci del contratto nazionale (S1, S2, PFA I, ecc.).
+        Una volta che i target aggregati nel Tab 1 ti soddisfano, devi \"spacchettarli\" nelle reali voci del contratto nazionale (S1, S2, PFA I, ecc.).
         1. **Modifica Manuale:** Inserisci i valori noti (es. S1 al 10%, S2 al 2%).
-        2. **Verifica:** Clicca su **"🔄 Calcola e Verifica Sconti (Manuale)"**. Il sistema calcolerà la cascata geometrica e ti mostrerà sotto "Diff. Fattura" quanto manca per raggiungere il target che avevi fissato nel Tab 1.
-        3. **La Magia (Auto-Allineamento):** Non impazzire con la calcolatrice! Clicca su **"🪄 Allinea Sconti Automaticamente"**. Il sistema calcolerà l'esatta percentuale geometrica mancante e la inserirà in **S5 %**, portando la differenza a zero. Farà la stessa cosa per i premi fuori fattura, inserendo la differenza algebrica in **PFA V %**.
+        2. **Verifica:** Clicca su **\"🔄 Calcola e Verifica Sconti (Manuale)\"**. Il sistema calcolerà la cascata geometrica e ti mostrerà sotto \"Diff. Fattura\" quanto manca per raggiungere il target che avevi fissato nel Tab 1.
+        3. **La Magia (Auto-Allineamento):** Non impazzire con la calcolatrice! Clicca su **\"🪄 Allinea Sconti Automaticamente\"**. Il sistema calcolerà l'esatta percentuale geometrica mancante e la inserirà in **S5 %**, portando la differenza a zero. Farà la stessa cosa per i premi fuori fattura, inserendo la differenza algebrica in **PFA V %**.
         4. **Trucco:** se vuoi agire su uno dei due sconti in fattura presenti senza doverne creare un terzo (l'S5 della simulazione) azzera uno degli sconti contrattuali, avvia la simulazione e poi sostituisci la colonna dello sconto contrattuale che vuoi modificare con i valori in S5. Ripeti l'allineamento automatico per evidenziare eventuali errori. 
         
         *Nota: In ogni Tab è presente un pulsante per scaricare la tabella corrente in Excel.*
         """)
 
-    with st.expander("🗄️ 6. STORICO (CRM), REPORTISTICA E BACK-OFFICE", expanded=False):
+    with st.expander("🧄 6. STORICO (CRM), REPORTISTICA E BACK-OFFICE", expanded=False):
         st.markdown("""
-        *   **Storico Promozioni (CRM):** Ogni simulazione può essere salvata nel database (come "Proposta" o "Confermata"). In questa scheda puoi filtrare, consultare ed esportare in Excel tutte le trattative passate. Se hai commesso un errore, puoi eliminare il singolo record tramite il suo ID.
-        *   **Clona Promozione:** Nello Storico puoi selezionare una vecchia promo e cliccare "Clona". Il sistema ti riporterà al Simulatore precompilando tutti i campi, permettendoti di creare una nuova trattativa in pochi secondi.
+        *   **Storico Promozioni (CRM):** Ogni simulazione può essere salvata nel database (come \"Proposta\" o \"Confermata\"). In questa scheda puoi filtrare, consultare ed esportare in Excel tutte le trattative passate. Se hai commesso un errore, puoi eliminare il singolo record tramite il suo ID.
+        *   **Clona Promozione:** Nello Storico puoi selezionare una vecchia promo e cliccare \"Clona\". Il sistema ti riporterà al Simulatore precompilando tutti i campi, permettendoti di creare una nuova trattativa in pochi secondi.
         *   **Report Sintetico:** Genera un file Excel consolidato per un intero cliente. Mostra l'allineamento di tutti i prezzi e sconti, evidenziando immediatamente le referenze approvate (Verdi) e quelle sotto soglia (Rosse). È il documento ideale da condividere con la Direzione Commerciale.
         *   **Back-Office (Import/Export Excel):** Per aggiornare massivamente le anagrafiche, i guardrail (Floor) o i contratti quadro, non occorre farlo riga per riga a schermo.
             1. Scarica il Template Excel.
-            2. Modifica i dati sul tuo computer. **ATTENZIONE:** Assicurati che in Excel la colonna degli EAN sia formattata come "Testo", altrimenti Excel trasformerà i codici a barre in numeri scientifici (es. 8,0022E+12) corrompendo il database.
+            2. Modifica i dati sul tuo computer. **ATTENZIONE:** Assicurati che in Excel la colonna degli EAN sia formattata come \"Testo\", altrimenti Excel trasformerà i codici a barre in numeri scientifici (es. 8,0022E+12) corrompendo il database.
             3. Ricarica il file tramite l'apposito pulsante.
         *   **Danger Zone (Reset):** Il pulsante di Reset nella barra laterale (protetto da password) cancella tutto il database e ricarica i dati finti di test. Da usare solo in fase di training o manutenzione.
         """)
