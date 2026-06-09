@@ -2353,18 +2353,33 @@ elif menu == "Report Sintetico":
                 
     df_dash = pd.DataFrame(dash_data)
     
-    if not df_dash.empty:
+    if not df_dash.empty and contratti_attivi_rilevati > 0:
+        # Integrazione colonne mancanti per compatibilità grafici e metriche di sicurezza
+        df_dash_clean = df_dash[df_dash['Stato'] == 'ATTIVO'].copy()
+        
+        # Mappa i nomi fittizi dei clienti e calcola dinamicamente i delta sul floor per i grafici
+        df_dash_clean['Cliente'] = insegna_campione if insegna_campione else g_macro
+        df_dash_clean['Delta_Euro'] = df_dash_clean['Net Net Cessione €'] - df_dash_clean['Floor Salov €']
+        
+        # Assegna lo stato corretto basato sui Guardrail (Floor Salov)
+        df_dash_clean['Stato_Grafico'] = df_dash_clean['Delta_Euro'].apply(
+            lambda x: 'Verde (Sopra Soglia)' if x >= 0 else 'Rosso (Sotto Soglia)'
+        )
+        
+        # Recupero stimato dei PFA (Premi Fuori Fattura) tramite la somma delle voci contrattuali valorizzate
+        df_dash_clean['PFA_Tot'] = float(contratto_risolto.voce_i + contratto_risolto.voce_ii + contratto_risolto.voce_iii + contratto_risolto.voce_iv + contratto_risolto.voce_v)
+
         with st.container(border=True):
-            st.subheader("Salute Contratti & Profondità Margine", help="A sinistra: Quanti accordi sono sani (Verde) e quanti in perdita (Rosso). Passa il mouse sulle fette per vedere QUALI clienti generano il risultato. A destra: La distanza media in Euro dal limite minimo aziendale (Floor) per ogni categoria.")
+            st.subheader("📊 Salute Contratti & Profondità Margine", help="A sinistra: Quanti accordi sono sani (Verde) e quanti in perdita (Rosso) rispetto al Floor. A destra: La distanza media in Euro dal limite minimo aziendale (Floor) per ogni categoria.")
             
             col_filt1, col_filt2 = st.columns(2)
             with col_filt1:
-                dash_cat = st.selectbox("1. Filtra per Categoria", ["Tutte le Categorie"] + sorted(df_dash['Categoria'].unique().tolist()), key="dash_cat")
+                dash_cat = st.selectbox("1. Filtra per Categoria", ["Tutte le Categorie"] + sorted(df_dash_clean['Categoria'].unique().tolist()), key="dash_cat")
             with col_filt2:
-                prods_available = df_dash[df_dash['Categoria'] == dash_cat]['Prodotto'].unique().tolist() if dash_cat != "Tutte le Categorie" else df_dash['Prodotto'].unique().tolist()
+                prods_available = df_dash_clean[df_dash_clean['Categoria'] == dash_cat]['Prodotto'].unique().tolist() if dash_cat != "Tutte le Categorie" else df_dash_clean['Prodotto'].unique().tolist()
                 dash_prod = st.selectbox("2. Filtra per Referenza Specifica", ["Tutte le Referenze"] + sorted(prods_available), key="dash_prod")
             
-            df_pie = df_dash.copy()
+            df_pie = df_dash_clean.copy()
             if dash_cat != "Tutte le Categorie": df_pie = df_pie[df_pie['Categoria'] == dash_cat]
             if dash_prod != "Tutte le Referenze": df_pie = df_pie[df_pie['Prodotto'] == dash_prod]
             
@@ -2378,15 +2393,15 @@ elif menu == "Report Sintetico":
                             return "<br>".join(unique_clients[:8]) + "<br><i>...e altri</i>"
                         return "<br>".join(unique_clients)
 
-                    df_pie_agg = df_pie.groupby('Stato').agg(
+                    df_pie_agg = df_pie.groupby('Stato_Grafico').agg(
                         Conteggio=('Prodotto', 'count'),
                         Clienti_Lista=('Cliente', format_clients)
                     ).reset_index()
 
-                    fig_pie = px.pie(df_pie_agg, values='Conteggio', names='Stato',
+                    fig_pie = px.pie(df_pie_agg, values='Conteggio', names='Stato_Grafico',
                                      custom_data=['Clienti_Lista'],
                                      title="Distribuzione Referenze (Sopra/Sotto Soglia Vs net net contrattuale)",
-                                     color='Stato', color_discrete_map={'Verde (Sopra Soglia)':'#22C55E', 'Rosso (Sotto Soglia)':'#EF4444'})
+                                     color='Stato_Grafico', color_discrete_map={'Verde (Sopra Soglia)':'#22C55E', 'Rosso (Sotto Soglia)':'#EF4444'})
                     
                     fig_pie.update_traces(hovertemplate="<b>%{label}</b><br>Num. Accordi: %{value}<br><br><b>Clienti coinvolti:</b><br>%{customdata[0]}<extra></extra>")
                     st.plotly_chart(fig_pie, use_container_width=True)
@@ -2405,7 +2420,7 @@ elif menu == "Report Sintetico":
                     st.plotly_chart(fig_delta, use_container_width=True)
                     
             else:
-                st.info("Nessun dato disponibile per i filtri selezionati.")
+                st.info("ℹ️ Nessun dato disponibile per i filtri selezionati.")
 
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -2413,23 +2428,22 @@ elif menu == "Report Sintetico":
         
         with col_dash1:
             with st.container(border=True):
-                st.subheader("Top 5 Clienti per PFA Medio (%)", help="Classifica i clienti più 'costosi' in termini di Premi Fuori Fattura. Aiuta a capire chi sta assorbendo la maggior parte del budget promozionale di fine anno.")
-                df_pfa_cli = df_dash.groupby('Cliente')['PFA_Tot'].mean().reset_index().sort_values('PFA_Tot', ascending=False).head(5)
-                fig_pfa = px.bar(df_pfa_cli, x='Cliente', y='PFA_Tot', labels={'Cliente': 'Insegna / Gruppo', 'PFA_Tot': 'PFA Medio (%)'}, color='PFA_Tot', color_continuous_scale='Reds')
+                st.subheader("Top 5 Referenze per PFA stimato (%)", help="Classifica i prodotti più costosi in termini di Premi Fuori Fattura ereditati contrattualmente.")
+                df_pfa_cli = df_dash_clean.groupby('Prodotto')['PFA_Tot'].mean().reset_index().sort_values('PFA_Tot', ascending=False).head(5)
+                fig_pfa = px.bar(df_pfa_cli, x='Prodotto', y='PFA_Tot', labels={'Prodotto': 'Referenza SKU', 'PFA_Tot': 'PFA Totale (%)'}, color='PFA_Tot', color_continuous_scale='Reds')
                 st.plotly_chart(fig_pfa, use_container_width=True)
         
         with col_dash2:
             with st.container(border=True):
-                st.subheader("Pressione Promozionale (PFA) per Categoria", help="Misura quanto margine viene ceduto a fine anno per ogni famiglia di prodotto. Aiuta a identificare se categorie a basso margine (es. Semi) sono eccessivamente caricate di premi rispetto ad altre.")
-                df_cat_health = df_dash.groupby('Categoria')['PFA_Tot'].mean().reset_index().sort_values('PFA_Tot', ascending=False)
+                st.subheader("Pressione Promozionale (PFA) per Categoria", help="Misura quanto margine viene ceduto a fine anno sotto forma di premi per ogni famiglia di prodotto.")
+                df_cat_health = df_dash_clean.groupby('Categoria')['PFA_Tot'].mean().reset_index().sort_values('PFA_Tot', ascending=False)
                 fig_cat = px.bar(df_cat_health, x='Categoria', y='PFA_Tot', labels={'Categoria': 'Famiglia Prodotto', 'PFA_Tot': 'PFA Medio (%)'}, color='PFA_Tot', color_continuous_scale='Blues')
                 st.plotly_chart(fig_cat, use_container_width=True)
 
     else:
-        st.warning("Nessun contratto attivo trovato nel database per generare la Dashboard.")
+        st.info("ℹ️ Nessun contratto attivo trovato nel database per generare i grafici della Dashboard per i filtri selezionati.")
 
     st.divider()
-
     with st.container(border=True):
         st.markdown("#### Benchmark Comparativo di Canale (Livello Sottogruppo)")
         st.markdown("Analisi strutturale delle asimmetrie commerciali. Gli sconti sono collassati per destinazione logica. IN FASE DI TEST USARE EX.V. SAGRA CLASSICO Lt1")
