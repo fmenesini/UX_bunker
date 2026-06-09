@@ -804,7 +804,8 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         cursor.execute("SELECT DISTINCT gruppo_macro FROM clienti WHERE attivo=1 ORDER BY gruppo_macro")
         gruppi = [r[0] for r in cursor.fetchall()]
         
-        col_ctx1, col_ctx2 = st.columns(2)
+        # --- AGGIUNTO IL TERZO SELETTORE PER L'INSEGNA LOCALE ---
+        col_ctx1, col_ctx2, col_ctx3 = st.columns(3)
         with col_ctx1:
             gruppo_sel = st.selectbox("Gruppo GDO", ["Nessuno"] + gruppi)
         
@@ -815,7 +816,13 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         with col_ctx2:
             sottogruppo_sel = st.selectbox("Sottogruppo GDO", [""] + sottogruppi if gruppo_sel != "Nessuno" else [""])
             
-        associato_sel = "" 
+        associati = []
+        if gruppo_sel != "Nessuno":
+            cursor.execute("SELECT DISTINCT associato_insegna FROM clienti WHERE gruppo_macro=? AND sottogruppo=? AND attivo=1 ORDER BY associato_insegna", (gruppo_sel, sottogruppo_sel))
+            associati = [r[0] for r in cursor.fetchall()]
+        with col_ctx3:
+            associato_sel = st.selectbox("Insegna Locale", [""] + associati if gruppo_sel != "Nessuno" else [""])
+        # --------------------------------------------------------
 
     query = """
         SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0) as min_net_net_g
@@ -871,43 +878,52 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
             if gruppo_sel != "Nessuno":
                 df_temp = st.session_state.rinnovi_df.copy()
                 first_contract = True
+                
+                # Funzione di sicurezza per evitare crash se un dato è None nel DB
+                def safe_float(v): return float(v) if v is not None else 0.0
+                
                 for idx, row in df_temp.iterrows():
                     contract = HierarchyResolver.resolve(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
+                    
                     if contract.listino_r is not None:
                         if first_contract:
-                            st.session_state.global_carico = float(contract.sconto_carico)
-                            st.session_state.global_pagamento = float(contract.sconto_pagamento)
+                            st.session_state.global_carico = safe_float(contract.sconto_carico)
+                            st.session_state.global_pagamento = safe_float(contract.sconto_pagamento)
                             first_contract = False
                             
-                        listino_n = float(contract.listino_r)
+                        listino_n = safe_float(contract.listino_r)
                         df_temp.at[idx, '[N] Listino €'] = listino_n
                         df_temp.at[idx, '[N+1] Listino €'] = listino_n
                         
-                        p = contract.listino_r
-                        for s in [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5, contract.sconto_6, contract.sconto_7, contract.sconto_y]:
-                            p = p * (Decimal('1') - (s / Decimal('100')))
+                        # Calcolo sicuro con Decimal per evitare errori di tipo
+                        p = Decimal(str(listino_n))
+                        sconti_fattura = [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5, contract.sconto_6, contract.sconto_7, contract.sconto_y]
+                        
+                        for s in sconti_fattura:
+                            val_s = Decimal(str(s)) if s is not None else Decimal('0')
+                            p = p * (Decimal('1') - (val_s / Decimal('100')))
                         
                         sc_fatt_eq = 0.0
-                        if contract.listino_r > 0:
-                            sc_fatt_eq = float(((Decimal('1') - (p / contract.listino_r)) * Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                        if listino_n > 0:
+                            sc_fatt_eq = float(((Decimal('1') - (p / Decimal(str(listino_n)))) * Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
                         
                         df_temp.at[idx, '[N] Sc. Fattura %'] = sc_fatt_eq
                         df_temp.at[idx, '[N+1] Sc. Fattura %'] = sc_fatt_eq
                         
-                        pfa_tot = float(contract.voce_i + contract.voce_ii + contract.voce_iii + contract.voce_iv + contract.voce_v)
+                        pfa_tot = safe_float(contract.voce_i) + safe_float(contract.voce_ii) + safe_float(contract.voce_iii) + safe_float(contract.voce_iv) + safe_float(contract.voce_v)
                         df_temp.at[idx, '[N] Contratto %'] = pfa_tot
                         df_temp.at[idx, '[N+1] Contratto %'] = pfa_tot
                         
-                        df_temp.at[idx, 'S1 %'] = float(contract.sconto_1)
-                        df_temp.at[idx, 'S2 %'] = float(contract.sconto_2)
-                        df_temp.at[idx, 'S3 %'] = float(contract.sconto_3)
-                        df_temp.at[idx, 'S4 %'] = float(contract.sconto_4)
-                        df_temp.at[idx, 'S5 %'] = float(contract.sconto_5)
-                        df_temp.at[idx, 'PFA I %'] = float(contract.voce_i)
-                        df_temp.at[idx, 'PFA II %'] = float(contract.voce_ii)
-                        df_temp.at[idx, 'PFA III %'] = float(contract.voce_iii)
-                        df_temp.at[idx, 'PFA IV %'] = float(contract.voce_iv)
-                        df_temp.at[idx, 'PFA V %'] = float(contract.voce_v)
+                        df_temp.at[idx, 'S1 %'] = safe_float(contract.sconto_1)
+                        df_temp.at[idx, 'S2 %'] = safe_float(contract.sconto_2)
+                        df_temp.at[idx, 'S3 %'] = safe_float(contract.sconto_3)
+                        df_temp.at[idx, 'S4 %'] = safe_float(contract.sconto_4)
+                        df_temp.at[idx, 'S5 %'] = safe_float(contract.sconto_5)
+                        df_temp.at[idx, 'PFA I %'] = safe_float(contract.voce_i)
+                        df_temp.at[idx, 'PFA II %'] = safe_float(contract.voce_ii)
+                        df_temp.at[idx, 'PFA III %'] = safe_float(contract.voce_iii)
+                        df_temp.at[idx, 'PFA IV %'] = safe_float(contract.voce_iv)
+                        df_temp.at[idx, 'PFA V %'] = safe_float(contract.voce_v)
                         
                 st.session_state.rinnovi_df = df_temp
                 st.rerun()
