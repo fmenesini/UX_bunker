@@ -6,12 +6,14 @@ import openpyxl
 import random
 import plotly.express as px
 import plotly.graph_objects as go
+import HierarchyResolver
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date
 import logging
 from dataclasses import replace
 from types import SimpleNamespace
+from core.hierarchy_resolver
 
 from config import DB_FILE, PRODUCTION_MODE
 from core.pricing_engine import PricingEngine, PricingInput
@@ -481,7 +483,14 @@ if menu == "Simulatore Offerte":
     ean, tipo_olio, min_net_net_g, codice_sap, formato_lt, pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet = prodotti_dict[prodotto_scelto]
     
     # Merge strutturale e locale in modo pulito
-    contract = get_merged_contract(conn, gruppo_sel, sottogruppo_sel, associato_sel, ean, tipo_olio)
+    contract = HierarchyResolver.resolve(
+    conn=conn, 
+    gruppo=gruppo_sel, 
+    sottogruppo=sottogruppo_sel, 
+    insegna=associato_sel, 
+    ean=ean, 
+    categoria=tipo_olio
+    )
 
     # --- AVVISO ACCORDI LOCALI ---
     cursor.execute("SELECT COUNT(*) FROM accordi_commerciali WHERE gruppo_macro=? AND associato_insegna=? AND associato_insegna != '' AND chiave_livello=?", (gruppo_sel, associato_sel, ean))
