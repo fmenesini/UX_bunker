@@ -903,6 +903,42 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
     if 'global_pagamento' not in st.session_state:
         st.session_state.global_pagamento = 0.0
     
+    if 'global_carico' not in st.session_state:
+        st.session_state.global_carico = 0.0
+    if 'global_pagamento' not in st.session_state:
+        st.session_state.global_pagamento = 0.0
+    if 'rinnovi_insegna' not in st.session_state:
+        st.session_state.rinnovi_insegna = ""
+    if 'rinnovi_gruppo' not in st.session_state:
+        st.session_state.rinnovi_gruppo = "Nessuno"
+    if 'rinnovi_sottogruppo' not in st.session_state:
+        st.session_state.rinnovi_sottogruppo = ""
+
+    def on_rinnovi_insegna_change():
+        ins = st.session_state.rinnovi_insegna
+        if ins and ins != "":
+            conn_cb = sqlite3.connect(DB_FILE)
+            cursor_cb = conn_cb.cursor()
+            cursor_cb.execute("SELECT gruppo_macro, sottogruppo FROM struttura_gdo WHERE associato_insegna=? LIMIT 1", (ins,))
+            res = cursor_cb.fetchone()
+            conn_cb.close()
+            if res:
+                st.session_state.rinnovi_gruppo = res[0]
+                st.session_state.rinnovi_sottogruppo = res[1] or ""
+
+    def on_rinnovi_gruppo_change():
+        grp = st.session_state.rinnovi_gruppo
+        ins = st.session_state.rinnovi_insegna
+        if ins and ins != "":
+            conn_cb = sqlite3.connect(DB_FILE)
+            cursor_cb = conn_cb.cursor()
+            cursor_cb.execute("SELECT COUNT(*) FROM struttura_gdo WHERE associato_insegna=? AND gruppo_macro=?", (ins, grp))
+            belongs = cursor_cb.fetchone()[0] > 0
+            conn_cb.close()
+            if not belongs:
+                st.session_state.rinnovi_insegna = ""
+                st.session_state.rinnovi_sottogruppo = ""
+
     st.markdown("#### 1. Contesto di Riferimento (Pre-compilazione Anno N)")
     
     with st.container(border=True):
@@ -910,23 +946,43 @@ elif menu == "Master Grid Rinnovi (N vs N+1)":
         cursor.execute("SELECT DISTINCT gruppo_macro FROM struttura_gdo WHERE attivo=1 ORDER BY gruppo_macro")
         gruppi = [r[0] for r in cursor.fetchall()]
         
+        cursor.execute("SELECT DISTINCT associato_insegna FROM struttura_gdo WHERE attivo=1 ORDER BY associato_insegna")
+        tutte_insegne_rinnovi = [r[0] for r in cursor.fetchall() if r[0]]
+
         col_ctx1, col_ctx2, col_ctx3 = st.columns(3)
+        
         with col_ctx1:
-            gruppo_sel = st.selectbox("Gruppo GDO", ["Nessuno"] + gruppi)
+            associato_sel = st.selectbox(
+                "Insegna Locale (Opzionale - Seleziona per auto-compilare)", 
+                [""] + tutte_insegne_rinnovi, 
+                key="rinnovi_insegna", 
+                on_change=on_rinnovi_insegna_change
+            )
+            
+        with col_ctx2:
+            gruppo_sel = st.selectbox(
+                "Gruppo GDO", 
+                ["Nessuno"] + gruppi, 
+                key="rinnovi_gruppo", 
+                on_change=on_rinnovi_gruppo_change
+            )
         
         sottogruppi = []
         if gruppo_sel != "Nessuno":
-            cursor.execute("SELECT DISTINCT sottogruppo FROM accordi_commerciali WHERE gruppo_macro=? AND sottogruppo != '' ORDER BY sottogruppo", (gruppo_sel,))
+            cursor.execute("""
+                SELECT DISTINCT sottogruppo FROM accordi_commerciali WHERE gruppo_macro=? AND sottogruppo != ''
+                UNION
+                SELECT DISTINCT sottogruppo FROM struttura_gdo WHERE gruppo_macro=? AND sottogruppo != '' AND sottogruppo IS NOT NULL
+                ORDER BY sottogruppo
+            """, (gruppo_sel, gruppo_sel))
             sottogruppi = [r[0] for r in cursor.fetchall()]
-        with col_ctx2:
-            sottogruppo_sel = st.selectbox("Sottogruppo GDO", [""] + sottogruppi if gruppo_sel != "Nessuno" else [""])
             
-        associati = []
-        if gruppo_sel != "Nessuno":
-            cursor.execute("SELECT DISTINCT associato_insegna FROM struttura_gdo WHERE gruppo_macro=? AND attivo=1 ORDER BY associato_insegna", (gruppo_sel,))
-            associati = [r[0] for r in cursor.fetchall()]
         with col_ctx3:
-            associato_sel = st.selectbox("Insegna Locale (Opzionale)", [""] + associati if gruppo_sel != "Nessuno" else [""], help="Seleziona l'insegna solo se il Listino Base è stato salvato a livello locale. Gli sconti locali verranno comunque ignorati in questa griglia.")
+            sottogruppo_sel = st.selectbox(
+                "Sottogruppo GDO", 
+                [""] + sottogruppi, 
+                key="rinnovi_sottogruppo"
+            )
 
     query = """
         SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0) as min_net_net_g
