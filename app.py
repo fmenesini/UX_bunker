@@ -385,7 +385,7 @@ if menu == "Simulatore Offerte":
         with st.container(border=True):
             sconto_y = st.number_input("Sconto Continuativo Y (%)", min_value=0.0, max_value=100.0, value=float(contract.sconto_y), step=0.5)
             if contract.sconto_y > 0:
-                st.markdown(f"<div class='alert-box alert-warning'>ATTENZIONE - UNO SCONTO CONTINUATIVO PUO' DERIVARE DA UN ACCORDO LOCALE - PRIMA DI MODIFICARE IL VALORE VERIFICARE SE POSSIBILE SENZA PROCEDERE A UN NUOVO ACCORDO - valore attuale: {fmt_it(float(contract.sconto_y), is_pct=True)}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='alert-box alert-warning'>ATTENZIONE - SE LO SCONTO CONTINUATIVO DERIVA DA UN ACCORDO LOCALE NON LO SI PUO' VARIARE SENZA UN NUOVO ACCORDO - valore attuale: {fmt_it(float(contract.sconto_y), is_pct=True)}</div>", unsafe_allow_html=True)
             
             if "A. Partenza" in metodo_lavoro:
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
