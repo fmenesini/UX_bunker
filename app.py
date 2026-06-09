@@ -381,11 +381,11 @@ if menu == "Simulatore Offerte":
     col_l1, col_l2 = st.columns(2)
     
     with col_l1:
-        st.markdown("#### Manovre e Leve Sconti")
+        st.markdown("#### Scontistiche Utilizzabili")
         with st.container(border=True):
             sconto_y = st.number_input("Sconto Continuativo Y (%)", min_value=0.0, max_value=100.0, value=float(contract.sconto_y), step=0.5)
             if contract.sconto_y > 0:
-                st.markdown(f"<div class='alert-box alert-warning'>ATTENZIONE - UNO SCONTO CONTINUATIVO PUO' DERIVARE DA UN ACCORDO LOCALE - valore attuale: {fmt_it(float(contract.sconto_y), is_pct=True)}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='alert-box alert-warning'>ATTENZIONE - UNO SCONTO CONTINUATIVO PUO' DERIVARE DA UN ACCORDO LOCALE - PRIMA DI MODIFICARE IL VALORE VERIFICARE SE POSSIBILE SENZA PROCEDERE A UN NUOVO ACCORDO - valore attuale: {fmt_it(float(contract.sconto_y), is_pct=True)}</div>", unsafe_allow_html=True)
             
             if "A. Partenza" in metodo_lavoro:
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
@@ -411,7 +411,7 @@ if menu == "Simulatore Offerte":
         sconto_z = PricingEngine.calculate_inverse(target_dec, temp_input, "Z")
 
     with col_l2:
-        st.markdown("#### Analisi Limiti Promozionali")
+        st.markdown("#### Limiti Promozionali per il net net minimo")
         with st.container(border=True):
             if "A. Partenza" in metodo_lavoro:
                 temp_input_max_z = PricingInput(
