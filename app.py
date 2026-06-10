@@ -336,7 +336,7 @@ st.sidebar.markdown("## Menu Principale")
 
 menu_options = [
     "Simulatore Offerte", 
-    "Simulatore per Rinnovi Contratto (N vs N+1)",
+    "Rinnovi Contrattuali (N vs N+1)",
     "Storico Promozioni", 
     "Dati Anagrafici (Logistica)", 
     "Back-Office (Contratti Nazionali)", 
@@ -920,9 +920,9 @@ if menu == "Simulatore Offerte":
     conn.close()
 
 # ==========================================
-# NUOVA SCHEDA: SIMULATORE PER RINNOVI CONTRATTO (N vs N+1)
+# NUOVA SCHEDA: RINNOVI CONTRATTUALI (N vs N+1)
 # ==========================================
-elif menu == "Simulatore per Rinnovi Contratto (N vs N+1)":
+elif menu == "Rinnovi Contrattuali (N vs N+1)":
     st.title("Simulatore per Rinnovi Contrattuali (N vs N+1)")
     st.markdown("Analisi differenziale dei margini, calcolo dello Spazio Promo e Roll-up per Sub-Categorie.")
     
