@@ -44,6 +44,30 @@ def safe_dec(val):
     except:
         return Decimal("0.00")
 
+def get_subcat(row):
+    """
+    Classifica i prodotti in sub-categorie merceologiche partendo
+    dal tipo di olio e dalla descrizione commerciale SAP.
+    """
+    desc = str(row['descrizione_commerciale']).upper()
+    tipo = str(row['tipo_olio']).upper()
+    if tipo == 'EXTRAVERGINE':
+        if '100% ITA' in desc or '100%I' in desc or 'TOSC' in desc: return 'Extravergini Italiani'
+        if 'BIO' in desc: return 'Extravergini Biologici'
+        return 'Extravergini Comunitari'
+    elif tipo == 'OLIVA': 
+        return 'Olio Raffinato'
+    elif tipo == 'SEMI':
+        if 'ARACHIDE' in desc: return 'Semi di Arachide'
+        if 'MAIS' in desc: return 'Semi di Mais'
+        if 'GIRAS' in desc: return 'Semi di Girasole'
+        if 'FRITT' in desc or 'FRIMX' in desc: return 'Oli per Frittura Specifici'
+        if 'VINACC' in desc: return 'Semi di Vinacciolo'
+        return 'Oli di Semi'
+    elif tipo == 'ACETO': 
+        return 'Aceto Balsamico'
+    return 'Altro'
+
 # ==========================================
 # CSS AVANZATO
 # ==========================================
