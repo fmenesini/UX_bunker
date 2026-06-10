@@ -336,7 +336,7 @@ st.sidebar.markdown("## Menu Principale")
 
 menu_options = [
     "Simulatore Offerte", 
-    "Master Grid Rinnovi (N vs N+1)",
+    "Simulatore per Rinnovi Contratto (N vs N+1)",
     "Storico Promozioni", 
     "Dati Anagrafici (Logistica)", 
     "Back-Office (Contratti Nazionali)", 
@@ -920,10 +920,10 @@ if menu == "Simulatore Offerte":
     conn.close()
 
 # ==========================================
-# NUOVA SCHEDA: MASTER GRID RINNOVI (N vs N+1)
+# NUOVA SCHEDA: SIMULATORE PER RINNOVI CONTRATTO (N vs N+1)
 # ==========================================
-elif menu == "Master Grid Rinnovi (N vs N+1)":
-    st.title("Master Grid Rinnovi Contrattuali (N vs N+1)")
+elif menu == "Simulatore per Rinnovi Contratto (N vs N+1)":
+    st.title("Simulatore per Rinnovi Contrattuali (N vs N+1)")
     st.markdown("Analisi differenziale dei margini, calcolo dello Spazio Promo e Roll-up per Sub-Categorie.")
     
     anno_corrente = date.today().year
@@ -2765,7 +2765,7 @@ else:
         2. Controlla i campi **Sconto Promo MAX** e **Sconto Unitario MAX**: ti indicano il limite massimo che puoi concedere prima che il semaforo diventi rosso.
         """)
         
-    with st.expander("📊 5. COME USARE LA 'MASTER GRID RINNOVI' (Simulazione N vs N+1)", expanded=False):
+    with st.expander("📊 5. COME USARE IL 'SIMULATORE PER RINNOVI CONTRATTUALI' (Simulazione N vs N+1)", expanded=False):
         st.markdown("""
         Questa scheda è lo strumento strategico per i rinnovi annuali. Permette di simulare l'intero portafoglio prodotti di un cliente in un'unica schermata, partendo dagli aggregati fino ad arrivare al dettaglio delle singole voci contrattuali.
         
