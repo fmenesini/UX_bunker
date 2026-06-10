@@ -410,7 +410,7 @@ if menu == "Simulatore Offerte":
     tutte_insegne_attive = [r[0] for r in cursor.fetchall() if r[0]]
 
     with st.container(border=True):
-        st.markdown("#### Contesto Negoziale")
+        st.markdown("#### Contesto Negoziale - Inserire Insegna")
         col_ctx1, col_ctx2, col_ctx3, col_ctx4 = st.columns(4)
         
         with col_ctx1:
