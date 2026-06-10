@@ -50,13 +50,18 @@ def safe_dec(val):
         return Decimal("0.00")
 
 def get_subcat(row):
+    """
+    Classifica i prodotti in sub-categorie merceologiche partendo
+    dal tipo di olio e dalla descrizione commerciale SAP.
+    """
     desc = str(row['descrizione_commerciale']).upper()
     tipo = str(row['tipo_olio']).upper()
     if tipo == 'EXTRAVERGINE':
         if '100% ITA' in desc or '100%I' in desc or 'TOSC' in desc: return 'Extravergini Italiani'
         if 'BIO' in desc: return 'Extravergini Biologici'
         return 'Extravergini Comunitari'
-    elif tipo == 'OLIVA': return 'Olio Raffinato'
+    elif tipo == 'OLIVA': 
+        return 'Olio Raffinato'
     elif tipo == 'SEMI':
         if 'ARACHIDE' in desc: return 'Semi di Arachide'
         if 'MAIS' in desc: return 'Semi di Mais'
@@ -64,11 +69,12 @@ def get_subcat(row):
         if 'FRITT' in desc or 'FRIMX' in desc: return 'Oli per Frittura Specifici'
         if 'VINACC' in desc: return 'Semi di Vinacciolo'
         return 'Oli di Semi'
-    elif tipo == 'ACETO': return 'Aceto Balsamico'
+    elif tipo == 'ACETO': 
+        return 'Aceto Balsamico'
     return 'Altro'
 
 # ==========================================
-# CSS AVANZATO
+# CSS AVANZATO (CON REGOLE DI SPAZIATURA)
 # ==========================================
 st.markdown("""
 <style>
@@ -227,7 +233,7 @@ def seed_baseline_data(conn):
         ("8002210131767", "10002765", "EXTRAVERGINE", "FBERIO EXV BOT W12x750ML CLASS IT", "Ex.v. Filippo Berio Classico lt.0,75", 0.75, 12.00, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
         ("8002210131668", "10002746", "EXTRAVERGINE", "FBERIO EXV BSA BOT W12x750ML IT", "Ex.v. Filippo Berio Bassa Acidità lt.0,75", 0.75, 17.00, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
         ("8002210131804", "10002768", "EXTRAVERGINE", "FBERIO EXV 100%I BOT W12x750ML IT", "Ex.v. Filippo Berio 100% Italiano lt.0,75", 0.75, 18.00, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
-        ("8002210133013", "10003200", "EXTRAVERGINE", "FB R.O. EXV BIO 100%IT MB BOT W12X750 IT", "Ex.v. Filippo Berio Riserva Oro lt.0,75", 0.75, 19.00, "Bott.Lt 0,75", 12, 12, 5, 60, 14, 9),
+        ("8002210133013", "10003200", "EXTRAVERGINE", "FB R.O. EXV BIO 100%IT MB BOT W12X750 IT", "Ex.v. Filippo Berio Riserva Oro lt.0,75", 0.75, 19.00, "Bott.Lt 0,75", 12, 12, 5, 60, 18, 12),
         ("8002210121461", "60000544", "EXTRAVERGINE", "EX.V. BUSTINA 10mlx250 FILIPPO BERIO ITA", "Ex.v. Filippo Berio Bustina ml.10", 0.01, 0.12, "bust lt 0,01", 250, 20, 5, 100, 14, 9),
         ("8002210126572", "10003240", "OLIVA", "SAGRA OOL PUR R-PET V12X750ML CLASS IT", "Oliva Sagra RPET lt.0,75 PET", 0.75, 8.00, "Pet.Lt 0,75", 12, 12, 5, 60, 18, 12),
         ("8002210001305", "10002717", "OLIVA", "SAGRA OOL BOT W12x1L CLASS", "Oliva Sagra lt.1", 1.0, 8.00, "Bott.Lt 1", 12, 8, 5, 40, 18, 12),
@@ -265,71 +271,6 @@ def seed_baseline_data(conn):
         ("8002210130234", "60000591", "EXTRAVERGINE", "FBERIO EXV DRES BOT V6x250ML PEP TE IT", "Ex.v. F.Berio Peperoncino lt.0,25", 0.25, 3.50, "Vetro lt 0,25", 6, 49, 5, 245, 24, 16),
         ("8002210130791", "60000590", "ACETO", "FBERIO ACE BALS BOT V6x250ML IT", "Aceto Balsamico F.Berio lt.0,25", 0.25, 2.00, "Vetro lt 0,25", 6, 48, 6, 288, 61, 41),
         ("8002210130197", "60000589", "ACETO", "FBERIO ACE BALS BOT V6x500ML IT", "Aceto Balsamico F.Berio lt.0,50", 0.5, 2.10, "Vetro lt 0,50", 6, 31, 5, 155, 61, 41)
-    ]
-    
-    for p in prodotti_salov:
-        cursor.execute("""
-        INSERT OR REPLACE INTO anagrafica_master (
-            ean, codice_sap, tipo_olio, descrizione_sap, descrizione_commerciale, formato_lt, confezione,
-            pezzi_cartone, cartoni_strato, strati_pallet, cartoni_pallet, conservazione_mesi, shelf_life_mesi
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (p[0], p[1], p[2], p[3], p[4], p[5], p[7], p[8], p[9], p[10], p[11], p[12], p[13]))
-        
-        cursor.execute("INSERT OR REPLACE INTO guardrail_aziendali (ean, min_net_net_g) VALUES (?, ?)", (p[0], p[6]))
-        
-    gdo_structure = [
-        ("SELEX GRUPPO COMMERCIALE", "", "ALFI"), ("SELEX GRUPPO COMMERCIALE", "", "DIMAR"), ("SELEX GRUPPO COMMERCIALE", "", "ITALBRIX"), ("SELEX GRUPPO COMMERCIALE", "", "RIALTO"), ("SELEX GRUPPO COMMERCIALE", "", "ALÌ"), ("SELEX GRUPPO COMMERCIALE", "", "ARCA COMMERCIALE"), ("SELEX GRUPPO COMMERCIALE", "", "SUPERMERCATI CADORO"), ("SELEX GRUPPO COMMERCIALE", "", "MAXI DÌ"), ("SELEX GRUPPO COMMERCIALE", "", "UNICOMM"), ("SELEX GRUPPO COMMERCIALE", "", "CE.DI. GROS"), ("SELEX GRUPPO COMMERCIALE", "", "CE.DI MARCHE"), ("SELEX GRUPPO COMMERCIALE", "", "GMF GRANDI MAGAZZINI FIORONI"), ("SELEX GRUPPO COMMERCIALE", "", "MAGAZZINI GABRIELLI"), ("SELEX GRUPPO COMMERCIALE", "", "L’ABBONDANZA"), ("SELEX GRUPPO COMMERCIALE", "", "SUPER ELITE"), ("SELEX GRUPPO COMMERCIALE", "", "SUPEREMME"), ("SELEX GRUPPO COMMERCIALE", "", "CDS"), ("SELEX GRUPPO COMMERCIALE", "", "MEGAMARK"),
-        ("GRUPPO VÉGÉ", "", "AMERICAN CASH"), ("GRUPPO VÉGÉ", "", "APULIA DISTRIBUZIONE"), ("GRUPPO VÉGÉ", "", "ASTA"), ("GRUPPO VÉGÉ", "", "BAVA"), ("GRUPPO VÉGÉ", "", "BENNET"), ("GRUPPO VÉGÉ", "", "CAPUTO SAVERIO & FIGLI"), ("GRUPPO VÉGÉ", "", "CARAMICO GAETANO & C."), ("GRUPPO VÉGÉ", "", "CENTRODET"), ("GRUPPO VÉGÉ", "", "COAL"), ("GRUPPO VÉGÉ", "", "COLONIAL SUD"), ("GRUPPO VÉGÉ", "", "DETERCART LOMBARDO"), ("GRUPPO VÉGÉ", "", "ERREGI"), ("GRUPPO VÉGÉ", "", "F.LLI ARENA"), ("GRUPPO VÉGÉ", "", "F.LLI MORGESE"), ("GRUPPO VÉGÉ", "", "GAMBARDELLA"), ("GRUPPO VÉGÉ", "", "GARGIULO & MAIELLO"), ("GRUPPO VÉGÉ", "", "GDA"), ("GRUPPO VÉGÉ", "", "GENERAL TRADE"), ("GRUPPO VÉGÉ", "", "G.F.E."), ("GRUPPO VÉGÉ", "", "GRD"), ("GRUPPO VÉGÉ", "", "GROSSY"), ("GRUPPO VÉGÉ", "", "I.S.A."), ("GRUPPO VÉGÉ", "", "MARKET INGROSS"), ("GRUPPO VÉGÉ", "", "MIGROSS"), ("GRUPPO VÉGÉ", "", "MODERNA 2020"), ("GRUPPO VÉGÉ", "", "MULTICEDI"), ("GRUPPO VÉGÉ", "", "MULTICEDI MCN"), ("GRUPPO VÉGÉ", "", "ROSSI"), ("GRUPPO VÉGÉ", "", "SCELGO"), ("GRUPPO VÉGÉ", "", "SI.D.I. PICCOLO"), ("GRUPPO VÉGÉ", "", "SUPERMERCATI TOSANO CEREA"), ("GRUPPO VÉGÉ", "", "VEGA"),
-        ("CONAD", "CONAD SOTTOGRUPPO", "CONAD CENTRO NORD"), ("CONAD", "CONAD SOTTOGRUPPO", "COMMERCIANTI INDIPENDENTI ASSOCIATI (CIA)"), ("CONAD", "CONAD SOTTOGRUPPO", "CONAD NORD OVEST"), ("CONAD", "CONAD SOTTOGRUPPO", "CONAD ADRIATICO"), ("CONAD", "CONAD SOTTOGRUPPO", "PAC 2000A"),
-        ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "COOP ALLEANZA 3.0"), ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "COOP LIGURIA"), ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "NOVA COOP"), ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "COOP LOMBARDIA"), ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "UNICOOP FIRENZE"), ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "UNICOOP ETRURIA"), ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "COOP RENO"), ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "COOP UNIONE AMIATINA"), ("COOP ITALIA", "COOP ITALIA SOTTOGRUPPO", "SAIT COOP"),
-        ("C3", "", "BRENDOLAN ALIMENTARI"), ("C3", "", "C.D. GEST"), ("C3", "", "COLLE VERDE"), ("C3", "", "D’AMBROS IPERMERCATO"), ("C3", "", "GROS CIDAC"), ("C3", "", "GRUPPO BRIÒ"), ("C3", "", "ITALCASH"), ("C3", "", "LANDO F.LLI"), ("C3", "", "LANZA COMMERCIO DETERGENZA"), ("C3", "", "LEKKERLAND ITALIA"), ("C3", "", "LEM MARKET"), ("C3", "", "PERRONE"), ("C3", "", "PREMIUM PRICE ITALIA"), ("C3", "", "RETAILPRO"), ("C3", "", "SCUDO"), ("C3", "", "SUPERMERCATI GRISI"), ("C3", "", "SUPERMERCATI MARTINELLI"), ("C3", "", "SUPERMERCATI VISOTTO"), ("C3", "", "TO.CAL"), ("C3", "", "VIVO FRIULI VENEZIA GIULIA"),
-        ("AGORÀ NETWORK", "", "GRUPPO POLI"), ("AGORÀ NETWORK", "", "IPERAL SUPERMERCATI"), ("AGORÀ NETWORK", "", "ROSSETTO TRADE"), ("AGORÀ NETWORK", "", "SOGEGROSS"), ("AGORÀ NETWORK", "", "TIGROS"),
-        ("CRAI GRUPPO", "CRAI SOTTOGRUPPO", "SILDA"), ("CRAI GRUPPO", "CRAI SOTTOGRUPPO", "CRAI MEDITERRANEA"), ("CRAI GRUPPO", "CRAI SOTTOGRUPPO", "DISTRIBUZIONE SICILIANO"), ("CRAI GRUPPO", "CRAI SOTTOGRUPPO", "CRAI TIRRENO"), ("CRAI GRUPPO", "CRAI SOTTOGRUPPO", "ARCEV"), ("CRAI GRUPPO", "CRAI SOTTOGRUPPO", "CODÈ CRAI OVEST"), ("CRAI GRUPPO", "CRAI SOTTOGRUPPO", "F.LLI IBBA"), ("CRAI GRUPPO", "CRAI SOTTOGRUPPO", "AMA CRAI EST"), ("CRAI GRUPPO", "CRAI SOTTOGRUPPO", "SUPERCENTRO"),
-        ("DESPAR SERVIZI", "", "MAIORA"), ("DESPAR SERVIZI", "", "ERGON"), ("DESPAR SERVIZI", "", "FIORINO"), ("DESPAR SERVIZI", "", "SCS-SUPERMERCATI CONSORZIATI SARDEGNA"), ("DESPAR SERVIZI", "", "CENTRO 3A"),
-        ("D.IT DISTRIBUZIONE ITALIANA", "", "CE.DI. SIGMA CAMPANIA"), ("D.IT DISTRIBUZIONE ITALIANA", "", "CONSORZIO EUROPA"), ("D.IT DISTRIBUZIONE ITALIANA", "", "LOMBARDI & C."), ("D.IT DISTRIBUZIONE ITALIANA", "", "REALCO"), ("D.IT DISTRIBUZIONE ITALIANA", "", "SAN FRANCESCO"), ("D.IT DISTRIBUZIONE ITALIANA", "", "SISA SICILIA"), ("D.IT DISTRIBUZIONE ITALIANA", "", "EUROPA COMMERCIALE"), ("D.IT DISTRIBUZIONE ITALIANA", "", "LE DELIZIE DEL SUD"), ("D.IT DISTRIBUZIONE ITALIANA", "", "VA.PA."),
-        ("EUROSPIN", "", "SPESA INTELLIGENTE"), ("EUROSPIN", "", "EUROSPIN TIRRENICA"), ("EUROSPIN", "", "EUROSPIN LAZIO"), ("EUROSPIN", "", "EUROSPIN PUGLIA"), ("EUROSPIN", "", "EUROSPIN SICILIA"),
-        ("CONSORZIO CORALIS", "", "ALIM GROSS"), ("CONSORZIO CORALIS", "", "CDC"), ("CONSORZIO CORALIS", "", "D.IN.AL."), ("CONSORZIO CORALis", "", "DUECI"), ("CONSORZIO CORALIS", "", "FILICE GIOVANNI"), ("CONSORZIO CORALIS", "", "FILICE GROUP"), ("CONSORZIO CORALIS", "", "GIGANTE ALIMENTARI"), ("CONSORZIO CORALIS", "", "GSD"), ("CONSORZIO CORALIS", "", "LA PRIMA"), ("CONSORZIO CORALIS", "", "LOMBARDO"), ("CONSORZIO CORALIS", "", "MAGNONE PIÙ"), ("CONSORZIO CORALIS", "", "MERIDIO"), ("CONSORZIO CORALIS", "", "PASCAR"), ("CONSORZIO CORALIS", "", "PREZZEMOLO&VITALE"), ("CONSORZIO CORALIS", "", "TUTTODISTRIBUZIONE"), ("CONSORZIO CORALIS", "", "VICINO A TE"),
-        ("GRUPPO FINIPER CANOVA", "", "IPER MONTEBELLO"), ("GRUPPO FINIPER CANOVA", "", "UNES"),
-        ("ESSELUNGA GRUPPO", "ESSELUNGA SOTTOGRUPPO", "ESSELUNGA"),
-        ("PAM GRUPPO", "PAM SOTTOGRUPPO", "PAM"),
-        ("SELEX GRUPPO", "SELEX SOTTOGRUPPO", "SELEX ")
-    ]
-    cursor.executemany("INSERT INTO struttura_gdo (gruppo_macro, sottogruppo, associato_insegna) VALUES (?, ?, ?)", gdo_structure)
-    
-    demo_insegne = ['COOP ALLEANZA 3.0', 'CONAD ADRIATICO', 'ESSELUNGA', 'SELEX ', 'PAM', 'CRAI TIRRENO']
-    for ins in demo_insegne:
-        cursor.execute("UPDATE struttura_gdo SET attivo=1 WHERE associato_insegna=?", (ins,))
-        
-    fallback_data = [
-        ('COOP ITALIA', '', '', 'GRUPPO', '', None, 20.0, 30.0, None, None, None, None, None, None, 1.5, 1.0, 14.0, 8.0, None, None, None, None),
-        ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', '', 'REFERENZA', '8002210131620', 66.00, None, None, None, None, None, None, 12.0, 5.0, None, None, None, None, None, None, None, None),
-        ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', '', 'REFERENZA', '8002210111110', 60.80, None, None, None, None, None, None, 15.0, 0.0, None, None, None, None, None, None, None, None),
-        ('COOP ITALIA', 'COOP ITALIA SOTTOGRUPPO', '', 'REFERENZA', '8002210001305', 43.20, None, None, None, None, None, None, 12.0, 0.0, None, None, None, None, None, None, None, None),
-
-        ('ESSELUNGA GRUPPO', '', '', 'GRUPPO', '', None, 35.0, 15.0, None, None, None, None, None, None, 1.2, 1.0, 12.0, 5.0, None, None, None, None),
-        ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', '', 'REFERENZA', '8002210131620', 40.00, None, None, None, None, None, None, 10.0, 7.0, None, None, None, None, None, None, None, None),
-        ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', '', 'REFERENZA', '8002210111110', 38.00, None, None, None, None, None, None, 55.0, 0.0, None, None, None, None, None, None, None, None),
-        ('ESSELUNGA GRUPPO', 'ESSELUNGA SOTTOGRUPPO', '', 'REFERENZA', '8002210001305', 24.00, None, None, None, None, None, None, 13.0, 0.0, None, None, None, None, None, None, None, None),
-
-        ('CONAD', '', '', 'GRUPPO', '', None, 17.0, 18.0, None, None, None, None, None, None, 1.5, 1.0, 9.0, 11.0, None, None, None, None),
-        ('CONAD', 'CONAD SOTTOGRUPPO', '', 'REFERENZA', '8002210131620', 50.00, None, None, None, None, None, None, 12.0, 9.0, None, None, None, None, None, None, None, None),
-        ('CONAD', 'CONAD SOTTOGRUPPO', '', 'REFERENZA', '8002210111110', 44.00, None, None, None, None, None, None, 11.0, 4.0, None, None, None, None, None, None, None, None),
-        ('CONAD', 'CONAD SOTTOGRUPPO', '', 'REFERENZA', '8002210001305', 30.00, None, None, None, None, None, None, 10.0, 4.0, None, None, None, None, None, None, None, None),
-
-        ('SELEX GRUPPO', '', '', 'GRUPPO', '', None, 17.0, 18.0, None, None, None, None, None, None, 1.5, 1.0, 9.0, 11.0, None, None, None, None),
-        ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', '', 'REFERENZA', '8002210131620', 50.00, None, None, None, None, None, None, 12.0, 9.0, None, None, None, None, None, None, None, None),
-        ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', '', 'REFERENZA', '8002210111110', 44.00, None, None, None, None, None, None, 11.0, 4.0, None, None, None, None, None, None, None, None),
-        ('SELEX GRUPPO', 'SELEX SOTTOGRUPPO', '', 'REFERENZA', '8002210001305', 30.00, None, None, None, None, None, None, 10.0, 4.0, None, None, None, None, None, None, None, None),
-        
-        ('PAM GRUPPO', '', '', 'GRUPPO', '', None, 15.0, 20.0, None, None, None, None, None, None, 1.4, 1.0, 11.0, 6.0, None, None, None, None),
-        ('PAM GRUPPO', 'PAM SOTTOGRUPPO', '', 'REFERENZA', '8002210131620', 52.00, None, None, None, None, None, None, 14.0, 6.0, None, None, None, None, None, None, None, None),
-        ('PAM GRUPPO', 'PAM SOTTOGRUPPO', '', 'REFERENZA', '8002210111110', 48.00, None, None, None, None, None, None, 13.0, 3.0, None, None, None, None, None, None, None, None),
-        ('PAM GRUPPO', 'PAM SOTTOGRUPPO', '', 'REFERENZA', '8002210001305', 32.00, None, None, None, None, None, None, 9.0, 3.0, None, None, None, None, None, None, None, None),
-
-        ('CRAI GRUPPO', '', '', 'GRUPPO', '', None, 12.0, 25.0, None, None, None, None, None, None, 2.0, 1.0, 7.0, 12.0, None, None, None, None),
-        ('CRAI GRUPPO', 'CRAI SOTTOGRUPPO', '', 'REFERENZA', '8002210131620', 56.00, None, None, None, None, None, None, 15.0, 8.0, None, None, None, None, None, None, None, None),
-        ('CRAI GRUPPO', 'CRAI SOTTOGRUPPO', '', 'REFERENZA', '8002210111110', 50.00, None, None, None, None, None, None, 12.0, 5.0, None, None, None, None, None, None, None, None),
-        ('CRAI GRUPPO', 'CRAI SOTTOGRUPPO', '', 'REFERENZA', '8002210001305', 35.00, None, None, None, None, None, None, 11.0, 5.0, None, None, None, None, None, None, None, None)
     ]
     
     cursor.executemany("""
@@ -1186,6 +1127,20 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
     df_base['Sub-Categoria'] = df_base.apply(get_subcat, axis=1)
     df_base['Categoria'] = df_base['tipo_olio']
     df_base = df_base.rename(columns={'descrizione_commerciale': 'Prodotto', 'min_net_net_g': 'Minimo Net Net €'})
+
+    # --- INIZIALIZZAZIONE STATO DI SESSIONE PER RINNOVI ---
+    dettaglio_cols = [
+        'S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %',
+        'PFA I %', 'PFA II %', 'PFA III %', 'PFA IV %', 'PFA V %'
+    ]
+    for col in OPERATIVE_COLS + dettaglio_cols:
+        df_base[col] = 0.0 if '€' in col or '%' in col else 0
+        
+    df_base['[N] Sc. Fattura %'] = 0.0
+    df_base['[N] Contratto %'] = 0.0
+
+    if 'rinnovi_df' not in st.session_state:
+        st.session_state.rinnovi_df = df_base.copy()
 
     # --- SCHEDE INFERIORI AGGIORNATE (CON L'AGGIUNTA DELLA SCHEDA 4) ---
     tab_simulazione, tab_risultati, tab_esplosione, tab_storico_rinnovi = st.tabs([
