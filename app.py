@@ -67,7 +67,6 @@ def get_subcat(row):
     elif tipo == 'ACETO': return 'Aceto Balsamico'
     return 'Altro'
 
-
 # ==========================================
 # CSS AVANZATO
 # ==========================================
@@ -1226,7 +1225,7 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
             with st.container(border=True):
                 st.markdown("**Esporta Template Simulazione**")
                 buf_sim = io.BytesIO()
-                st.session_state.rinnovi_df[['ean', 'Categoria', 'Sub-Categoria', 'Prodotto', 'Minimo Net Net €'] + operative_cols].to_excel(buf_sim, index=False)
+                st.session_state.rinnovi_df[['ean', 'Categoria', 'Sub-Categoria', 'Prodotto', 'Minimo Net Net €'] + OPERATIVE_COLS].to_excel(buf_sim, index=False)
                 st.download_button("Scarica Tabella Simulazione", buf_sim.getvalue(), "Template_Simulazione.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             
             st.metric("Variazione Totale Ponderata (%)", fmt_it(tot_delta_perc, 2, is_pct=True, sign=True))
@@ -1239,7 +1238,7 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
                     df_up_sim = pd.read_excel(up_sim, dtype={'ean': str})
                     df_up_sim['ean'] = df_up_sim['ean'].astype(str).str.zfill(13)
                     df_temp = st.session_state.rinnovi_df.copy()
-                    for col in operative_cols + ['Minimo Net Net €']:
+                    for col in OPERATIVE_COLS + ['Minimo Net Net €']:
                         if col in df_up_sim.columns:
                             mapping = df_up_sim.set_index('ean')[col].to_dict()
                             df_temp[col] = df_temp['ean'].map(mapping).fillna(df_temp[col])
@@ -1635,7 +1634,7 @@ elif menu == "Storico Promozioni":
     query = """
         SELECT id, data_salvataggio, stato_promo, gruppo_macro, associato_insegna, ean, descrizione_commerciale, 
                sell_in_dal, sell_in_al, sell_out_dal, sell_out_al,
-               listino_r, sconto_z, sconto_aa, min_net_net_g, net_net_am, net_net_post_promo, 
+               listino_r, sconto_y, sconto_z, sconto_aa, min_net_net_g, net_net_am, net_net_post_promo, 
                volumi_stimati, contributo_fisso, contributo_pezzo, costo_totale_extra, note 
         FROM storico_promo WHERE 1=1
     """
@@ -2772,7 +2771,7 @@ elif menu == "Report Sintetico":
                     wb.save(buffer_rep)
                     
                     st.download_button(
-                        label=f"SCARICA EXCEL",
+                        label="SCARICA EXCEL",
                         data=buffer_rep.getvalue(),
                         file_name=f"Sintesi_{ass_rep_sel}_{datetime.now().strftime('%Y%m%d')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2928,7 +2927,7 @@ else:
         ### 🚶‍♂️ Guida Sequenziale Passo-Dopo-Passo:
         
         1.  **Definisci il Contesto di Partenza:**  
-            Seleziona l'Insegna Locale. Clicca sul pulsante **Carica Condizioni Attuali da DB**. La griglia scaricherà in automatico i listini ufficiali e tutti gli sconti in vigore per l'anno in corso (Anno N), inserendoli come base di partenza.
+            Seleziona l'Insegna Locale. Clicca sul pulsante **Carica Condizioni Attuali da DB**. La griglia scaricherà in automatico i listini ufficiali e tutti gli sconti in vigore per l'anno in corso (Anno N), inserendoli como base di partenza.
         2.  **Definisci i Volumi Obiettivo:**  
             All'interno del **Tab 1 (Master Grid)**, inserisci nella colonna **[N+1] Volumi** le stime di vendita previste per l'anno futuro per ciascun prodotto.  
             *Nota Importante:* Per ottimizzare l'analisi, le schede dei risultati e le medie ponderate prenderanno in considerazione esclusivamente i prodotti attivi (ovvero quelli con volumi futuri maggiori di zero).
