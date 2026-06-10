@@ -929,6 +929,23 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
     anno_corrente = date.today().year
     conn = sqlite3.connect(DB_FILE)
     
+    # Creazione automatica della tabella per la persistenza degli scenari annuali
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS proposte_rinnovi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, 
+            data_salvataggio TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+            nome_proposta TEXT, 
+            gruppo_macro TEXT, 
+            sottogruppo TEXT, 
+            associato_insegna TEXT, 
+            global_carico REAL, 
+            global_pagamento REAL, 
+            dati_json TEXT
+        )
+    """)
+    conn.commit()
+    
     # Helper per l'esportazione Excel
     def to_excel_bytes(df):
         output = io.BytesIO()
@@ -984,40 +1001,158 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
         cursor.execute("SELECT DISTINCT associato_insegna FROM struttura_gdo WHERE attivo=1 ORDER BY associato_insegna")
         tutte_insegne_rinnovi = [r[0] for r in cursor.fetchall() if r[0]]
 
-        col_ctx1, col_ctx2, col_ctx3 = st.columns(3)
+        # Riorganizzazione della UI secondo le regole di UX design
+        col_selectors, col_actions = st.columns([3, 2])
         
-        with col_ctx1:
-            associato_sel = st.selectbox(
-                "Insegna Locale (Opzionale - Seleziona per auto-compilare)", 
-                [""] + tutte_insegne_rinnovi, 
-                key="rinnovi_insegna", 
-                on_change=on_rinnovi_insegna_change
-            )
+        with col_selectors:
+            st.markdown("**1. Configurazione GDO**")
+            col_ctx1, col_ctx2, col_ctx3 = st.columns(3)
             
-        with col_ctx2:
-            gruppo_sel = st.selectbox(
-                "Gruppo GDO", 
-                ["Nessuno"] + gruppi, 
-                key="rinnovi_gruppo", 
-                on_change=on_rinnovi_gruppo_change
-            )
-        
-        sottogruppi = []
+            with col_ctx1:
+                associato_sel = st.selectbox(
+                    "Insegna Locale (Seleziona prima)", 
+                    [""] + tutte_insegne_rinnovi, 
+                    key="rinnovi_insegna", 
+                    on_change=on_rinnovi_insegna_change
+                )
+                
+            with col_ctx2:
+                gruppo_sel = st.selectbox(
+                    "Gruppo GDO", 
+                    ["Nessuno"] + gruppi, 
+                    key="rinnovi_gruppo", 
+                    on_change=on_rinnovi_gruppo_change
+                )
+            
+            sottogruppi = []
+            if gruppo_sel != "Nessuno":
+                cursor.execute("""
+                    SELECT DISTINCT sottogruppo FROM accordi_commerciali WHERE gruppo_macro=? AND sottogruppo != ''
+                    UNION
+                    SELECT DISTINCT sottogruppo FROM struttura_gdo WHERE gruppo_macro=? AND sottogruppo != '' AND sottogruppo IS NOT NULL
+                    ORDER BY sottogruppo
+                """, (gruppo_sel, gruppo_sel))
+                sottogruppi = [r[0] for r in cursor.fetchall()]
+                
+            with col_ctx3:
+                sottogruppo_sel = st.selectbox(
+                    "Sottogruppo GDO", 
+                    [""] + sottogruppi, 
+                    key="rinnovi_sottogruppo"
+                )
+                
+        with col_actions:
+            st.markdown("**2. Azioni & Salvataggi Scenario**")
+            col_btn_grp1, col_btn_grp2 = st.columns(2)
+            with col_btn_grp1:
+                btn_carica = st.button("Carica Baseline 🔄", type="primary", use_container_width=True, help="Importa le condizioni contrattuali del cliente dal DB.")
+                btn_mock = st.button("Dati di Test (Mock) 🧪", use_container_width=True, help="Popola lo scenario corrente con dati di test simulati.")
+            with col_btn_grp2:
+                nome_scenario = st.text_input("Nome Proposta per Salvare", placeholder="Es. Scenario Q3", label_visibility="collapsed")
+                btn_salva = st.button("Salva Scenario 💾", type="secondary", use_container_width=True, help="Salva lo stato corrente della griglia dei rinnovi per riprenderlo in futuro.")
+
+    # Esecuzione azioni scenario
+    if btn_carica:
         if gruppo_sel != "Nessuno":
-            cursor.execute("""
-                SELECT DISTINCT sottogruppo FROM accordi_commerciali WHERE gruppo_macro=? AND sottogruppo != ''
-                UNION
-                SELECT DISTINCT sottogruppo FROM struttura_gdo WHERE gruppo_macro=? AND sottogruppo != '' AND sottogruppo IS NOT NULL
-                ORDER BY sottogruppo
-            """, (gruppo_sel, gruppo_sel))
-            sottogruppi = [r[0] for r in cursor.fetchall()]
+            df_temp = st.session_state.rinnovi_df.copy()
+            first_contract = True
             
-        with col_ctx3:
-            sottogruppo_sel = st.selectbox(
-                "Sottogruppo GDO", 
-                [""] + sottogruppi, 
-                key="rinnovi_sottogruppo"
-            )
+            def safe_float(v): return float(v) if v is not None else 0.0
+            
+            for idx, row in df_temp.iterrows():
+                contract = get_merged_contract(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
+                
+                if contract.listino_r is None:
+                    contract.listino_r = get_listino_strutturale(conn, gruppo_sel, sottogruppo_sel, row['ean'])
+                
+                if contract.listino_r is not None:
+                    if first_contract:
+                        st.session_state.global_carico = safe_float(contract.sconto_carico)
+                        st.session_state.global_pagamento = safe_float(contract.sconto_pagamento)
+                        first_contract = False
+                        
+                    listino_n = safe_float(contract.listino_r)
+                    df_temp.at[idx, '[N] Listino €'] = listino_n
+                    df_temp.at[idx, '[N+1] Listino €'] = listino_n
+                    
+                    p = Decimal(str(listino_n))
+                    sconti_strutturali = [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5]
+                    
+                    for s in sconti_strutturali:
+                        val_s = Decimal(str(s)) if s is not None else Decimal('0')
+                        p = p * (Decimal('1') - (val_s / Decimal('100')))
+                    
+                    sc_fatt_eq = 0.0
+                    if listino_n > 0:
+                        sc_fatt_eq = float(((Decimal('1') - (p / Decimal(str(listino_n)))) * Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                    
+                    df_temp.at[idx, '[N] Sc. Fattura %'] = sc_fatt_eq
+                    df_temp.at[idx, '[N+1] Sc. Fattura %'] = sc_fatt_eq
+                    
+                    pfa_tot = safe_float(contract.voce_i) + safe_float(contract.voce_ii) + safe_float(contract.voce_iii) + safe_float(contract.voce_iv) + safe_float(contract.voce_v)
+                    df_temp.at[idx, '[N] Contratto %'] = pfa_tot
+                    df_temp.at[idx, '[N+1] Contratto %'] = pfa_tot
+                    
+                    df_temp.at[idx, 'S1 %'] = safe_float(contract.sconto_1)
+                    df_temp.at[idx, 'S2 %'] = safe_float(contract.sconto_2)
+                    df_temp.at[idx, 'S3 %'] = safe_float(contract.sconto_3)
+                    df_temp.at[idx, 'S4 %'] = safe_float(contract.sconto_4)
+                    df_temp.at[idx, 'S5 %'] = safe_float(contract.sconto_5)
+                    df_temp.at[idx, 'PFA I %'] = safe_float(contract.voce_i)
+                    df_temp.at[idx, 'PFA II %'] = safe_float(contract.voce_ii)
+                    df_temp.at[idx, 'PFA III %'] = safe_float(contract.voce_iii)
+                    df_temp.at[idx, 'PFA IV %'] = safe_float(contract.voce_iv)
+                    df_temp.at[idx, 'PFA V %'] = safe_float(contract.voce_v)
+                    
+            st.session_state.rinnovi_df = df_temp
+            st.success("Condizioni contrattuali ricaricate con successo.")
+            st.rerun()
+        else:
+            st.warning("Seleziona un Gruppo GDO o un'Insegna Locale prima di caricare i dati.")
+
+    if btn_mock:
+        df_mock = st.session_state.rinnovi_df.copy()
+        st.session_state.global_carico = 2.0
+        st.session_state.global_pagamento = 1.5
+        for idx, row in df_mock.iterrows():
+            floor = row['Minimo Net Net €'] if row['Minimo Net Net €'] > 0 else 3.0
+            vol = random.randint(10, 100) * 100
+            
+            listino_n = float(round(floor * 1.5, 2))
+            sc_fatt_n = 10.0
+            pfa_n = 5.0
+            
+            df_mock.at[idx, '[N] Listino €'] = listino_n
+            df_mock.at[idx, '[N] Sc. Fattura %'] = sc_fatt_n
+            df_mock.at[idx, '[N] Contratto %'] = pfa_n
+            
+            df_mock.at[idx, '[N+1] Volumi'] = int(vol * 1.05)
+            df_mock.at[idx, '[N+1] Listino €'] = float(round(floor * 1.6, 2))
+            df_mock.at[idx, '[N+1] Sc. Fattura %'] = 12.0
+            df_mock.at[idx, '[N+1] Contratto %'] = 5.0
+            
+            df_mock.at[idx, 'S1 %'] = 10.0
+            df_mock.at[idx, 'S2 %'] = 2.22 
+            df_mock.at[idx, 'PFA I %'] = 5.0
+            
+        st.session_state.rinnovi_df = df_mock
+        st.success("Dati di test caricati con successo.")
+        st.rerun()
+
+    if btn_salva:
+        if not nome_scenario.strip():
+            st.warning("⚠️ Inserisci un nome per la proposta commerciale prima di procedere al salvataggio.")
+        elif gruppo_sel == "Nessuno" and not associato_sel:
+            st.warning("⚠️ Seleziona una configurazione GDO (Insegna o Gruppo) valida prima di salvare.")
+        else:
+            dati_json = st.session_state.rinnovi_df.to_json(orient='records')
+            cursor.execute("""
+                INSERT INTO proposte_rinnovi (nome_proposta, gruppo_macro, sottogruppo, associato_insegna, global_carico, global_pagamento, dati_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (nome_scenario, gruppo_sel, sottogruppo_sel, associato_sel, float(st.session_state.global_carico), float(st.session_state.global_pagamento), dati_json))
+            conn.commit()
+            st.success(f"💾 Scenario '{nome_scenario}' salvato correttamente!")
+            st.rerun()
 
     query = """
         SELECT a.ean, a.descrizione_commerciale, a.tipo_olio, COALESCE(g.min_net_net_g, 0.0) as min_net_net_g
@@ -1025,149 +1160,21 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
         LEFT JOIN guardrail_aziendali g ON a.ean = g.ean
     """
     df_base = pd.read_sql_query(query, conn)
-    
-    def get_subcat(row):
-        desc = str(row['descrizione_commerciale']).upper()
-        tipo = str(row['tipo_olio']).upper()
-        if tipo == 'EXTRAVERGINE':
-            if '100% ITA' in desc or '100%I' in desc or 'TOSC' in desc: return 'Extravergini Italiani'
-            if 'BIO' in desc: return 'Extravergini Biologici'
-            return 'Extravergini Comunitari'
-        elif tipo == 'OLIVA': return 'Olio Raffinato'
-        elif tipo == 'SEMI':
-            if 'ARACHIDE' in desc: return 'Semi di Arachide'
-            if 'MAIS' in desc: return 'Semi di Mais'
-            if 'GIRAS' in desc: return 'Semi di Girasole'
-            if 'FRITT' in desc or 'FRIMX' in desc: return 'Oli per Frittura Specifici'
-            if 'VINACC' in desc: return 'Semi di Vinacciolo'
-            return 'Oli di Semi'
-        elif tipo == 'ACETO': return 'Aceto Balsamico'
-        return 'Altro'
-        
     df_base['Sub-Categoria'] = df_base.apply(get_subcat, axis=1)
     df_base['Categoria'] = df_base['tipo_olio']
     df_base = df_base.rename(columns={'descrizione_commerciale': 'Prodotto', 'min_net_net_g': 'Minimo Net Net €'})
-    
-    operative_cols = [
-        '[N+1] Volumi', '[N] Listino €', '[N+1] Listino €', 
-        '[N+1] Sc. Fattura %', '[N+1] Contratto %'
-    ]
-    
-    dettaglio_cols = [
-        'S1 %', 'S2 %', 'S3 %', 'S4 %', 'S5 %',
-        'PFA I %', 'PFA II %', 'PFA III %', 'PFA IV %', 'PFA V %'
-    ]
-    
-    for col in operative_cols + dettaglio_cols:
-        df_base[col] = 0.0 if '€' in col or '%' in col else 0
-        
-    df_base['[N] Sc. Fattura %'] = 0.0
-    df_base['[N] Contratto %'] = 0.0
 
-    if 'rinnovi_df' not in st.session_state:
-        st.session_state.rinnovi_df = df_base.copy()
-
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        if st.button("Carica Condizioni Attuali da DB", type="primary", use_container_width=True):
-            if gruppo_sel != "Nessuno":
-                df_temp = st.session_state.rinnovi_df.copy()
-                first_contract = True
-                
-                def safe_float(v): return float(v) if v is not None else 0.0
-                
-                for idx, row in df_temp.iterrows():
-                    contract = get_merged_contract(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
-                    
-                    if contract.listino_r is None:
-                        contract.listino_r = get_listino_strutturale(conn, gruppo_sel, sottogruppo_sel, row['ean'])
-                    
-                    if contract.listino_r is not None:
-                        if first_contract:
-                            st.session_state.global_carico = safe_float(contract.sconto_carico)
-                            st.session_state.global_pagamento = safe_float(contract.sconto_pagamento)
-                            first_contract = False
-                            
-                        listino_n = safe_float(contract.listino_r)
-                        df_temp.at[idx, '[N] Listino €'] = listino_n
-                        df_temp.at[idx, '[N+1] Listino €'] = listino_n
-                        
-                        p = Decimal(str(listino_n))
-                        sconti_strutturali = [contract.sconto_1, contract.sconto_2, contract.sconto_3, contract.sconto_4, contract.sconto_5]
-                        
-                        for s in sconti_strutturali:
-                            val_s = Decimal(str(s)) if s is not None else Decimal('0')
-                            p = p * (Decimal('1') - (val_s / Decimal('100')))
-                        
-                        sc_fatt_eq = 0.0
-                        if listino_n > 0:
-                            sc_fatt_eq = float(((Decimal('1') - (p / Decimal(str(listino_n)))) * Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-                        
-                        df_temp.at[idx, '[N] Sc. Fattura %'] = sc_fatt_eq
-                        df_temp.at[idx, '[N+1] Sc. Fattura %'] = sc_fatt_eq
-                        
-                        pfa_tot = safe_float(contract.voce_i) + safe_float(contract.voce_ii) + safe_float(contract.voce_iii) + safe_float(contract.voce_iv) + safe_float(contract.voce_v)
-                        df_temp.at[idx, '[N] Contratto %'] = pfa_tot
-                        df_temp.at[idx, '[N+1] Contratto %'] = pfa_tot
-                        
-                        df_temp.at[idx, 'S1 %'] = safe_float(contract.sconto_1)
-                        df_temp.at[idx, 'S2 %'] = safe_float(contract.sconto_2)
-                        df_temp.at[idx, 'S3 %'] = safe_float(contract.sconto_3)
-                        df_temp.at[idx, 'S4 %'] = safe_float(contract.sconto_4)
-                        df_temp.at[idx, 'S5 %'] = safe_float(contract.sconto_5)
-                        df_temp.at[idx, 'PFA I %'] = safe_float(contract.voce_i)
-                        df_temp.at[idx, 'PFA II %'] = safe_float(contract.voce_ii)
-                        df_temp.at[idx, 'PFA III %'] = safe_float(contract.voce_iii)
-                        df_temp.at[idx, 'PFA IV %'] = safe_float(contract.voce_iv)
-                        df_temp.at[idx, 'PFA V %'] = safe_float(contract.voce_v)
-                        
-                st.session_state.rinnovi_df = df_temp
-                st.rerun()
-            else:
-                st.warning("Seleziona un Gruppo GDO prima di caricare i dati.")
-
-    with col_btn2:
-        if st.button("Popola con Dati di Test (Mock Data)", use_container_width=True):
-            df_mock = st.session_state.rinnovi_df.copy()
-            st.session_state.global_carico = 2.0
-            st.session_state.global_pagamento = 1.5
-            for idx, row in df_mock.iterrows():
-                floor = row['Minimo Net Net €'] if row['Minimo Net Net €'] > 0 else 3.0
-                vol = random.randint(10, 100) * 100
-                
-                listino_n = float(round(floor * 1.5, 2))
-                sc_fatt_n = 10.0
-                pfa_n = 5.0
-                
-                df_mock.at[idx, '[N] Listino €'] = listino_n
-                df_mock.at[idx, '[N] Sc. Fattura %'] = sc_fatt_n
-                df_mock.at[idx, '[N] Contratto %'] = pfa_n
-                
-                df_mock.at[idx, '[N+1] Volumi'] = int(vol * 1.05)
-                df_mock.at[idx, '[N+1] Listino €'] = float(round(floor * 1.6, 2))
-                df_mock.at[idx, '[N+1] Sc. Fattura %'] = 12.0
-                df_mock.at[idx, '[N+1] Contratto %'] = 5.0
-                
-                df_mock.at[idx, 'S1 %'] = 10.0
-                df_mock.at[idx, 'S2 %'] = 2.22 
-                df_mock.at[idx, 'PFA I %'] = 5.0
-                
-            st.session_state.rinnovi_df = df_mock
-            st.rerun()
-
-    conn.close()
-
-    tab_simulazione, tab_risultati, tab_esplosione = st.tabs([
+    # --- SCHEDE INFERIORI AGGIORNATE (CON L'AGGIUNTA DELLA SCHEDA 4) ---
+    tab_simulazione, tab_risultati, tab_esplosione, tab_storico_rinnovi = st.tabs([
         "1. Master Grid (Input Dati)", 
         "2. Analisi Ponderata & Spazio Promo",
-        "3. Esplosione Sconti (Dettaglio)"
+        "3. Esplosione Sconti (Dettaglio)",
+        "4. Proposte Rinnovi Salvate 📁"
     ])
 
     with tab_simulazione:
         st.markdown("#### Griglia di Simulazione Contrattuale")
-        
-        # --- FILTRO RAPIDO ---
-        filtro_vista = st.radio("Filtra Referenze in Tabella:", ["Tutte le Referenze", "Solo con Volumi > 0", "Sotto Soglia (Allarme Rosso)"], horizontal=True)
+        filtro_vista = st.radio("Filtra Referenze in Tabella:", ["Tutte le Referenze", "Solo con Volumi > 0", "Sotto Soglia (Allarme Rosso)"], horizontal=True, key="filtro_vista_rinnovi")
         
         # --- INPUT GLOBALI PER CARICO E PAGAMENTO ---
         with st.container(border=True):
@@ -1370,7 +1377,7 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
                 column_config={"Allarme": "Sotto Floor!"},
                 hide_index=True, use_container_width=True
             )
-            st.download_button("📥 Scarica Tabella Categorie (Excel)", to_excel_bytes(df_cat_disp), "Analisi_Categorie.xlsx")
+            st.download_button("📥 Scarica Tabella Categorie (Excel)", to_excel_bytes(df_cat_disp), "Analisi_Categorie.xlsx", key="down_cat_rinnovi")
             
             st.divider()
             
@@ -1413,7 +1420,7 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
                 },
                 hide_index=True, use_container_width=True
             )
-            st.download_button("📥 Scarica Dettaglio Referenze (Excel)", to_excel_bytes(df_active[cols_sku_disp]), "Dettaglio_Referenze.xlsx")
+            st.download_button("📥 Scarica Dettaglio Referenze (Excel)", to_excel_bytes(df_active[cols_sku_disp]), "Dettaglio_Referenze.xlsx", key="down_sku_rinnovi")
 
     with tab_esplosione:
         st.markdown("#### Esplosione Sconti (Dettaglio)")
@@ -1461,7 +1468,7 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
             
             col_spacer, col_btn_exp = st.columns([3, 1])
             with col_btn_exp:
-                st.download_button("📥 Scarica Esplosione Sconti (Excel)", to_excel_bytes(df_explode[cols_to_edit_exp]), "Esplosione_Sconti.xlsx")
+                st.download_button("📥 Scarica Esplosione Sconti (Excel)", to_excel_bytes(df_explode[cols_to_edit_exp]), "Esplosione_Sconti.xlsx", key="down_explode_rinnovi")
 
             with st.form("form_esplosione"):
                 col_btn_calc, col_btn_align = st.columns(2)
@@ -1504,6 +1511,76 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
                      st.session_state.rinnovi_df = df_temp
                      
                  st.rerun()
+
+    with tab_storico_rinnovi:
+        st.markdown("#### Gestione Proposte dei Rinnovi Contrattuali Salvate")
+        
+        df_saved = pd.read_sql_query("""
+            SELECT id, data_salvataggio, nome_proposta, gruppo_macro, sottogruppo, associato_insegna, global_carico, global_pagamento 
+            FROM proposte_rinnovi 
+            ORDER BY data_salvataggio DESC
+        """, conn)
+        
+        if df_saved.empty:
+            st.info("Nessuna proposta di rinnovo salvata al momento. Usa il pannello 'Azioni Scenario' in alto per memorizzare la simulazione corrente.")
+        else:
+            st.dataframe(
+                df_saved,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "id": "ID Scenario",
+                    "data_salvataggio": st.column_config.DatetimeColumn("Data Salvataggio", format="DD/MM/YYYY HH:mm"),
+                    "nome_proposta": "Nome Proposta",
+                    "gruppo_macro": "Gruppo Macro",
+                    "sottogruppo": "Sottogruppo",
+                    "associato_insegna": "Insegna Locale",
+                    "global_carico": st.column_config.NumberColumn("Sconto Carico %", format="%.2f %%"),
+                    "global_pagamento": st.column_config.NumberColumn("Sconto Pagamento %", format="%.2f %%"),
+                }
+            )
+            
+            col_load_left, col_load_right = st.columns(2)
+            
+            scenari_opzioni = {f"{r['nome_proposta']} ({r['associato_insegna'] or r['gruppo_macro']}) [ID: {r['id']}]": r['id'] for _, r in df_saved.iterrows()}
+            
+            with col_load_left:
+                with st.container(border=True):
+                    st.markdown("**🔄 Ripristina Proposta**")
+                    sel_scenario_text = st.selectbox("Seleziona scenario da ricaricare nel simulatore", list(scenari_opzioni.keys()), key="select_scenario_load_key")
+                    scenario_id = scenari_opzioni[sel_scenario_text]
+                    
+                    if st.button("CARICA PROPOSTA SELEZIONATA 🔄", type="primary", use_container_width=True, help="Sovrascrive lo scenario corrente ripristinando la simulazione caricata."):
+                        cursor.execute("SELECT gruppo_macro, sottogruppo, associato_insegna, global_carico, global_pagamento, dati_json FROM proposte_rinnovi WHERE id=?", (scenario_id,))
+                        res_scen = cursor.fetchone()
+                        if res_scen:
+                            st.session_state.rinnovi_gruppo = res_scen[0]
+                            st.session_state.rinnovi_sottogruppo = res_scen[1] or ""
+                            st.session_state.rinnovi_insegna = res_scen[2] or ""
+                            st.session_state.global_carico = float(res_scen[3])
+                            st.session_state.global_pagamento = float(res_scen[4])
+                            
+                            df_restored = pd.read_json(io.StringIO(res_scen[5]))
+                            if 'ean' in df_restored.columns:
+                                df_restored['ean'] = df_restored['ean'].astype(str).str.replace(r'\.0$', '', regex=True).str.zfill(13)
+                                
+                            st.session_state.rinnovi_df = df_restored
+                            st.success(f"Scenario ID {scenario_id} ripristinato con successo.")
+                            st.rerun()
+                            
+            with col_load_right:
+                with st.container(border=True):
+                    st.markdown("**❌ Elimina Proposta**")
+                    sel_scenario_del_text = st.selectbox("Seleziona scenario da rimuovere", list(scenari_opzioni.keys()), key="select_scenario_del_key")
+                    scenario_del_id = scenari_opzioni[sel_scenario_del_text]
+                    
+                    if st.button("ELIMINA PROPOSTA SELEZIONATA ❌", type="secondary", use_container_width=True, help="Elimina in modo definitivo lo scenario selezionato dal DB."):
+                        cursor.execute("DELETE FROM proposte_rinnovi WHERE id=?", (scenario_del_id,))
+                        conn.commit()
+                        st.warning(f"Scenario ID {scenario_del_id} rimosso con successo.")
+                        st.rerun()
+
+    conn.close()
 
 # ==========================================
 # SCHEDA: STORICO PROMOZIONI
