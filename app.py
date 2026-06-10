@@ -2746,7 +2746,7 @@ else:
         "1. L'ABC del Pricing GDO",
         "2. Gerarchia & Ereditarietà dei Contratti",
         "3. Simulatore Offerte (Passo-Dopo-Passo)",
-        "4. Master Grid Rinnovi (Guida Strategica)",
+        "4. Rinnovi Contrattuali (Guida Strategica)",
         "5. Gestione DB, Caricamenti & Back-Office"
     ])
     
@@ -2867,17 +2867,17 @@ else:
         """)
 
     # ----------------------------------------------------
-    # TAB 4: GUIDA OPERATIVA: MASTER GRID RINNOVI
+    # TAB 4: GUIDA OPERATIVA: RINNOVI CONTRATTUALI
     # ----------------------------------------------------
     with tab_rinnovi:
         st.subheader("Guida Strategica: Gestire i Rinnovi di Fine Anno")
         st.markdown("""
-        La **Master Grid Rinnovi** è lo strumento più potente a disposizione per gestire la pianificazione annuale (*Anno N+1*) per un intero cliente, monitorando la marginalità in tempo reale a livello consolidato.
+        La **Tabella per i rinnovi contrattuali ** serve per gestire la pianificazione annuale (*Anno N+1*) per un intero cliente, monitorando la marginalità in tempo reale a livello consolidato.
         
         ### 🚶‍♂️ Guida Sequenziale Passo-Dopo-Passo:
         
         1.  **Definisci il Contesto di Partenza:**  
-            Seleziona l'Insegna Locale. Clicca sul pulsante **Carica Condizioni Attuali da DB**. La griglia scaricherà in automatico i listini ufficiali e tutti gli sconti in vigore per l'anno in corso (Anno N), inserendoli como base di partenza.
+            Seleziona il Gruppo-Sottogruppo oggetto. Clicca sul pulsante **Carica Condizioni Attuali da DB**. La griglia scaricherà in automatico i listini ufficiali e tutti gli sconti in vigore per l'anno in corso (Anno N), inserendoli como base di partenza.
         2.  **Definisci i Volumi Obiettivo:**  
             All'interno del **Tab 1 (Master Grid)**, inserisci nella colonna **[N+1] Volumi** le stime di vendita previste per l'anno futuro per ciascun prodotto.  
             *Nota Importante:* Per ottimizzare l'analisi, le schede dei risultati e le medie ponderate prenderanno in considerazione esclusivamente i prodotti attivi (ovvero quelli con volumi futuri maggiori di zero).
