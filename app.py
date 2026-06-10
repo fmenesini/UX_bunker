@@ -922,38 +922,13 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
         st.session_state.global_carico = 0.0
     if 'global_pagamento' not in st.session_state:
         st.session_state.global_pagamento = 0.0
-    if 'rinnovi_insegna' not in st.session_state:
-        st.session_state.rinnovi_insegna = ""
     if 'rinnovi_gruppo' not in st.session_state:
         st.session_state.rinnovi_gruppo = "Nessuno"
     if 'rinnovi_sottogruppo' not in st.session_state:
         st.session_state.rinnovi_sottogruppo = ""
 
-    # --- CALLBACKS DI AUTOCOMPILAZIONE MASTER GRID ---
-    def on_rinnovi_insegna_change():
-        ins = st.session_state.rinnovi_insegna
-        if ins and ins != "":
-            conn_cb = sqlite3.connect(DB_FILE)
-            cursor_cb = conn_cb.cursor()
-            cursor_cb.execute("SELECT gruppo_macro, sottogruppo FROM struttura_gdo WHERE associato_insegna=? LIMIT 1", (ins,))
-            res = cursor_cb.fetchone()
-            conn_cb.close()
-            if res:
-                st.session_state.rinnovi_gruppo = res[0]
-                st.session_state.rinnovi_sottogruppo = res[1] or ""
-
-    def on_rinnovi_gruppo_change():
-        grp = st.session_state.rinnovi_gruppo
-        ins = st.session_state.rinnovi_insegna
-        if ins and ins != "":
-            conn_cb = sqlite3.connect(DB_FILE)
-            cursor_cb = conn_cb.cursor()
-            cursor_cb.execute("SELECT COUNT(*) FROM struttura_gdo WHERE associato_insegna=? AND gruppo_macro=?", (ins, grp))
-            belongs = cursor_cb.fetchone()[0] > 0
-            conn_cb.close()
-            if not belongs:
-                st.session_state.rinnovi_insegna = ""
-                st.session_state.rinnovi_sottogruppo = ""
+    # Definiamo l'associato vuoto dato che i contratti annuali si stipulano a livello Sottogruppo
+    associato_sel = ""
 
     st.markdown("#### 1. Contesto di Riferimento (Pre-compilazione Anno N)")
     
@@ -962,30 +937,18 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
         cursor.execute("SELECT DISTINCT gruppo_macro FROM struttura_gdo WHERE attivo=1 ORDER BY gruppo_macro")
         gruppi = [r[0] for r in cursor.fetchall()]
         
-        cursor.execute("SELECT DISTINCT associato_insegna FROM struttura_gdo WHERE attivo=1 ORDER BY associato_insegna")
-        tutte_insegne_rinnovi = [r[0] for r in cursor.fetchall() if r[0]]
-
-        # Riorganizzazione della UI secondo le regole di UX design
+        # UI semplificata e riorganizzata su 2 blocchi orizzontali secondo UX design
         col_selectors, col_actions = st.columns([3, 2])
         
         with col_selectors:
-            st.markdown("**1. Configurazione GDO**")
-            col_ctx1, col_ctx2, col_ctx3 = st.columns(3)
+            st.markdown("**1. Configurazione GDO (Accordo Quadro)**")
+            col_ctx1, col_ctx2 = st.columns(2)
             
             with col_ctx1:
-                associato_sel = st.selectbox(
-                    "Insegna Locale (Seleziona prima)", 
-                    [""] + tutte_insegne_rinnovi, 
-                    key="rinnovi_insegna", 
-                    on_change=on_rinnovi_insegna_change
-                )
-                
-            with col_ctx2:
                 gruppo_sel = st.selectbox(
                     "Gruppo GDO", 
                     ["Nessuno"] + gruppi, 
-                    key="rinnovi_gruppo", 
-                    on_change=on_rinnovi_gruppo_change
+                    key="rinnovi_gruppo"
                 )
             
             sottogruppi = []
@@ -998,7 +961,7 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
                 """, (gruppo_sel, gruppo_sel))
                 sottogruppi = [r[0] for r in cursor.fetchall()]
                 
-            with col_ctx3:
+            with col_ctx2:
                 sottogruppo_sel = st.selectbox(
                     "Sottogruppo GDO", 
                     [""] + sottogruppi, 
@@ -1009,7 +972,7 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
             st.markdown("**2. Azioni & Salvataggi Scenario**")
             col_btn_grp1, col_btn_grp2 = st.columns(2)
             with col_btn_grp1:
-                btn_carica = st.button("Carica Baseline 🔄", type="primary", use_container_width=True, help="Importa le condizioni contrattuali del cliente dal DB.")
+                btn_carica = st.button("Carica Baseline 🔄", type="primary", use_container_width=True, help="Importa dal DB le condizioni del Sottogruppo/Gruppo.")
                 btn_mock = st.button("Dati di Test (Mock) 🧪", use_container_width=True, help="Popola lo scenario corrente con dati di test simulati.")
             with col_btn_grp2:
                 nome_scenario = st.text_input("Nome Proposta per Salvare", placeholder="Es. Scenario Q3", label_visibility="collapsed")
@@ -1024,6 +987,7 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
             def safe_float(v): return float(v) if v is not None else 0.0
             
             for idx, row in df_temp.iterrows():
+                # associato_sel è fisso a "" in modo da risolvere le condizioni del Sottogruppo/Gruppo
                 contract = get_merged_contract(conn, gruppo_sel, sottogruppo_sel, associato_sel, row['ean'], row['tipo_olio'])
                 
                 if contract.listino_r is None:
@@ -1072,7 +1036,7 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
             st.success("Condizioni contrattuali ricaricate con successo.")
             st.rerun()
         else:
-            st.warning("Seleziona un Gruppo GDO o un'Insegna Locale prima di caricare i dati.")
+            st.warning("Seleziona un Gruppo GDO valido prima di caricare i dati.")
 
     if btn_mock:
         df_mock = st.session_state.rinnovi_df.copy()
@@ -1106,14 +1070,14 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
     if btn_salva:
         if not nome_scenario.strip():
             st.warning("⚠️ Inserisci un nome per la proposta commerciale prima di procedere al salvataggio.")
-        elif gruppo_sel == "Nessuno" and not associato_sel:
-            st.warning("⚠️ Seleziona una configurazione GDO (Insegna o Gruppo) valida prima di salvare.")
+        elif gruppo_sel == "Nessuno":
+            st.warning("⚠️ Seleziona una configurazione GDO (Gruppo) valida prima di salvare.")
         else:
             dati_json = st.session_state.rinnovi_df.to_json(orient='records')
             cursor.execute("""
                 INSERT INTO proposte_rinnovi (nome_proposta, gruppo_macro, sottogruppo, associato_insegna, global_carico, global_pagamento, dati_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (nome_scenario, gruppo_sel, sottogruppo_sel, associato_sel, float(st.session_state.global_carico), float(st.session_state.global_pagamento), dati_json))
+                VALUES (?, ?, ?, '', ?, ?, ?)
+            """, (nome_scenario, gruppo_sel, sottogruppo_sel, float(st.session_state.global_carico), float(st.session_state.global_pagamento), dati_json))
             conn.commit()
             st.success(f"💾 Scenario '{nome_scenario}' salvato correttamente!")
             st.rerun()
@@ -1142,7 +1106,7 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
     if 'rinnovi_df' not in st.session_state:
         st.session_state.rinnovi_df = df_base.copy()
 
-    # --- SCHEDE INFERIORI AGGIORNATE (CON L'AGGIUNTA DELLA SCHEDA 4) ---
+    # --- SCHEDE INFERIORI ---
     tab_simulazione, tab_risultati, tab_esplosione, tab_storico_rinnovi = st.tabs([
         "1. Master Grid (Input Dati)", 
         "2. Analisi Ponderata & Spazio Promo",
@@ -1256,10 +1220,10 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
                 val_mass = st.number_input("3. Valore (%)", min_value=-100.0, max_value=100.0, step=0.5, format="%.2f")
             with col_m4:
                 st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                btn_mass = st.form_submit_button("⚡ Applica Valore", type="secondary", use_container_width=True)
+                btn_mass = st.form_submit_button("⚡ Applica Valore", type="secondary")
             with col_m5:
                 st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                submit_sim = st.form_submit_button("🔄 Calcola Simulazione", type="primary", use_container_width=True)
+                submit_sim = st.form_submit_button("🔄 Calcola Simulazione", type="primary")
                 
             st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
             
@@ -1465,7 +1429,7 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
                     val_mass_exp = st.number_input("3. Valore (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.2f", key="val_mass_exp")
                 with col_m4:
                     st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                    btn_mass_exp = st.form_submit_button("⚡ Applica Massivo", type="secondary")
+                    btn_mass_exp = st.form_submit_button("⚡ Applica Massivo")
                     
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
                 
