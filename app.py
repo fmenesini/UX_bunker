@@ -2877,7 +2877,7 @@ else:
         ### 🚶‍♂️ Guida Sequenziale Passo-Dopo-Passo:
         
         1.  **Definisci il Contesto di Partenza:**  
-            Seleziona il Gruppo-Sottogruppo oggetto. Clicca sul pulsante **Carica Condizioni Attuali da DB**. La griglia scaricherà in automatico i listini ufficiali e tutti gli sconti in vigore per l'anno in corso (Anno N), inserendoli como base di partenza.
+            Seleziona il Gruppo-Sottogruppo oggetto di analisi. Clicca sul pulsante **Carica Condizioni Attuali da DB**. La griglia scaricherà in automatico i listini ufficiali e tutti gli sconti in vigore per l'anno in corso (Anno N), inserendoli como base di partenza.
         2.  **Definisci i Volumi Obiettivo:**  
             All'interno del **Tab 1 (Master Grid)**, inserisci nella colonna **[N+1] Volumi** le stime di vendita previste per l'anno futuro per ciascun prodotto.  
             *Nota Importante:* Per ottimizzare l'analisi, le schede dei risultati e le medie ponderate prenderanno in considerazione esclusivamente i prodotti attivi (ovvero quelli con volumi futuri maggiori di zero).
