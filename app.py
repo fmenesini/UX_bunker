@@ -1449,6 +1449,26 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
                 st.download_button("📥 Scarica Esplosione Sconti (Excel)", to_excel_bytes(df_explode[cols_to_edit_exp]), "Esplosione_Sconti.xlsx", key="down_explode_rinnovi")
 
             with st.form("form_esplosione"):
+                # --- STRUMENTO DI VARIAZIONE MASSIVA ---
+                st.markdown("##### ⚡ Azioni Rapide e Aggiornamento Massivo")
+                col_m1, col_m2, col_m3, col_m4 = st.columns([2.5, 2.5, 2, 2])
+                subcat_uniche = sorted(st.session_state.rinnovi_df['Sub-Categoria'].unique().tolist())
+                
+                with col_m1:
+                    cat_mass_exp = st.selectbox("1. Scegli Categoria", ["Tutto l'Assortimento"] + subcat_uniche, key="cat_mass_exp")
+                with col_m2:
+                    param_mass_exp = st.selectbox("2. Scegli Sconto / Voce PFA", [
+                        "S1 %", "S2 %", "S3 %", "S4 %", "S5 %",
+                        "PFA I %", "PFA II %", "PFA III %", "PFA IV %", "PFA V %"
+                    ], key="param_mass_exp")
+                with col_m3:
+                    val_mass_exp = st.number_input("3. Valore (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.2f", key="val_mass_exp")
+                with col_m4:
+                    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                    btn_mass_exp = st.form_submit_button("⚡ Applica Massivo", type="secondary")
+                    
+                st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
+                
                 col_btn_calc, col_btn_align = st.columns(2)
                 with col_btn_calc:
                     submit_exp = st.form_submit_button("🔄 Calcola e Verifica Sconti (Manuale)", type="primary")
@@ -1464,12 +1484,23 @@ elif menu == "Rinnovi Contrattuali (N vs N+1)":
                     key="editor_esplosione"
                 )
                 
-            if submit_exp or align_exp:
+            if submit_exp or align_exp or btn_mass_exp:
+                 # Salvataggio preventivo modifiche manuali
                  for i, idx in enumerate(df_explode.index):
                      for col in dettaglio_cols:
                          if col in df_exp_edited.columns:
                              st.session_state.rinnovi_df.at[idx, col] = df_exp_edited.iloc[i][col]
                              
+                 # Applicazione del valore massivo se richiesto
+                 if btn_mass_exp:
+                     df_temp = st.session_state.rinnovi_df.copy()
+                     for idx, row in df_temp.iterrows():
+                         if row['[N+1] Volumi'] > 0:
+                             if cat_mass_exp == "Tutto l'Assortimento" or row['Sub-Categoria'] == cat_mass_exp:
+                                 df_temp.at[idx, param_mass_exp] = val_mass_exp
+                     st.session_state.rinnovi_df = df_temp
+                             
+                 # Allineamento automatico se richiesto
                  if align_exp:
                      df_temp = st.session_state.rinnovi_df.copy()
                      for idx, row in df_temp[df_temp['[N+1] Volumi'] > 0].iterrows():
