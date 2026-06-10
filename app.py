@@ -71,6 +71,24 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header[data-testid="stHeader"] { background: transparent !important; }
+
+    /* REGOLE DI SPAZIATURA PER I GRUPPI DEL MENU PRINCIPALE (RADIO BUTTONS) */
+    div[role="radiogroup"] > label:nth-of-type(3),
+    div[role="radiogroup"] > div[data-baseweb="radio"]:nth-of-type(3) {
+        margin-bottom: 25px !important;
+    }
+    div[role="radiogroup"] > label:nth-of-type(6),
+    div[role="radiogroup"] > div[data-baseweb="radio"]:nth-of-type(6) {
+        margin-bottom: 25px !important;
+    }
+    div[role="radiogroup"] > label:nth-of-type(7),
+    div[role="radiogroup"] > div[data-baseweb="radio"]:nth-of-type(7) {
+        margin-bottom: 25px !important;
+    }
+    div[role="radiogroup"] > label:nth-of-type(8),
+    div[role="radiogroup"] > div[data-baseweb="radio"]:nth-of-type(8) {
+        margin-bottom: 25px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -247,7 +265,7 @@ def seed_baseline_data(conn):
         ("DESPAR SERVIZI", "", "MAIORA"), ("DESPAR SERVIZI", "", "ERGON"), ("DESPAR SERVIZI", "", "FIORINO"), ("DESPAR SERVIZI", "", "SCS-SUPERMERCATI CONSORZIATI SARDEGNA"), ("DESPAR SERVIZI", "", "CENTRO 3A"),
         ("D.IT DISTRIBUZIONE ITALIANA", "", "CE.DI. SIGMA CAMPANIA"), ("D.IT DISTRIBUZIONE ITALIANA", "", "CONSORZIO EUROPA"), ("D.IT DISTRIBUZIONE ITALIANA", "", "LOMBARDI & C."), ("D.IT DISTRIBUZIONE ITALIANA", "", "REALCO"), ("D.IT DISTRIBUZIONE ITALIANA", "", "SAN FRANCESCO"), ("D.IT DISTRIBUZIONE ITALIANA", "", "SISA SICILIA"), ("D.IT DISTRIBUZIONE ITALIANA", "", "EUROPA COMMERCIALE"), ("D.IT DISTRIBUZIONE ITALIANA", "", "LE DELIZIE DEL SUD"), ("D.IT DISTRIBUZIONE ITALIANA", "", "VA.PA."),
         ("EUROSPIN", "", "SPESA INTELLIGENTE"), ("EUROSPIN", "", "EUROSPIN TIRRENICA"), ("EUROSPIN", "", "EUROSPIN LAZIO"), ("EUROSPIN", "", "EUROSPIN PUGLIA"), ("EUROSPIN", "", "EUROSPIN SICILIA"),
-        ("CONSORZIO CORALIS", "", "ALIM GROSS"), ("CONSORZIO CORALIS", "", "CDC"), ("CONSORZIO CORALIS", "", "D.IN.AL."), ("CONSORZIO CORALIS", "", "DUECI"), ("CONSORZIO CORALIS", "", "FILICE GIOVANNI"), ("CONSORZIO CORALIS", "", "FILICE GROUP"), ("CONSORZIO CORALIS", "", "GIGANTE ALIMENTARI"), ("CONSORZIO CORALIS", "", "GSD"), ("CONSORZIO CORALIS", "", "LA PRIMA"), ("CONSORZIO CORALIS", "", "LOMBARDO"), ("CONSORZIO CORALIS", "", "MAGNONE PIÙ"), ("CONSORZIO CORALIS", "", "MERIDIO"), ("CONSORZIO CORALIS", "", "PASCAR"), ("CONSORZIO CORALIS", "", "PREZZEMOLO&VITALE"), ("CONSORZIO CORALIS", "", "TUTTODISTRIBUZIONE"), ("CONSORZIO CORALIS", "", "VICINO A TE"),
+        ("CONSORZIO CORALIS", "", "ALIM GROSS"), ("CONSORZIO CORALIS", "", "CDC"), ("CONSORZIO CORALIS", "", "D.IN.AL."), ("CONSORZIO CORALis", "", "DUECI"), ("CONSORZIO CORALIS", "", "FILICE GIOVANNI"), ("CONSORZIO CORALIS", "", "FILICE GROUP"), ("CONSORZIO CORALIS", "", "GIGANTE ALIMENTARI"), ("CONSORZIO CORALIS", "", "GSD"), ("CONSORZIO CORALIS", "", "LA PRIMA"), ("CONSORZIO CORALIS", "", "LOMBARDO"), ("CONSORZIO CORALIS", "", "MAGNONE PIÙ"), ("CONSORZIO CORALIS", "", "MERIDIO"), ("CONSORZIO CORALIS", "", "PASCAR"), ("CONSORZIO CORALIS", "", "PREZZEMOLO&VITALE"), ("CONSORZIO CORALIS", "", "TUTTODISTRIBUZIONE"), ("CONSORZIO CORALIS", "", "VICINO A TE"),
         ("GRUPPO FINIPER CANOVA", "", "IPER MONTEBELLO"), ("GRUPPO FINIPER CANOVA", "", "UNES"),
         ("ESSELUNGA GRUPPO", "ESSELUNGA SOTTOGRUPPO", "ESSELUNGA"),
         ("PAM GRUPPO", "PAM SOTTOGRUPPO", "PAM"),
@@ -642,7 +660,7 @@ if menu == "Simulatore Offerte":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    st.markdown("#### Struttura di Costo (Waterfall)")
+    st.markdown("#### Structura di Costo (Waterfall)")
     waterfall_data = [{"Fase Pricing": step.fase, "Valore Unitario": fmt_it(float(step.valore), 3, is_euro=True), "Dettaglio Operazione": step.descrizione} for step in result.steps]
     if mostra_impatto:
         waterfall_data.append({"Fase Pricing": "Impatto Extra (Sell-Out)", "Valore Unitario": fmt_it(float(net_net_post_promo), 3, is_euro=True), "Dettaglio Operazione": f"-{fmt_it(float(impatto_unitario_extra), 3, is_euro=True)}/Pz"})
@@ -704,6 +722,7 @@ if menu == "Simulatore Offerte":
     with col_act1:
         st.markdown("#### Salva nel CRM")
         with st.container(border=True):
+            st.markdown("#### Salva nel CRM")
             stato_promo = st.radio("Stato Promozione", ["Proposta", "Confermata"], horizontal=True)
             note_promo = st.text_input("Note (es. Volantino)")
             if st.button("Salva Promozione", type="primary", use_container_width=True):
@@ -2677,7 +2696,7 @@ else:
 
         *   **Listino Base (R):** È il prezzo di listino ufficiale Salov, al lordo di qualsiasi sconto.
         *   **Sconti in Fattura (S1... S7, Y, Z):** Sconti percentuali applicati direttamente in fattura. Riducono l'imponibile. Si dividono in *Centrali* (definiti dall'Accordo Quadro) e *Locali/Promo* (definiti per singole attività).
-        *   **Sconto Diretto (AA):** È un "Taglio Prezzo" espresso in Valore Assoluto (Euro), non in percentuale (es. -0,50 € a bottiglia).
+        *   **Sconto Diretto (AA):** È un \"Taglio Prezzo\" espresso in Valore Assoluto (Euro), non in percentuale (es. -0,50 € a bottiglia).
         *   **Oneri Logistici (AB) e di Pagamento (AC):** Trattenute percentuali applicate dal cliente per la gestione centralizzata del magazzino o per i flussi finanziari.
         *   **Netto Fattura 2 (AF):** Il prezzo reale a cui il prodotto viene fatturato, calcolato dopo aver applicato tutti gli sconti e gli oneri.
         *   **Premi Fuori Fattura / Off-Invoice (PFA):** (Voci I, II, III, ecc.). Sono i contributi di fine anno o fine periodo richiesti dalla GDO (es. premi di fine anno, contributi assortimento). *Riducono il nostro margine, ma non abbassano il prezzo a scaffale del cliente*.
