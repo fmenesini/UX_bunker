@@ -23,8 +23,13 @@ logging.basicConfig(level=logging.WARNING)
 st.set_page_config(page_title="Bunker Commerciale - Salov", layout="wide", initial_sidebar_state="expanded")
 
 # ==========================================
-# FUNZIONI DI SUPPORTO E FORMATTAZIONE
+# FUNZIONI GLOBALI E COSTANTI DI SUPPORTO
 # ==========================================
+OPERATIVE_COLS = [
+    '[N+1] Volumi', '[N] Listino €', '[N+1] Listino €', 
+    '[N+1] Sc. Fattura %', '[N+1] Contratto %'
+]
+
 def fmt_it(val, decimals=2, is_euro=False, is_pct=False, sign=False):
     if pd.isna(val): return ""
     if sign:
@@ -45,18 +50,13 @@ def safe_dec(val):
         return Decimal("0.00")
 
 def get_subcat(row):
-    """
-    Classifica i prodotti in sub-categorie merceologiche partendo
-    dal tipo di olio e dalla descrizione commerciale SAP.
-    """
     desc = str(row['descrizione_commerciale']).upper()
     tipo = str(row['tipo_olio']).upper()
     if tipo == 'EXTRAVERGINE':
         if '100% ITA' in desc or '100%I' in desc or 'TOSC' in desc: return 'Extravergini Italiani'
         if 'BIO' in desc: return 'Extravergini Biologici'
         return 'Extravergini Comunitari'
-    elif tipo == 'OLIVA': 
-        return 'Olio Raffinato'
+    elif tipo == 'OLIVA': return 'Olio Raffinato'
     elif tipo == 'SEMI':
         if 'ARACHIDE' in desc: return 'Semi di Arachide'
         if 'MAIS' in desc: return 'Semi di Mais'
@@ -64,9 +64,9 @@ def get_subcat(row):
         if 'FRITT' in desc or 'FRIMX' in desc: return 'Oli per Frittura Specifici'
         if 'VINACC' in desc: return 'Semi di Vinacciolo'
         return 'Oli di Semi'
-    elif tipo == 'ACETO': 
-        return 'Aceto Balsamico'
+    elif tipo == 'ACETO': return 'Aceto Balsamico'
     return 'Altro'
+
 
 # ==========================================
 # CSS AVANZATO
