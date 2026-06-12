@@ -147,11 +147,11 @@ def init_db():
         "ALTER TABLE struttura_gdo ADD COLUMN sottogruppo TEXT"
     ]
     for query in migrazioni:
-    try:
-        cursor.execute(query)
-        conn.commit()  # ✅ Se funziona, salva subito questa modifica
-    except sqlite3.OperationalError:
-        conn.rollback()  # 🛡️ Se fallisce (colonna già esistente), resetta lo stato ed evita il blocco!
+        try:
+            cursor.execute(query)
+            conn.commit()  # ✅ Se funziona, salva subito questa modifica
+        except sqlite3.OperationalError:
+            conn.rollback()  # 🛡️ Se fallisce (colonna già esistente), resetta lo stato ed evita il blocco!
     conn.commit()
 
     cursor.execute("SELECT COUNT(*) FROM anagrafica_master")
