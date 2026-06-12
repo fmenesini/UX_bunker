@@ -206,11 +206,17 @@ def get_merged_contract(conn, gruppo, sottogruppo, insegna, ean, categoria):
     
 def seed_baseline_data(conn):
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM accordi_commerciali")
-    cursor.execute("DELETE FROM clienti")
-    cursor.execute("DELETE FROM anagrafica_master")
-    cursor.execute("DELETE FROM guardrail_aziendali")
-    cursor.execute("DELETE FROM struttura_gdo")
+    
+    # 🛡️ Resetta preventivamente la transazione per ripulire eventuali errori precedenti
+    conn.rollback()
+    
+    # Esegue le cancellazioni proteggendo ogni singola operazione
+    for tabella in ["accordi_commerciali", "clienti", "anagrafica_master", "guardrail_aziendali", "struttura_gdo"]:
+        try:
+            cursor.execute(f"DELETE FROM {tabella}")
+            conn.commit()  # Salva subito la cancellazione se va a buon fine
+        except sqlite3.OperationalError:
+            conn.rollback()  # Se una singola tabella è bloccata o dà errore, resetta e passa alla successiva
     
     prodotti_salov = [
         ("8002210111110", "10002713", "EXTRAVERGINE", "SAGRA EXV BOT W12x1L CLASS IT", "Ex.v. Sagra Classico lt.1", 1.0, 10.00, "Bott.Lt 1", 12, 8, 5, 40, 14, 9),
