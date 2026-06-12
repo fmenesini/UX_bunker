@@ -355,20 +355,6 @@ def seed_baseline_data(conn):
     """, fallback_data)
     conn.commit()
 
-Ora il sistema è perfettamente allineato e robusto. Puoi testare l'inserimento di una regola nel Back-Office e vederla applicata istantaneamente nel Simulatore e nella Dashboard!
-1m57.9s
-Model 10:01
-Thinking Thoughts
-
-Expand to view model thoughts
-chevron_right
-L'errore è causato dal fatto che, durante il copia-incolla, la variabile `fallback_data` (che contiene i dati di test dei contratti) è stata inavvertitamente cancellata o nominata male nel tuo file.
-
-Per risolvere definitivamente, **sostituisci l'intera funzione `seed_baseline_data`** (che va da `def seed_baseline_data(conn):` fino a `conn.commit()`, all'incirca dalla riga 160 alla riga 300) con questo blocco di codice esatto e completo. 
-
-Copia e incolla questo:
-
-```python
 def seed_baseline_data(conn):
     cursor = conn.cursor()
     
