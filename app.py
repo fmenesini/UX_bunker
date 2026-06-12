@@ -521,16 +521,16 @@ if "go_to_menu" in st.session_state:
 st.sidebar.markdown("## Menu Principale")
 
 menu_options = [
-    "--- 📊 SIMULAZIONI ---",
+    
     "Simulatore Offerte", 
     "Rinnovi Contrattuali (N vs N+1)",
     "Storico Promozioni", 
-    "--- 🗄️ DATABASE ---",
+    
     "Dati Anagrafici (Logistica)", 
     "Back-Office (Contratti Nazionali)", 
     "Anagrafica GDO (Clienti)",
     "Accordi Locali (Promo)",
-    "--- 📈 REPORT E GUIDE ---",
+    
     "Report Sintetico", 
     "Guida Operativa"
 ]
